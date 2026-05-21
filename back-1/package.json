@@ -25,7 +25,7 @@
     "db:studio": "prisma studio"
   },
   "prisma": {
-    "seed": "npx ts-node --transpile-only prisma/seed.ts"
+    "seed": "node_modules/.bin/ts-node --transpile-only prisma/seed.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
