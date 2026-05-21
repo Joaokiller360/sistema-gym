@@ -1,0 +1,37 @@
+import { cookies } from 'next/headers'
+import { apiFetch } from '@/lib/api'
+import { PlanEditor } from './PlanEditor'
+
+interface SubscriptionPlan {
+  id: string
+  key: string
+  label: string
+  price: number
+  currency: string
+  maxMembers: number | null
+  features: string[]
+  isActive: boolean
+  sortOrder: number
+}
+
+export default async function AdminPlansPage() {
+  const cookieStore = await cookies()
+  const token = cookieStore.get('session')?.value ?? ''
+
+  const plans = await apiFetch<SubscriptionPlan[]>('/admin/subscription-plans', token, {
+    next: { tags: ['admin-subscription-plans'] },
+  }) ?? []
+
+  return (
+    <div className="p-6 lg:p-8 space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Planes de suscripción</h1>
+        <p className="text-muted-foreground text-sm mt-1">
+          Gestioná los planes disponibles para los gimnasios y sus precios
+        </p>
+      </div>
+
+      <PlanEditor plans={plans} />
+    </div>
+  )
+}
