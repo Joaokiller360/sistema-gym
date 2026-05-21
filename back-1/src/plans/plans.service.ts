@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { centsToDecimal } from '../common/utils/proration.util';
 
@@ -18,6 +18,7 @@ export class PlansService {
   }
 
   async create(gymId: string, data: any) {
+    if (!gymId) throw new BadRequestException('gymId is required');
     const payload = { ...data, gymId };
     if (data.price !== undefined) payload.price = centsToDecimal(data.price);
     return this.prisma.plan.create({ data: payload });
@@ -40,8 +41,8 @@ export class PlansService {
     return this.prisma.plan.delete({ where: { id } });
   }
 
-  private async assertExists(id: string, gymId: string) {
-    const plan = await this.prisma.plan.findFirst({ where: { id, gymId } });
+  private async assertExists(id: string, gymId?: string) {
+    const plan = await this.prisma.plan.findFirst({ where: gymId ? { id, gymId } : { id } });
     if (!plan) throw new NotFoundException('Plan not found');
     return plan;
   }

@@ -23,29 +23,33 @@ export class PlansController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN)
   create(@Req() req: any, @Body() body: any) {
-    return this.plansService.create(req.gymId, body);
+    const gymId = req.gymId ?? body.gymId;
+    return this.plansService.create(gymId, body);
   }
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN)
   update(@Param('id') id: string, @Req() req: any, @Body() body: any) {
-    return this.plansService.update(id, req.gymId, body);
+    const gymId = req.gymId ?? body.gymId;
+    return this.plansService.update(id, gymId, body);
   }
 
   @Patch(':id/toggle')
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
-  toggle(@Param('id') id: string, @Req() req: any) {
-    return this.plansService.toggle(id, req.gymId);
+  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN)
+  toggle(@Param('id') id: string, @Req() req: any, @Body() body: any) {
+    const gymId = req.gymId ?? body.gymId;
+    return this.plansService.toggle(id, gymId);
   }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
-  remove(@Param('id') id: string, @Req() req: any) {
-    return this.plansService.remove(id, req.gymId);
+  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN)
+  remove(@Param('id') id: string, @Req() req: any, @Body() body: any) {
+    const gymId = req.gymId ?? body.gymId;
+    return this.plansService.remove(id, gymId);
   }
 }

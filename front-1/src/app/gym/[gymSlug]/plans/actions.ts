@@ -47,6 +47,7 @@ export async function createPlanAction(
   const token = await getToken()
   const result = await apiFetch(`/plans`, token, {
     method: 'POST',
+    headers: { 'x-gym-slug': gymSlug },
     body: JSON.stringify(buildPayload(parsed.data)),
   })
 
@@ -67,6 +68,7 @@ export async function updatePlanAction(
   const token = await getToken()
   const result = await apiFetch(`/plans/${planId}`, token, {
     method: 'PATCH',
+    headers: { 'x-gym-slug': gymSlug },
     body: JSON.stringify(buildPayload(parsed.data)),
   })
 
@@ -83,12 +85,12 @@ export async function togglePlanActiveAction(
   active: boolean,
 ): Promise<void> {
   const token = await getToken()
-  await apiFetch(`/plans/${planId}/toggle`, token, { method: 'PATCH' })
+  await apiFetch(`/plans/${planId}/toggle`, token, { method: 'PATCH', headers: { 'x-gym-slug': gymSlug } })
   revalidateTag(`plans-${gymSlug}`, 'default')
 }
 
 export async function deletePlanAction(gymSlug: string, planId: string): Promise<void> {
   const token = await getToken()
-  await apiFetch(`/plans/${planId}`, token, { method: 'DELETE' })
+  await apiFetch(`/plans/${planId}`, token, { method: 'DELETE', headers: { 'x-gym-slug': gymSlug } })
   revalidateTag(`plans-${gymSlug}`, 'default')
 }

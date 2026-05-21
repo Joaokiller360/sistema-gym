@@ -11,7 +11,18 @@ export class TenantGuard implements CanActivate {
     const user = request.user;
 
     if (!user) return false;
-    if (user.role === Role.SUPER_ADMIN) return true;
+
+    if (user.role === Role.SUPER_ADMIN) {
+      const gymSlug = request.headers['x-gym-slug'];
+      if (gymSlug) {
+        const gym = await this.prisma.gym.findUnique({
+          where: { slug: gymSlug },
+          select: { id: true },
+        });
+        if (gym) request.gymId = gym.id;
+      }
+      return true;
+    }
 
     if (!user.gymId) {
       throw new ForbiddenException('No gym assigned to this user');
