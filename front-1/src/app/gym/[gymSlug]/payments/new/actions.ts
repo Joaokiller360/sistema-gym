@@ -41,6 +41,7 @@ export async function registerMemberPaymentAction(
   // 1. Create membership
   const membershipResult = await apiFetchWithError<{ id: string }>('/memberships', token, {
     method: 'POST',
+    headers: { 'x-gym-slug': gymSlug },
     body: JSON.stringify({
       memberId,
       planId,
@@ -54,6 +55,7 @@ export async function registerMemberPaymentAction(
   // 2. Register payment linked to membership
   const paymentResult = await apiFetch('/payments', token, {
     method: 'POST',
+    headers: { 'x-gym-slug': gymSlug },
     body: JSON.stringify({
       memberId,
       membershipId: membershipResult.data.id,
