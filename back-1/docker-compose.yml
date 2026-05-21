@@ -22,12 +22,16 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${PORT:-3001}:${PORT:-3001}"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-gymuser}:${POSTGRES_PASSWORD:-gympassword}@db:5432/${POSTGRES_DB:-gymosdb}?schema=public
+      PORT: ${PORT:-3001}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      BACKEND_URL: ${BACKEND_URL:-http://localhost:3001}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL}
     depends_on:
       db:
         condition: service_healthy
