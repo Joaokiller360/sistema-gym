@@ -13,7 +13,7 @@ COPY . .
 RUN npm run build
 
 # ---- Production Stage ----
-FROM node:22-alpine AS production
+FROM node:20-alpine AS production
 
 WORKDIR /app
 
