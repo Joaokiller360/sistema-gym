@@ -25,28 +25,28 @@ export class MembershipsController {
 
   @Patch(':id/suspend')
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN, Role.SUPER_ADMIN)
   suspend(@Param('id') id: string, @Req() req: any) {
     return this.membershipsService.suspend(id, req.gymId);
   }
 
   @Patch(':id/freeze')
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN, Role.SUPER_ADMIN)
   freeze(@Param('id') id: string, @Req() req: any) {
     return this.membershipsService.freeze(id, req.gymId);
   }
 
   @Patch(':id/unfreeze')
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN, Role.SUPER_ADMIN)
   unfreeze(@Param('id') id: string, @Req() req: any) {
     return this.membershipsService.unfreeze(id, req.gymId);
   }
 
   @Patch(':id/cancel')
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN, Role.SUPER_ADMIN)
   cancel(@Param('id') id: string, @Req() req: any) {
     return this.membershipsService.cancel(id, req.gymId);
   }

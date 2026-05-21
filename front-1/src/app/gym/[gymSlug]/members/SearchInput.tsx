@@ -11,7 +11,11 @@ export function SearchInput({ defaultValue }: { defaultValue?: string }) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const value = e.target.value
+    const raw = e.target.value
+    const value = raw.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]/g, '')
+    if (raw !== value) {
+      e.target.value = value
+    }
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
       const params = new URLSearchParams(searchParams.toString())

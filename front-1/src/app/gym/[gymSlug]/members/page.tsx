@@ -30,7 +30,7 @@ export default async function MembersPage({ params, searchParams }: Props) {
   const token = cookieStore.get('session')?.value ?? ''
 
   const qs = new URLSearchParams()
-  if (q) qs.set('q', q)
+  if (q) qs.set('search', q)
   if (status) qs.set('status', status)
   qs.set('page', String(page))
   qs.set('limit', String(LIMIT))

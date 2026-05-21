@@ -86,9 +86,13 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
     if (!activeMembership) return
     setConfirmCancelMembership(false)
     startCancelTransition(async () => {
-      await cancelMembershipWithPaymentsAction(gymSlug, activeMembership.id, memberId)
-      toast.success('Membresía cancelada correctamente')
-      router.refresh()
+      const result = await cancelMembershipWithPaymentsAction(gymSlug, activeMembership.id, memberId)
+      if (result.error) {
+        toast.error(result.error)
+      } else {
+        toast.success('Membresía cancelada correctamente')
+        router.refresh()
+      }
     })
   }
 

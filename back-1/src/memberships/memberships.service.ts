@@ -146,7 +146,10 @@ export class MembershipsService {
   }
 
   async cancel(id: string, gymId: string) {
-    await this.assertExists(id, gymId);
+    console.log('[MembershipsService.cancel] id:', id, 'gymId:', gymId);
+    const m = await this.prisma.membership.findFirst({ where: { id, gymId } });
+    console.log('[MembershipsService.cancel] found:', JSON.stringify(m));
+    if (!m) throw new NotFoundException('Membership not found');
     return this.prisma.membership.update({ where: { id }, data: { status: 'CANCELLED' } });
   }
 
