@@ -18,9 +18,10 @@ export class PaymentsController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN, Role.RECEPTIONIST)
+  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN, Role.RECEPTIONIST)
   create(@Req() req: any, @Body() body: any) {
-    return this.paymentsService.create(req.gymId, body);
+    const gymId = req.gymId ?? body.gymId;
+    return this.paymentsService.create(gymId, body);
   }
 
   @Get(':id/receipt')
