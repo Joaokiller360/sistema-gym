@@ -1,0 +1,71 @@
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { unlink } from 'fs/promises';
+import { join } from 'path';
+import * as bcrypt from 'bcrypt';
+import { PrismaService } from '../prisma/prisma.service';
+
+@Injectable()
+export class GymsService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async findBySlug(slug: string) {
+    const gym = await this.prisma.gym.findUnique({ where: { slug } });
+    if (!gym) throw new NotFoundException('Gym not found');
+    return gym;
+  }
+
+  async update(id: string, data: any) {
+    const gym = await this.prisma.gym.findUnique({ where: { id } });
+    if (!gym) throw new NotFoundException('Gym not found');
+    return this.prisma.gym.update({ where: { id }, data });
+  }
+
+  async remove(id: string) {
+    const gym = await this.prisma.gym.findUnique({ where: { id } });
+    if (!gym) throw new NotFoundException('Gym not found');
+    await this.prisma.gym.delete({ where: { id } });
+    return { message: 'Gym deleted successfully' };
+  }
+
+  async updateLogo(id: string, logoUrl: string) {
+    const gym = await this.prisma.gym.findUnique({ where: { id } });
+    if (!gym) throw new NotFoundException('Gym not found');
+
+    if (gym.logoUrl?.startsWith('/uploads/logos/')) {
+      const oldPath = join(process.cwd(), gym.logoUrl);
+      unlink(oldPath).catch(() => null);
+    }
+
+    return this.prisma.gym.update({ where: { id }, data: { logoUrl } });
+  }
+
+  async getStaff(gymId: string) {
+    return this.prisma.user.findMany({
+      where: { gymId, role: 'GYM_ADMIN' },
+      select: { id: true, name: true, email: true, isActive: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async createStaff(gymId: string, name: string, email: string) {
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing) throw new ConflictException('Ya existe un usuario con ese email');
+
+    const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-4).toUpperCase();
+    const hashed = await bcrypt.hash(tempPassword, 10);
+
+    const user = await this.prisma.user.create({
+      data: { name, email, password: hashed, role: 'GYM_ADMIN', gymId, isActive: true },
+      select: { id: true, name: true, email: true, isActive: true, createdAt: true },
+    });
+
+    return { ...user, tempPassword };
+  }
+
+  async removeStaff(gymId: string, userId: string) {
+    const user = await this.prisma.user.findFirst({ where: { id: userId, gymId, role: 'GYM_ADMIN' } });
+    if (!user) throw new NotFoundException('Administrador no encontrado');
+    await this.prisma.user.delete({ where: { id: userId } });
+    return { message: 'Administrador eliminado' };
+  }
+}

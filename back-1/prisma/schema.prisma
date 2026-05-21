@@ -1,0 +1,451 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  GYM_OWNER
+  GYM_ADMIN
+  TRAINER
+  RECEPTIONIST
+}
+
+enum MembershipStatus {
+  ACTIVE
+  EXPIRED
+  SUSPENDED
+  FROZEN
+  CANCELLED
+}
+
+enum GymSubscriptionStatus {
+  ACTIVE
+  GRACE
+  SUSPENDED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+  OTHER
+}
+
+enum MaintenanceType {
+  PREVENTIVE
+  CORRECTIVE
+  INSPECTION
+}
+
+enum InventoryStatus {
+  ACTIVE
+  OUT_OF_SERVICE
+  MAINTENANCE
+  RETIRED
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENT
+  CANCELLED
+}
+
+model Gym {
+  id               String   @id @default(uuid())
+  name             String
+  slug             String   @unique
+  logoUrl          String?
+  isActive         Boolean  @default(true)
+  address          String?
+  country          String?
+  timezone         String   @default("UTC")
+  currency         String   @default("USD")
+  subscriptionPlan String   @default("BASIC")
+  subscriptionStatus      GymSubscriptionStatus @default(ACTIVE)
+  subscriptionExpiresAt   DateTime?
+  subscriptionGraceEndsAt DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  ownerId String? @unique
+  owner   User?   @relation("GymOwner", fields: [ownerId], references: [id])
+
+  users               User[]              @relation("GymUsers")
+  branches            Branch[]
+  plans               Plan[]
+  members             Member[]
+  trainers            Trainer[]
+  classes             Class[]
+  inventoryItems      InventoryItem[]
+  communications      Communication[]
+  campaigns           EmailCampaign[]
+  templates           EmailTemplate[]
+  gymBillingPayments  GymBillingPayment[]
+
+  @@map("gyms")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  gymId String?
+  gym   Gym?    @relation("GymUsers", fields: [gymId], references: [id], onDelete: SetNull)
+
+  ownedGym Gym? @relation("GymOwner")
+
+  @@index([gymId])
+  @@map("users")
+}
+
+model Branch {
+  id        String   @id @default(uuid())
+  name      String
+  address   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  gymId String
+  gym   Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  members        Member[]
+  trainers       Trainer[]
+  classes        Class[]
+  inventoryItems InventoryItem[]
+  memberships    Membership[]
+  payments       Payment[]
+  attendances    Attendance[]
+
+  @@index([gymId])
+  @@map("branches")
+}
+
+model Plan {
+  id          String   @id @default(uuid())
+  name        String
+  price       Decimal  @db.Decimal(10, 2)
+  currency    String   @default("USD")
+  durationDays Int
+  daysPerWeek Int?
+  benefits    Json     @default("[]")
+  isActive    Boolean  @default(true)
+  isFeatured  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  gymId String
+  gym   Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  memberships Membership[]
+
+  @@index([gymId])
+  @@map("plans")
+}
+
+model Member {
+  id        String   @id @default(uuid())
+  firstName String
+  lastName  String
+  email     String
+  phone     String?
+  birthDate DateTime?
+  photoUrl  String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  gymId    String
+  gym      Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  memberships      Membership[]
+  payments         Payment[]
+  attendances      Attendance[]
+  classEnrollments ClassEnrollment[]
+
+  @@index([gymId])
+  @@index([branchId])
+  @@map("members")
+}
+
+model Membership {
+  id        String           @id @default(uuid())
+  startDate DateTime
+  endDate   DateTime
+  status    MembershipStatus @default(ACTIVE)
+  frozenAt  DateTime?
+  frozenDays Int             @default(0)
+  notes     String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  gymId    String
+  memberId String
+  member   Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  planId   String
+  plan     Plan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  payments Payment[]
+
+  @@index([gymId])
+  @@index([memberId])
+  @@index([planId])
+  @@index([status])
+  @@map("memberships")
+}
+
+model Payment {
+  id        String        @id @default(uuid())
+  amount    Decimal       @db.Decimal(10, 2)
+  currency  String        @default("USD")
+  method    PaymentMethod @default(CASH)
+  notes     String?
+  receiptUrl String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  gymId        String
+  memberId     String
+  member       Member      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  membershipId String?
+  membership   Membership? @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+  branchId     String?
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  @@index([gymId])
+  @@index([memberId])
+  @@index([membershipId])
+  @@index([branchId])
+  @@map("payments")
+}
+
+model Attendance {
+  id        String    @id @default(uuid())
+  checkIn   DateTime  @default(now())
+  checkOut  DateTime?
+  createdAt DateTime  @default(now())
+
+  gymId    String
+  memberId String
+  member   Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  @@index([gymId])
+  @@index([memberId])
+  @@index([branchId])
+  @@index([checkIn])
+  @@map("attendances")
+}
+
+model Trainer {
+  id           String   @id @default(uuid())
+  firstName    String
+  lastName     String
+  email        String
+  phone        String?
+  specialty    String?
+  isActive     Boolean  @default(true)
+  availability Json     @default("{}")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  gymId    String
+  gym      Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  classes Class[]
+
+  @@index([gymId])
+  @@index([branchId])
+  @@map("trainers")
+}
+
+model Class {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  maxCapacity Int
+  schedule    Json
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  gymId     String
+  gym       Gym     @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  branchId  String?
+  branch    Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  trainerId String?
+  trainer   Trainer? @relation(fields: [trainerId], references: [id], onDelete: SetNull)
+
+  enrollments ClassEnrollment[]
+
+  @@index([gymId])
+  @@index([branchId])
+  @@index([trainerId])
+  @@map("classes")
+}
+
+model ClassEnrollment {
+  id        String    @id @default(uuid())
+  enrolledAt DateTime @default(now())
+  attended  Boolean   @default(false)
+  attendedAt DateTime?
+
+  gymId    String
+  memberId String
+  member   Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  classId  String
+  class    Class  @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, classId])
+  @@index([gymId])
+  @@index([memberId])
+  @@index([classId])
+  @@map("class_enrollments")
+}
+
+model InventoryItem {
+  id           String          @id @default(uuid())
+  name         String
+  description  String?
+  quantity     Int             @default(1)
+  status       InventoryStatus @default(ACTIVE)
+  serialNumber String?
+  purchaseDate DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  gymId    String
+  gym      Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  maintenances Maintenance[]
+
+  @@index([gymId])
+  @@index([branchId])
+  @@map("inventory_items")
+}
+
+model Maintenance {
+  id              String          @id @default(uuid())
+  type            MaintenanceType
+  description     String
+  responsibleName String?
+  scheduledAt     DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime        @default(now())
+
+  gymId           String
+  inventoryItemId String
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  @@index([gymId])
+  @@index([inventoryItemId])
+  @@map("maintenances")
+}
+
+model Communication {
+  id          String   @id @default(uuid())
+  subject     String
+  body        String
+  recipientIds String[]
+  sentAt      DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  gymId String
+  gym   Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@index([gymId])
+  @@map("communications")
+}
+
+model EmailTemplate {
+  id        String   @id @default(uuid())
+  name      String
+  subject   String
+  body      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  gymId     String
+  gym       Gym             @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  campaigns EmailCampaign[]
+
+  @@index([gymId])
+  @@map("email_templates")
+}
+
+model SubscriptionPlan {
+  id           String   @id @default(uuid())
+  key          String   @unique
+  label        String
+  price        Decimal  @db.Decimal(10, 2)
+  currency     String   @default("USD")
+  durationDays Int      @default(30)
+  graceDays    Int      @default(5)
+  maxMembers   Int?
+  features     Json     @default("[]")
+  isActive     Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("subscription_plans")
+}
+
+model GymBillingPayment {
+  id          String        @id @default(uuid())
+  amount      Decimal       @db.Decimal(10, 2)
+  currency    String        @default("USD")
+  method      PaymentMethod @default(CASH)
+  notes       String?
+  periodStart DateTime
+  periodEnd   DateTime
+  createdAt   DateTime      @default(now())
+
+  gymId String
+  gym   Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@index([gymId])
+  @@map("gym_billing_payments")
+}
+
+model EmailCampaign {
+  id          String         @id @default(uuid())
+  name        String
+  status      CampaignStatus @default(DRAFT)
+  segment     Json           @default("{}")
+  scheduledAt DateTime?
+  sentAt      DateTime?
+  metrics     Json           @default("{}")
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  gymId      String
+  gym        Gym            @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  templateId String?
+  template   EmailTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@index([gymId])
+  @@map("email_campaigns")
+}

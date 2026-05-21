@@ -1,0 +1,23 @@
+# dependencies
+node_modules
+
+# builds
+dist
+.next
+build
+
+# env
+.env
+.env.local
+
+# logs
+*.log
+
+# mac
+.DS_Store
+
+# prisma
+prisma/dev.db
+
+# vscode
+.vscode
