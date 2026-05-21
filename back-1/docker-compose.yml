@@ -1,21 +1,4 @@
 services:
-  db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-gymuser}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gympassword}
-      POSTGRES_DB: ${POSTGRES_DB:-gymosdb}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "${DATABASE_PORT:-5432}:5432"
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gymuser} -d ${POSTGRES_DB:-gymosdb}" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   api:
     build:
       context: .
@@ -24,7 +7,7 @@ services:
     ports:
       - "${PORT:-3001}:${PORT:-3001}"
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-gymuser}:${POSTGRES_PASSWORD:-gympassword}@db:5432/${POSTGRES_DB:-gymosdb}?schema=public
+      DATABASE_URL: ${DATABASE_URL}
       PORT: ${PORT:-3001}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
@@ -34,12 +17,7 @@ services:
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL}
     volumes:
       - uploads_data:/app/uploads
-    depends_on:
-      db:
-        condition: service_healthy
 
 volumes:
-  postgres_data:
-    driver: local
   uploads_data:
     driver: local
