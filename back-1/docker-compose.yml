@@ -9,9 +9,9 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5434:5432"
+      - "{DATABASE_PORT}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gymuser} -d ${POSTGRES_DB:-gymosdb}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gymuser} -d ${POSTGRES_DB:-gymosdb}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -24,7 +24,7 @@ services:
     ports:
       - "${PORT:-3001}:${PORT:-3001}"
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-gymuser}:${POSTGRES_PASSWORD:-gympassword}@db:{DATABASE_PORT}/${POSTGRES_DB:-gymosdb}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:-gymuser}:${POSTGRES_PASSWORD:-gympassword}@db:5432/${POSTGRES_DB:-gymosdb}?schema=public
       PORT: ${PORT:-3001}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
@@ -32,9 +32,14 @@ services:
       BACKEND_URL: ${BACKEND_URL:-http://localhost:3001}
       RESEND_API_KEY: ${RESEND_API_KEY}
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL}
+    volumes:
+      - uploads_data:/app/uploads
     depends_on:
       db:
         condition: service_healthy
-
-volumes:
-  postgres_data:
+        
+  volumes:
+    postgres_data:
+      driver: local
+    uploads_data:
+      driver: local
