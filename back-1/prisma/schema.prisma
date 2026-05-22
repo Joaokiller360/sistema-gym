@@ -69,7 +69,6 @@ model Gym {
   currency         String   @default("USD")
   schedule         Json?
   subscriptionPlan String   @default("BASIC")
-  storeEnabled     Boolean  @default(false)
   subscriptionStatus      GymSubscriptionStatus @default(ACTIVE)
   subscriptionExpiresAt   DateTime?
   subscriptionGraceEndsAt DateTime?
@@ -148,10 +147,11 @@ model Plan {
   daysPerWeek Int?
   benefits       Json     @default("[]")
   accessSchedule Json?
-  isActive    Boolean  @default(true)
-  isFeatured  Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isActive      Boolean  @default(true)
+  isFeatured    Boolean  @default(false)
+  storeEnabled  Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   gymId String
   gym   Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)

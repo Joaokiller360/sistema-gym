@@ -39,6 +39,7 @@ const formSchema = z.object({
   })),
   isActive: z.boolean(),
   isFeatured: z.boolean(),
+  storeEnabled: z.boolean(),
 })
 
 type FormValues = z.infer<typeof formSchema>
@@ -109,6 +110,7 @@ export function PlanForm({ gymSlug, planId, defaultValues, onSuccess, onClose, s
       benefits: [],
       isActive: true,
       isFeatured: false,
+      storeEnabled: false,
       ...defaultValues,
     },
   })
@@ -141,6 +143,7 @@ export function PlanForm({ gymSlug, planId, defaultValues, onSuccess, onClose, s
   const benefits = watch('benefits')
   const isActive = watch('isActive')
   const isFeatured = watch('isFeatured')
+  const storeEnabled = watch('storeEnabled')
 
   const currencySymbol = CURRENCIES.find(c => c.value === currency)?.symbol ?? '$'
   const daysLabel = DAYS_OPTIONS.find(d => d.value === daysPerWeek)?.label ?? daysPerWeek
@@ -317,6 +320,7 @@ export function PlanForm({ gymSlug, planId, defaultValues, onSuccess, onClose, s
             {([
               { name: 'isActive' as const, label: 'Plan activo', desc: 'Visible para los miembros' },
               { name: 'isFeatured' as const, label: 'Plan destacado', desc: 'Se muestra primero con badge dorado' },
+              { name: 'storeEnabled' as const, label: 'Incluye tienda', desc: 'Miembros con este plan acceden a la tienda' },
             ] as const).map(({ name, label, desc }) => (
               <div key={name} className="flex items-center justify-between rounded-xl border border-zinc-100 bg-zinc-50 px-4 py-3">
                 <div>

@@ -31,13 +31,12 @@ interface Props {
   defaultSlug: string
   defaultPlan: string
   defaultLogoUrl?: string | null
-  defaultStoreEnabled?: boolean
   ownerName?: string
   ownerEmail?: string
   hasOwner: boolean
 }
 
-export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, defaultLogoUrl, defaultStoreEnabled = false, ownerName, ownerEmail, hasOwner }: Props) {
+export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, defaultLogoUrl, ownerName, ownerEmail, hasOwner }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -73,7 +72,6 @@ export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, defa
   const [name, setName] = useState(defaultName)
   const [slug, setSlug] = useState(defaultSlug)
   const [plan, setPlan] = useState(defaultPlan)
-  const [storeEnabled, setStoreEnabled] = useState(defaultStoreEnabled)
   const [newOwnerName, setNewOwnerName] = useState(ownerName ?? '')
   const [newOwnerEmail, setNewOwnerEmail] = useState(ownerEmail ?? '')
   const [newOwnerPassword, setNewOwnerPassword] = useState('')
@@ -83,7 +81,7 @@ export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, defa
     if (!name.trim() || !slug.trim()) { setError('Nombre y slug requeridos'); return }
     setError(null)
     startTransition(async () => {
-      const gymRes = await updateGymAction(gymId, { name, slug, subscriptionPlan: plan, storeEnabled } as any)
+      const gymRes = await updateGymAction(gymId, { name, slug, subscriptionPlan: plan } as any)
       if (gymRes?.error) { setError(gymRes.error); return }
 
       if (hasOwner && (newOwnerName !== ownerName || newOwnerEmail !== ownerEmail || newOwnerPassword)) {
@@ -225,24 +223,6 @@ export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, defa
               </button>
             ))}
           </div>
-        </div>
-      </div>
-
-      {/* Módulos */}
-      <div className="space-y-3 pt-2 border-t border-zinc-100">
-        <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">Módulos</p>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold">Tienda / Mini-tienda</p>
-            <p className="text-xs text-zinc-400">Habilitar ventas de productos e inventario de tienda</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setStoreEnabled(v => !v)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${storeEnabled ? 'bg-[#1fad9d]' : 'bg-zinc-200'}`}
-          >
-            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${storeEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
-          </button>
         </div>
       </div>
 

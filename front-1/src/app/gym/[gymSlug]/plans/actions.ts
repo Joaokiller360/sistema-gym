@@ -18,6 +18,7 @@ const planSchema = z.object({
   })).default([]),
   isActive: z.boolean(),
   isFeatured: z.boolean(),
+  storeEnabled: z.boolean(),
 })
 
 export type PlanActionInput = z.infer<typeof planSchema>
@@ -37,6 +38,7 @@ function buildPayload(data: PlanActionInput) {
     benefits: data.benefits.map((b) => b.value.trim()).filter(Boolean),
     isActive: data.isActive,
     isFeatured: data.isFeatured,
+    storeEnabled: data.storeEnabled,
   }
 }
 

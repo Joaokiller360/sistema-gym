@@ -33,6 +33,7 @@ export default async function EditPlanPage({ params }: Props) {
     benefits: plan.benefits.map((b) => ({ value: b })),
     isActive: plan.isActive,
     isFeatured: plan.isFeatured,
+    storeEnabled: plan.storeEnabled,
   }
 
   return (

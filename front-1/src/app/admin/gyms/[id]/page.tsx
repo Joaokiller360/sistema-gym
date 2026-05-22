@@ -119,7 +119,6 @@ export default async function GymDetailPage({ params }: Props) {
           defaultSlug={gym.slug}
           defaultPlan={gym.subscriptionPlan}
           defaultLogoUrl={gym.logoUrl ?? null}
-          defaultStoreEnabled={gym.storeEnabled ?? false}
           ownerName={gym.owner?.name}
           ownerEmail={gym.owner?.email}
           hasOwner={!!gym.owner}

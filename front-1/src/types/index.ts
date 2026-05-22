@@ -81,6 +81,7 @@ export interface Plan {
   benefits: string[];
   isActive: boolean;
   isFeatured: boolean;
+  storeEnabled: boolean;
   gymId: string;
   createdAt: string;
   updatedAt: string;
