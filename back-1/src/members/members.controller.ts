@@ -18,7 +18,7 @@ export class MembersController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN, Role.RECEPTIONIST)
+  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN, Role.RECEPTIONIST)
   create(@Req() req: any, @Body() body: any) {
     return this.membersService.create(req.gymId, body);
   }
@@ -30,14 +30,14 @@ export class MembersController {
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN)
   update(@Param('id') id: string, @Req() req: any, @Body() body: any) {
     return this.membersService.update(id, req.gymId, body);
   }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER)
+  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER)
   remove(@Param('id') id: string, @Req() req: any) {
     return this.membersService.remove(id, req.gymId);
   }

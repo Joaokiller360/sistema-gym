@@ -1,6 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { centsToDecimal } from '../common/utils/proration.util';
 
 @Injectable()
 export class PaymentsService {
@@ -27,7 +26,7 @@ export class PaymentsService {
   async create(gymId: string, data: any) {
     if (!gymId) throw new BadRequestException('gymId is required');
     const payload = { ...data, gymId };
-    if (data.amount !== undefined) payload.amount = centsToDecimal(data.amount);
+    if (data.amount !== undefined) payload.amount = Math.round(Number(data.amount));
     return this.prisma.payment.create({ data: payload });
   }
 

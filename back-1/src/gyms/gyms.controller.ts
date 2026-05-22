@@ -32,9 +32,14 @@ export class GymsController {
     return this.gymsService.findBySlug(slug);
   }
 
+  @Get(':slug/status')
+  getStatus(@Param('slug') slug: string) {
+    return this.gymsService.getStatus(slug);
+  }
+
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.SUPER_ADMIN)
+  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN, Role.SUPER_ADMIN)
   update(@Param('id') id: string, @Body() body: any) {
     return this.gymsService.update(id, body);
   }

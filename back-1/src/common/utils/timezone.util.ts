@@ -51,3 +51,49 @@ export function buildDateRangeFilter(startDate: string | undefined, endDate: str
   if (endDate)   filter.lte = endOfDayUTC(endDate, timezone);
   return filter;
 }
+
+export type DayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+
+export interface DayHours {
+  open: string;  // "HH:mm" en hora local del gym
+  close: string; // "HH:mm" en hora local del gym
+}
+
+export type GymSchedule = Partial<Record<DayKey, DayHours | null>>;
+
+export interface PlanDayAccess {
+  from: string; // "HH:mm"
+  to: string;   // "HH:mm"
+}
+
+export type PlanAccessSchedule = Partial<Record<DayKey, PlanDayAccess | null>>;
+
+const DAY_MAP: Record<string, DayKey> = {
+  Mon: 'mon', Tue: 'tue', Wed: 'wed', Thu: 'thu',
+  Fri: 'fri', Sat: 'sat', Sun: 'sun',
+};
+
+function localTimeStr(date: Date, timezone: string): string {
+  return date.toLocaleTimeString('en-US', { timeZone: timezone, hour12: false, hour: '2-digit', minute: '2-digit' });
+}
+
+function localDayKey(date: Date, timezone: string): DayKey {
+  const abbr = date.toLocaleDateString('en-US', { timeZone: timezone, weekday: 'short' });
+  return DAY_MAP[abbr] ?? 'mon';
+}
+
+export function isGymOpen(schedule: GymSchedule, timezone: string, at: Date = new Date()): boolean {
+  const day = localDayKey(at, timezone);
+  const hours = schedule[day];
+  if (!hours) return false;
+  const time = localTimeStr(at, timezone);
+  return time >= hours.open && time <= hours.close;
+}
+
+export function isWithinPlanAccess(access: PlanAccessSchedule, timezone: string, at: Date = new Date()): boolean {
+  const day = localDayKey(at, timezone);
+  const slot = access[day];
+  if (!slot) return false;
+  const time = localTimeStr(at, timezone);
+  return time >= slot.from && time <= slot.to;
+}

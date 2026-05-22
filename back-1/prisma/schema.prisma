@@ -67,6 +67,7 @@ model Gym {
   country          String?
   timezone         String   @default("UTC")
   currency         String   @default("USD")
+  schedule         Json?
   subscriptionPlan String   @default("BASIC")
   subscriptionStatus      GymSubscriptionStatus @default(ACTIVE)
   subscriptionExpiresAt   DateTime?
@@ -137,11 +138,12 @@ model Branch {
 model Plan {
   id          String   @id @default(uuid())
   name        String
-  price       Decimal  @db.Decimal(10, 2)
+  price       Int
   currency    String   @default("USD")
   durationDays Int
   daysPerWeek Int?
-  benefits    Json     @default("[]")
+  benefits       Json     @default("[]")
+  accessSchedule Json?
   isActive    Boolean  @default(true)
   isFeatured  Boolean  @default(false)
   createdAt   DateTime @default(now())
@@ -213,7 +215,7 @@ model Membership {
 
 model Payment {
   id        String        @id @default(uuid())
-  amount    Decimal       @db.Decimal(10, 2)
+  amount    Int
   currency  String        @default("USD")
   method    PaymentMethod @default(CASH)
   notes     String?
@@ -400,7 +402,7 @@ model SubscriptionPlan {
   id           String   @id @default(uuid())
   key          String   @unique
   label        String
-  price        Decimal  @db.Decimal(10, 2)
+  price        Int
   currency     String   @default("USD")
   durationDays Int      @default(30)
   graceDays    Int      @default(5)
@@ -416,7 +418,7 @@ model SubscriptionPlan {
 
 model GymBillingPayment {
   id          String        @id @default(uuid())
-  amount      Decimal       @db.Decimal(10, 2)
+  amount      Int
   currency    String        @default("USD")
   method      PaymentMethod @default(CASH)
   notes       String?

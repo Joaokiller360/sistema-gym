@@ -3,6 +3,7 @@ import { unlink } from 'fs/promises';
 import { join } from 'path';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { isGymOpen, GymSchedule } from '../common/utils/timezone.util';
 
 @Injectable()
 export class GymsService {
@@ -12,6 +13,16 @@ export class GymsService {
     const gym = await this.prisma.gym.findUnique({ where: { slug } });
     if (!gym) throw new NotFoundException('Gym not found');
     return gym;
+  }
+
+  async getStatus(slug: string) {
+    const gym = await this.prisma.gym.findUnique({ where: { slug }, select: { timezone: true, schedule: true } });
+    if (!gym) throw new NotFoundException('Gym not found');
+    const tz = gym.timezone ?? 'UTC';
+    const now = new Date();
+    const localTime = now.toLocaleTimeString('es', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false });
+    const isOpen = gym.schedule ? isGymOpen(gym.schedule as GymSchedule, tz, now) : null;
+    return { timezone: tz, localTime, isOpen };
   }
 
   async update(id: string, data: any) {
