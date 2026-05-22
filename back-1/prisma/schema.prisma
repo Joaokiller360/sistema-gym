@@ -89,7 +89,9 @@ model Gym {
   campaigns           EmailCampaign[]
   templates           EmailTemplate[]
   gymBillingPayments  GymBillingPayment[]
+  planStore           PlanStore[]
   products            Product[]
+  productCategories   ProductCategory[]
   productSales        ProductSale[]
   memberCredits       MemberProductCredit[]
 
@@ -157,6 +159,7 @@ model Plan {
   gym   Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
 
   memberships Membership[]
+  storeItem   PlanStore?
 
   @@index([gymId])
   @@map("plans")
@@ -459,27 +462,46 @@ model EmailCampaign {
   @@map("email_campaigns")
 }
 
-// ── Store / Mini-tienda ────────────────────────────────────
+// ── Store / Mini-tienda ─────────────────────────────────────
+
+model ProductCategory {
+  id        String   @id @default(uuid())
+  name      String
+  imageUrl  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  gymId String
+  gym   Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  products Product[]
+
+  @@index([gymId])
+  @@map("product_categories")
+}
 
 model Product {
   id          String   @id @default(uuid())
   name        String
   description String?
+  imageUrl    String?
   price       Int
   cost        Int?
   stock       Int      @default(0)
-  category    String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  gymId String
-  gym   Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  gymId      String
+  gym        Gym              @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  categoryId String?
+  category   ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
-  saleItems   ProductSaleItem[]
-  credits     MemberProductCredit[]
+  saleItems ProductSaleItem[]
+  credits   MemberProductCredit[]
 
   @@index([gymId])
+  @@index([categoryId])
   @@map("products")
 }
 
@@ -524,12 +546,12 @@ model MemberProductCredit {
   notes     String?
   createdAt DateTime  @default(now())
 
-  gymId     String
-  gym       Gym     @relation(fields: [gymId], references: [id], onDelete: Cascade)
-  memberId  String
-  member    Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  productId String
-  product   Product @relation(fields: [productId], references: [id])
+  gymId      String
+  gym        Gym          @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  memberId   String
+  member     Member       @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product      @relation(fields: [productId], references: [id])
   paidSaleId String?
   paidSale   ProductSale? @relation(fields: [paidSaleId], references: [id], onDelete: SetNull)
 
@@ -537,4 +559,24 @@ model MemberProductCredit {
   @@index([memberId])
   @@index([productId])
   @@map("member_product_credits")
+}
+
+// ── Tienda de Planes ────────────────────────────────────────
+
+model PlanStore {
+  id           String   @id @default(uuid())
+  displayOrder Int      @default(0)
+  promoText    String?
+  isVisible    Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  planId String @unique
+  plan   Plan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  gymId String
+  gym   Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@index([gymId])
+  @@map("plan_store")
 }
