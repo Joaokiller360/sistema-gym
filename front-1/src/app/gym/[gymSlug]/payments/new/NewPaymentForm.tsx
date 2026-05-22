@@ -34,10 +34,14 @@ export function NewPaymentForm({
   gymSlug,
   members,
   plans,
+  onSuccess,
+  onClose,
 }: {
   gymSlug: string
   members: Member[]
   plans: Plan[]
+  onSuccess?: (memberId: string) => void
+  onClose?: () => void
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -56,9 +60,10 @@ export function NewPaymentForm({
   const [method, setMethod] = useState<'CASH' | 'CARD' | 'TRANSFER' | 'OTHER'>('CASH')
 
   const filteredMembers = useMemo(() => {
-    if (!memberSearch.trim()) return members.slice(0, 8)
+    const active = members.filter(m => m.isActive)
+    if (!memberSearch.trim()) return active.slice(0, 8)
     const q = memberSearch.toLowerCase()
-    return members.filter(m =>
+    return active.filter(m =>
       `${m.firstName} ${m.lastName}`.toLowerCase().includes(q) ||
       m.email.toLowerCase().includes(q)
     ).slice(0, 8)
@@ -95,6 +100,12 @@ export function NewPaymentForm({
       if (res?.error) {
         toast.error(res.error)
         setError(res.error)
+        return
+      }
+      if (onSuccess && res.memberId) {
+        onSuccess(res.memberId)
+      } else {
+        router.push(`/gym/${gymSlug}/members/${res.memberId}`)
       }
     })
   }

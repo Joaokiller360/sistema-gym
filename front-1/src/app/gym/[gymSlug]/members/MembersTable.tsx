@@ -1,9 +1,11 @@
 'use client'
 
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useTransition } from 'react'
 import { UserCircle2, ChevronRight } from 'lucide-react'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Member } from '@/types'
+import { toggleMemberActiveAction } from './[id]/actions'
 
 function initials(firstName: string, lastName: string) {
   return `${firstName[0] ?? ''}${lastName[0] ?? ''}`.toUpperCase()
@@ -13,7 +15,31 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-export function MembersTable({ members, gymSlug }: { members: Member[]; gymSlug: string }) {
+export function MembersTable({
+  members,
+  gymSlug,
+  paramsString,
+}: {
+  members: Member[]
+  gymSlug: string
+  paramsString: string
+}) {
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+
+  function toggleActive(id: string, current: boolean) {
+    startTransition(async () => {
+      await toggleMemberActiveAction(gymSlug, id, !current)
+      router.refresh()
+    })
+  }
+
+  function openMember(id: string) {
+    const params = new URLSearchParams(paramsString)
+    params.set('member', id)
+    router.push(`?${params.toString()}`)
+  }
+
   if (members.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed py-20 text-sm text-muted-foreground">
@@ -28,10 +54,10 @@ export function MembersTable({ members, gymSlug }: { members: Member[]; gymSlug:
       {/* Mobile cards */}
       <div className="space-y-2 sm:hidden">
         {members.map(m => (
-          <Link
+          <div
             key={m.id}
-            href={`/gym/${gymSlug}/members/${m.id}`}
-            className="flex items-center gap-3 bg-white rounded-2xl border border-zinc-200 px-4 py-3.5 hover:border-[#1fad9d] transition-colors active:scale-[0.99]"
+            onClick={() => openMember(m.id)}
+            className="w-full flex items-center gap-3 bg-white rounded-2xl border border-zinc-200 px-4 py-3.5 hover:border-[#1fad9d] transition-colors active:scale-[0.99] cursor-pointer"
           >
             <div className="h-10 w-10 rounded-full bg-[#1fad9d]/10 flex items-center justify-center shrink-0">
               <span className="text-sm font-bold text-[#1fad9d]">{initials(m.firstName, m.lastName)}</span>
@@ -41,10 +67,21 @@ export function MembersTable({ members, gymSlug }: { members: Member[]; gymSlug:
               <p className="text-xs text-muted-foreground truncate">{m.email}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <StatusBadge status={m.isActive ? 'active' : 'inactive'} />
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={(e) => { e.stopPropagation(); toggleActive(m.id, m.isActive) }}
+                className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold transition-all disabled:opacity-50 ${
+                  m.isActive
+                    ? 'bg-emerald-50 text-emerald-700 hover:bg-red-50 hover:text-red-600'
+                    : 'bg-zinc-100 text-zinc-500 hover:bg-emerald-50 hover:text-emerald-700'
+                }`}
+              >
+                {m.isActive ? 'Activo' : 'Inactivo'}
+              </button>
               <ChevronRight className="h-4 w-4 text-zinc-300" />
             </div>
-          </Link>
+          </div>
         ))}
       </div>
 
@@ -76,17 +113,29 @@ export function MembersTable({ members, gymSlug }: { members: Member[]; gymSlug:
                 </td>
                 <td className="px-5 py-4 text-muted-foreground hidden md:table-cell">{m.phone ?? '—'}</td>
                 <td className="px-5 py-4">
-                  <StatusBadge status={m.isActive ? 'active' : 'inactive'} />
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={(e) => { e.stopPropagation(); toggleActive(m.id, m.isActive) }}
+                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold transition-all disabled:opacity-50 ${
+                      m.isActive
+                        ? 'bg-emerald-50 text-emerald-700 hover:bg-red-50 hover:text-red-600'
+                        : 'bg-zinc-100 text-zinc-500 hover:bg-emerald-50 hover:text-emerald-700'
+                    }`}
+                  >
+                    {m.isActive ? 'Activo' : 'Inactivo'}
+                  </button>
                 </td>
                 <td className="px-5 py-4 text-muted-foreground hidden lg:table-cell">{formatDate(m.createdAt)}</td>
                 <td className="px-5 py-4 text-right">
-                  <Link
-                    href={`/gym/${gymSlug}/members/${m.id}`}
+                  <button
+                    type="button"
+                    onClick={() => openMember(m.id)}
                     className="inline-flex items-center gap-1 text-xs font-semibold text-[#1fad9d] hover:text-[#0e7a70] transition-colors"
                   >
                     Ver perfil
                     <ChevronRight className="h-3.5 w-3.5" />
-                  </Link>
+                  </button>
                 </td>
               </tr>
             ))}

@@ -43,6 +43,7 @@ export interface Gym {
   country: string | null;
   timezone: string;
   subscriptionPlan: string;
+  storeEnabled: boolean;
   ownerId: string | null;
   owner?: { id: string; email: string; name: string } | null;
   createdAt: string;

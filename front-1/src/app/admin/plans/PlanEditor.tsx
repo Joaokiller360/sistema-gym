@@ -22,6 +22,7 @@ interface SubscriptionPlan {
   price: number
   currency: string
   maxMembers: number | null
+  storeEnabled: boolean
   features: string[]
   isActive: boolean
   sortOrder: number
@@ -48,6 +49,7 @@ function EditPlanCard({ plan }: { plan: SubscriptionPlan }) {
   const [price, setPrice] = useState(String(Number(plan.price)))
   const [currency, setCurrency] = useState(plan.currency)
   const [maxMembers, setMaxMembers] = useState(plan.maxMembers == null ? '' : String(plan.maxMembers))
+  const [storeEnabled, setStoreEnabled] = useState(plan.storeEnabled ?? false)
   const [features, setFeatures] = useState<string[]>(plan.features as string[])
   const [isActive, setIsActive] = useState(plan.isActive)
 
@@ -64,6 +66,7 @@ function EditPlanCard({ plan }: { plan: SubscriptionPlan }) {
         price,
         currency,
         maxMembers: maxMembers === '' ? null : parseInt(maxMembers),
+        storeEnabled,
         features: features.filter(f => f.trim()),
         isActive,
       })
@@ -110,6 +113,11 @@ function EditPlanCard({ plan }: { plan: SubscriptionPlan }) {
             </div>
           </div>
 
+          {plan.storeEnabled && (
+            <p className="text-xs font-bold text-[#1fad9d] bg-[#1fad9d]/10 rounded-full px-2.5 py-1 w-fit">
+              🏪 Tienda incluida
+            </p>
+          )}
           <ul className="space-y-1.5">
             {(plan.features as string[]).map((f, i) => (
               <li key={i} className="flex items-center gap-2 text-sm">
@@ -171,6 +179,20 @@ function EditPlanCard({ plan }: { plan: SubscriptionPlan }) {
           <input type="number" min="1" value={maxMembers} onChange={e => setMaxMembers(e.target.value)} disabled={isPending} placeholder="Ilimitado" className={inputClass} />
         </div>
 
+        <div className="flex items-center justify-between">
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest text-zinc-400 block">Tienda incluida</label>
+            <p className="text-xs text-zinc-400 mt-0.5">Habilita módulo de tienda para los gyms con este plan</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setStoreEnabled(v => !v)}
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${storeEnabled ? 'bg-[#1fad9d]' : 'bg-zinc-200'}`}
+          >
+            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${storeEnabled ? 'translate-x-4' : 'translate-x-1'}`} />
+          </button>
+        </div>
+
         <div>
           <div className="flex items-center justify-between mb-2">
             <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Características</label>
@@ -227,6 +249,7 @@ function NewPlanCard() {
   const [price, setPrice] = useState('0')
   const [currency, setCurrency] = useState('USD')
   const [maxMembers, setMaxMembers] = useState('')
+  const [storeEnabledNew, setStoreEnabledNew] = useState(false)
   const [features, setFeatures] = useState<string[]>([''])
 
   function handleCreate() {
@@ -240,6 +263,7 @@ function NewPlanCard() {
         price,
         currency,
         maxMembers: maxMembers === '' ? null : parseInt(maxMembers),
+        storeEnabled: storeEnabledNew,
         features: features.filter(f => f.trim()),
       })
       if (res.error) { setError(res.error) }
@@ -294,6 +318,20 @@ function NewPlanCard() {
         <div>
           <label className="text-xs font-bold uppercase tracking-widest text-zinc-400 block mb-1">Máx. miembros</label>
           <input type="number" min="1" value={maxMembers} onChange={e => setMaxMembers(e.target.value)} disabled={isPending} placeholder="Ilimitado" className={inputClass} />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <label className="text-xs font-bold uppercase tracking-widest text-zinc-400 block">Tienda incluida</label>
+            <p className="text-xs text-zinc-400 mt-0.5">Habilita módulo de tienda para gyms con este plan</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setStoreEnabledNew(v => !v)}
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${storeEnabledNew ? 'bg-[#1fad9d]' : 'bg-zinc-200'}`}
+          >
+            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${storeEnabledNew ? 'translate-x-4' : 'translate-x-1'}`} />
+          </button>
         </div>
 
         <div>

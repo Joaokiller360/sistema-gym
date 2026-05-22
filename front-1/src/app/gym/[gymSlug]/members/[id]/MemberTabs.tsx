@@ -10,6 +10,7 @@ import { MembershipWithRelations, Payment, Attendance, MembershipStatus, Plan } 
 import { AssignPlanForm } from './AssignPlanForm'
 import { ChangePlanForm } from './ChangePlanForm'
 import { RegisterPaymentForm } from './RegisterPaymentForm'
+import { MemberCredits } from './MemberCredits'
 import { deletePaymentAction } from './actions'
 import { cancelMembershipWithPaymentsAction } from '../../memberships/actions'
 import {
@@ -51,6 +52,14 @@ const METHOD_LABELS: Record<string, string> = {
   OTHER: 'Otro',
 }
 
+interface Product {
+  id: string; name: string; price: number; stock: number; category: string | null; isActive: boolean
+}
+interface Credit {
+  id: string; productId: string; quantity: number; unitPrice: number; isPaid: boolean; paidAt: string | null
+  notes: string | null; createdAt: string; product: { name: string; price: number }
+}
+
 interface MemberTabsProps {
   memberId: string
   gymSlug: string
@@ -58,9 +67,12 @@ interface MemberTabsProps {
   payments: Payment[]
   attendance: Attendance[]
   plans: Plan[]
+  memberIsActive?: boolean
+  storeProducts?: Product[]
+  memberCredits?: Credit[]
 }
 
-export function MemberTabs({ memberId, gymSlug, memberships, payments, attendance, plans }: MemberTabsProps) {
+export function MemberTabs({ memberId, gymSlug, memberships, payments, attendance, plans, memberIsActive = true, storeProducts = [], memberCredits = [] }: MemberTabsProps) {
   const router = useRouter()
   const activeMembership = memberships.find(m => m.status === 'ACTIVE')
   const pastMemberships = memberships.filter(m => m.status !== 'ACTIVE')
@@ -102,6 +114,14 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
         <TabsTrigger value="membership">Membresía</TabsTrigger>
         <TabsTrigger value="payments">Pagos</TabsTrigger>
         <TabsTrigger value="attendance">Asistencia</TabsTrigger>
+        <TabsTrigger value="credits">
+          Créditos
+          {memberCredits.filter(c => !c.isPaid).length > 0 && (
+            <span className="ml-1.5 rounded-full bg-amber-400 text-black text-[10px] font-black px-1.5 py-0.5">
+              {memberCredits.filter(c => !c.isPaid).length}
+            </span>
+          )}
+        </TabsTrigger>
         <TabsTrigger value="communications">Comunicaciones</TabsTrigger>
       </TabsList>
 
@@ -156,8 +176,9 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
           </div>
         )}
 
-        {/* Assign plan form (always visible to allow renewals) */}
-        <AssignPlanForm memberId={memberId} gymSlug={gymSlug} plans={plans} />
+        {memberIsActive && (
+          <AssignPlanForm memberId={memberId} gymSlug={gymSlug} plans={plans} activeMembershipId={activeMembership?.id} />
+        )}
 
         {/* Change plan (only when there's an active membership) */}
         {activeMembership && (
@@ -297,6 +318,16 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
             </div>
           </>
         )}
+      </TabsContent>
+
+      {/* ── Créditos tienda ──────────────────────────────── */}
+      <TabsContent value="credits" className="mt-4">
+        <MemberCredits
+          gymSlug={gymSlug}
+          memberId={memberId}
+          products={storeProducts}
+          credits={memberCredits}
+        />
       </TabsContent>
 
       {/* ── Comunicaciones ───────────────────────────────── */}

@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
-import { ChevronLeft, Mail, Phone } from 'lucide-react'
+import { ChevronLeft, Mail, Phone, Pencil } from 'lucide-react'
+import { Suspense } from 'react'
 import { apiFetch } from '@/lib/api'
 import { Member, MembershipWithRelations, Payment, Attendance, Plan } from '@/types'
 import { StatusBadge } from '@/components/shared/StatusBadge'
@@ -9,11 +10,13 @@ import { Separator } from '@/components/ui/separator'
 import { MemberTabs } from './MemberTabs'
 import { MemberStatusControl } from './MemberStatusControl'
 import { ResendWelcomeButton } from './ResendWelcomeButton'
+import { EditMemberModal } from './EditMemberModal'
 import { cn } from '@/lib/utils'
 import { buttonVariants } from '@/components/ui/button'
 
 interface Props {
   params: Promise<{ gymSlug: string; id: string }>
+  searchParams: Promise<{ edit?: string }>
 }
 
 function initials(name: string) {
@@ -28,25 +31,32 @@ function formatDate(iso: string) {
   })
 }
 
-export default async function MemberDetailPage({ params }: Props) {
+export default async function MemberDetailPage({ params, searchParams }: Props) {
   const { gymSlug, id } = await params
+  const { edit } = await searchParams
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value ?? ''
 
-  const [member, memberships, payments, attendance, plans] = await Promise.all([
+  const [member, memberships, payments, attendance, plans, storeProducts, memberCredits] = await Promise.all([
     apiFetch<Member>(`/members/${id}`, token, {
-      next: { tags: [`member-${id}`] },
+      next: { tags: [`member-${id}`] }, headers: { 'x-gym-slug': gymSlug },
     }),
     apiFetch<MembershipWithRelations[]>(`/memberships?memberId=${id}`, token, {
-      next: { tags: [`member-${id}-memberships`] },
+      next: { tags: [`member-${id}-memberships`] }, headers: { 'x-gym-slug': gymSlug },
     }),
     apiFetch<Payment[]>(`/payments?memberId=${id}`, token, {
-      next: { tags: [`member-${id}-payments`] },
+      next: { tags: [`member-${id}-payments`] }, headers: { 'x-gym-slug': gymSlug },
     }),
     apiFetch<Attendance[]>(`/attendance?memberId=${id}`, token, {
-      next: { tags: [`member-${id}-attendance`] },
+      next: { tags: [`member-${id}-attendance`] }, headers: { 'x-gym-slug': gymSlug },
     }),
-    apiFetch<Plan[]>(`/plans`, token),
+    apiFetch<Plan[]>(`/plans`, token, { headers: { 'x-gym-slug': gymSlug } }),
+    apiFetch<any[]>('/store/products', token, {
+      next: { tags: [`store-products-${gymSlug}`] }, headers: { 'x-gym-slug': gymSlug },
+    }),
+    apiFetch<any[]>(`/store/credits/${id}`, token, {
+      next: { tags: [`store-credits-${id}`] }, headers: { 'x-gym-slug': gymSlug },
+    }),
   ])
 
   if (!member) notFound()
@@ -82,6 +92,13 @@ export default async function MemberDetailPage({ params }: Props) {
                 {member.firstName} {member.lastName}
               </h1>
               <StatusBadge status={member.isActive ? 'active' : 'inactive'} />
+              <a
+                href={`?edit=member`}
+                className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 px-2.5 py-1 text-xs font-semibold text-zinc-500 hover:border-zinc-300 hover:text-zinc-800 transition-all"
+              >
+                <Pencil className="h-3 w-3" />
+                Editar
+              </a>
             </div>
 
             <div className="flex items-center gap-4 mt-2 flex-wrap">
@@ -120,6 +137,12 @@ export default async function MemberDetailPage({ params }: Props) {
         </div>
       </div>
 
+      {edit === 'member' && (
+        <Suspense>
+          <EditMemberModal gymSlug={gymSlug} member={member} />
+        </Suspense>
+      )}
+
       {/* Tabs */}
       <MemberTabs
         memberId={member.id}
@@ -128,6 +151,9 @@ export default async function MemberDetailPage({ params }: Props) {
         payments={payments ?? []}
         attendance={attendance ?? []}
         plans={plans ?? []}
+        memberIsActive={member.isActive}
+        storeProducts={storeProducts ?? []}
+        memberCredits={memberCredits ?? []}
       />
     </div>
   )

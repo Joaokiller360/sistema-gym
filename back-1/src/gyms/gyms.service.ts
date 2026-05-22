@@ -12,7 +12,11 @@ export class GymsService {
   async findBySlug(slug: string) {
     const gym = await this.prisma.gym.findUnique({ where: { slug } });
     if (!gym) throw new NotFoundException('Gym not found');
-    return gym;
+    const plan = await this.prisma.subscriptionPlan.findUnique({
+      where: { key: gym.subscriptionPlan },
+      select: { storeEnabled: true },
+    });
+    return { ...gym, storeEnabled: gym.storeEnabled || (plan?.storeEnabled ?? false) };
   }
 
   async getStatus(slug: string) {

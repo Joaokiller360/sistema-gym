@@ -19,6 +19,7 @@ export default async function EditPlanPage({ params }: Props) {
 
   const plan = await apiFetch<Plan>(`/plans/${planId}`, token, {
     next: { tags: [`plan-${planId}`] },
+    headers: { 'x-gym-slug': gymSlug },
   })
 
   if (!plan) notFound()

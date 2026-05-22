@@ -1,22 +1,42 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import Link from 'next/link'
 import { Plus, Trash2, Loader2, Check, Star, Zap } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { createPlanAction, updatePlanAction } from './actions'
 
+const ONLY_LETTERS_NUMBERS = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ0-9\s]+$/
+const ALLOWED_CHAR = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ0-9\s]$/
+
+function blockInvalidChar(e: React.KeyboardEvent<HTMLInputElement>) {
+  if (e.key.length === 1 && !ALLOWED_CHAR.test(e.key)) e.preventDefault()
+}
+
+function blockInvalidPaste(e: React.ClipboardEvent<HTMLInputElement>) {
+  const text = e.clipboardData.getData('text')
+  if (!ONLY_LETTERS_NUMBERS.test(text)) e.preventDefault()
+}
+
 const formSchema = z.object({
-  name: z.string().min(1, 'Nombre requerido').max(100),
-  price: z.number({ message: 'Precio inválido' }).min(0),
+  name: z.string().min(1, 'Nombre requerido').max(100, 'No se puede poner más de 100 caracteres').refine(
+    v => ONLY_LETTERS_NUMBERS.test(v),
+    'Solo se permiten letras y números',
+  ),
+  price: z.number({ message: 'Precio inválido' }).min(0).max(999, 'No se puede poner más de 3 caracteres'),
   currency: z.string().min(1),
-  durationDays: z.number({ message: 'Duración inválida' }).int().min(1),
+  durationDays: z.number({ message: 'Duración inválida' }).int().min(1).max(100, 'Máximo 100 días'),
   daysPerWeek: z.string().min(1),
-  benefits: z.array(z.object({ value: z.string() })),
+  benefits: z.array(z.object({
+    value: z.string().refine(
+      v => v === '' || ONLY_LETTERS_NUMBERS.test(v),
+      'Solo se permiten letras y números',
+    ),
+  })),
   isActive: z.boolean(),
   isFeatured: z.boolean(),
 })
@@ -55,6 +75,9 @@ interface PlanFormProps {
   gymSlug: string
   planId?: string
   defaultValues?: Partial<FormValues>
+  onSuccess?: () => void
+  onClose?: () => void
+  showPreview?: boolean
 }
 
 function FieldError({ msg }: { msg?: string }) {
@@ -62,7 +85,8 @@ function FieldError({ msg }: { msg?: string }) {
   return <p className="text-xs text-red-500 font-medium mt-1">{msg}</p>
 }
 
-export function PlanForm({ gymSlug, planId, defaultValues }: PlanFormProps) {
+export function PlanForm({ gymSlug, planId, defaultValues, onSuccess, onClose, showPreview = true }: PlanFormProps) {
+  const router = useRouter()
   const isEdit = !!planId
   const [serverError, setServerError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -97,7 +121,15 @@ export function PlanForm({ gymSlug, planId, defaultValues }: PlanFormProps) {
       const result = isEdit
         ? await updatePlanAction(gymSlug, planId!, values)
         : await createPlanAction(gymSlug, values)
-      if (result?.error) setServerError(result.error)
+      if (result?.error) {
+        setServerError(result.error)
+        return
+      }
+      if (onSuccess) {
+        onSuccess()
+      } else {
+        router.push(`/gym/${gymSlug}/plans`)
+      }
     })
   }
 
@@ -115,7 +147,7 @@ export function PlanForm({ gymSlug, planId, defaultValues }: PlanFormProps) {
   const durationPreset = DURATION_PRESETS.find(p => p.days === durationDays)
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6 items-start">
+    <form onSubmit={handleSubmit(onSubmit)} className={showPreview ? 'grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6 items-start' : 'space-y-4'}>
 
       {/* ── LEFT: fields ── */}
       <div className="space-y-4">
@@ -127,6 +159,8 @@ export function PlanForm({ gymSlug, planId, defaultValues }: PlanFormProps) {
             placeholder="Ej. Plan Full Access"
             disabled={isPending}
             {...register('name')}
+            onKeyDown={blockInvalidChar}
+            onPaste={blockInvalidPaste}
             className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#1fad9d] focus:border-transparent disabled:opacity-50 transition-all font-semibold"
           />
           <FieldError msg={errors.name?.message} />
@@ -143,7 +177,7 @@ export function PlanForm({ gymSlug, planId, defaultValues }: PlanFormProps) {
               <input
                 type="text"
                 inputMode="decimal"
-                maxLength={100}
+                maxLength={3}
                 disabled={isPending}
                 {...register('price', { setValueAs: v => parseFloat(String(v).replace(/[^0-9.]/g, '')) || 0 })}
                 className="w-full rounded-xl border border-zinc-200 bg-zinc-50 pl-8 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1fad9d] focus:border-transparent disabled:opacity-50 transition-all font-semibold"
@@ -192,14 +226,17 @@ export function PlanForm({ gymSlug, planId, defaultValues }: PlanFormProps) {
               <input
                 type="number"
                 min="1"
+                max="100"
                 disabled={isPending}
                 {...register('durationDays', { valueAsNumber: true })}
                 placeholder="Días"
                 className={cn(
-                  'w-24 rounded-xl border px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#1fad9d] focus:border-transparent disabled:opacity-50 transition-all bg-zinc-50',
-                  !DURATION_PRESETS.find(p => p.days === durationDays)
-                    ? 'border-[#1fad9d] text-[#1fad9d]'
-                    : 'border-zinc-200 text-zinc-500',
+                  'w-24 rounded-xl border px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50 transition-all bg-zinc-50',
+                  errors.durationDays
+                    ? 'border-red-400 text-red-500 focus:ring-red-400'
+                    : !DURATION_PRESETS.find(p => p.days === durationDays)
+                      ? 'border-[#1fad9d] text-[#1fad9d] focus:ring-[#1fad9d]'
+                      : 'border-zinc-200 text-zinc-500 focus:ring-[#1fad9d]',
                 )}
               />
             </div>
@@ -249,6 +286,8 @@ export function PlanForm({ gymSlug, planId, defaultValues }: PlanFormProps) {
                   placeholder={`Beneficio ${index + 1}`}
                   disabled={isPending}
                   {...register(`benefits.${index}.value`)}
+                  onKeyDown={blockInvalidChar}
+                  onPaste={blockInvalidPaste}
                   className="flex-1 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#1fad9d] focus:border-transparent disabled:opacity-50 transition-all"
                 />
                 <button
@@ -311,17 +350,19 @@ export function PlanForm({ gymSlug, planId, defaultValues }: PlanFormProps) {
             {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
             {isPending ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Crear plan'}
           </button>
-          <Link
-            href={`/gym/${gymSlug}/plans`}
-            className="rounded-xl border border-zinc-200 px-6 py-2.5 text-sm font-semibold text-zinc-600 hover:border-zinc-300 transition-all"
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() => onClose ? onClose() : router.push(`/gym/${gymSlug}/plans`)}
+            className="rounded-xl border border-zinc-200 px-6 py-2.5 text-sm font-semibold text-zinc-600 hover:border-zinc-300 transition-all disabled:opacity-50"
           >
             Cancelar
-          </Link>
+          </button>
         </div>
       </div>
 
       {/* ── RIGHT: live preview ── */}
-      <div className="lg:sticky lg:top-6">
+      {showPreview && <div className="lg:sticky lg:top-6">
         <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-3">Vista previa</p>
         <div className={cn(
           'rounded-2xl border-2 bg-white p-6 space-y-5 transition-all',
@@ -380,7 +421,7 @@ export function PlanForm({ gymSlug, planId, defaultValues }: PlanFormProps) {
             </ul>
           )}
         </div>
-      </div>
+      </div>}
 
     </form>
   )

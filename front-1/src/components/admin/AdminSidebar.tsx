@@ -14,9 +14,12 @@ import {
   TrendingUp,
   Menu,
   X,
+  Moon,
+  Sun,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logoutAction } from '@/lib/logout'
+import { useTheme } from '@/components/providers/ThemeProvider'
 
 const NAV = [
   { label: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
@@ -94,6 +97,7 @@ function NavContent({
         <div className="px-3 py-1.5">
           <p className="text-xs text-white/40 truncate">{user.email}</p>
         </div>
+        <ThemeToggleButton />
         <button
           onClick={onLogout}
           disabled={isPending}
@@ -104,6 +108,19 @@ function NavContent({
         </button>
       </div>
     </div>
+  )
+}
+
+function ThemeToggleButton() {
+  const { theme, toggle } = useTheme()
+  return (
+    <button
+      onClick={toggle}
+      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-white/60 hover:bg-white/5 hover:text-white transition-all"
+    >
+      {theme === 'dark' ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
+      {theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
+    </button>
   )
 }
 

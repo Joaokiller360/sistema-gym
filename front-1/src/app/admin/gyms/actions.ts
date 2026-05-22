@@ -88,6 +88,8 @@ export async function updateGymAction(gymId: string, data: Partial<CreateGymInpu
   if (!result) return { error: 'Error al actualizar el gimnasio' }
   revalidateTag('admin-gyms', 'default')
   revalidateTag(`admin-gym-${gymId}`, 'default')
+  const slug = (data as any).slug
+  if (slug) revalidateTag(`gym-${slug}`, 'default')
 }
 
 export async function deleteGymAction(gymId: string): Promise<{ error?: string }> {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -9,17 +9,16 @@ export function SearchInput({ defaultValue }: { defaultValue?: string }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [value, setValue] = useState(defaultValue ?? '')
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const raw = e.target.value
-    const value = raw.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]/g, '')
-    if (raw !== value) {
-      e.target.value = value
-    }
+    const filtered = raw.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]/g, '')
+    setValue(filtered)
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
       const params = new URLSearchParams(searchParams.toString())
-      if (value.trim()) params.set('q', value.trim())
+      if (filtered.trim()) params.set('q', filtered.trim())
       else params.delete('q')
       params.delete('page')
       router.push(`?${params.toString()}`)
@@ -31,7 +30,7 @@ export function SearchInput({ defaultValue }: { defaultValue?: string }) {
       <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground pointer-events-none" />
       <Input
         placeholder="Buscar miembro..."
-        defaultValue={defaultValue}
+        value={value}
         onChange={handleChange}
         className="pl-8"
       />

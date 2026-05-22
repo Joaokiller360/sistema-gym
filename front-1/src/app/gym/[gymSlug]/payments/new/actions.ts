@@ -1,7 +1,6 @@
 'use server'
 
 import { cookies } from 'next/headers'
-import { redirect } from 'next/navigation'
 import { revalidateTag } from 'next/cache'
 import { z } from 'zod'
 import { apiFetch, apiFetchWithError } from '@/lib/api'
@@ -27,7 +26,7 @@ export type NewPaymentInput = z.infer<typeof schema>
 export async function registerMemberPaymentAction(
   gymSlug: string,
   data: NewPaymentInput,
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; memberId?: string }> {
   const parsed = schema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
 
@@ -72,5 +71,5 @@ export async function registerMemberPaymentAction(
   revalidateTag(`memberships-${gymSlug}`, 'default')
   revalidateTag(`member-${memberId}`, 'default')
   revalidateTag(`member-${memberId}-memberships`, 'default')
-  redirect(`/gym/${gymSlug}/members/${memberId}`)
+  return { memberId }
 }

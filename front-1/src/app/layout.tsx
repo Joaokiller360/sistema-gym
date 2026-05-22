@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Roboto } from "next/font/google"
 import { Toaster } from "@/components/ui/sonner"
+import { ThemeProvider } from "@/components/providers/ThemeProvider"
 import "./globals.css"
 
 const roboto = Roboto({
@@ -18,10 +19,19 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="es" className={`${roboto.variable} h-full antialiased`}>
+    <html lang="es" className={`${roboto.variable} h-full antialiased`} suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=sessionStorage.getItem('theme');if(t==='dark')document.documentElement.classList.add('dark')}catch(e){}})()`,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col">
-        {children}
-        <Toaster richColors position="top-right" />
+        <ThemeProvider>
+          {children}
+          <Toaster richColors position="top-right" />
+        </ThemeProvider>
       </body>
     </html>
   )

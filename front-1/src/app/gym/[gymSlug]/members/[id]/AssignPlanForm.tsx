@@ -17,9 +17,10 @@ interface Props {
   memberId: string
   gymSlug: string
   plans: Plan[]
+  activeMembershipId?: string
 }
 
-export function AssignPlanForm({ memberId, gymSlug, plans }: Props) {
+export function AssignPlanForm({ memberId, gymSlug, plans, activeMembershipId }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [planId, setPlanId] = useState('')
@@ -43,7 +44,7 @@ export function AssignPlanForm({ memberId, gymSlug, plans }: Props) {
         price: Number(selectedPlan.price),
         currency: selectedPlan.currency,
         method,
-      })
+      }, activeMembershipId)
       if (res.error) {
         setError(res.error)
       } else {

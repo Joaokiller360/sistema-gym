@@ -119,6 +119,7 @@ export default async function GymDetailPage({ params }: Props) {
           defaultSlug={gym.slug}
           defaultPlan={gym.subscriptionPlan}
           defaultLogoUrl={gym.logoUrl ?? null}
+          defaultStoreEnabled={gym.storeEnabled ?? false}
           ownerName={gym.owner?.name}
           ownerEmail={gym.owner?.email}
           hasOwner={!!gym.owner}
@@ -250,7 +251,7 @@ export default async function GymDetailPage({ params }: Props) {
                     }
                   </td>
                   <td className="px-5 py-3 font-semibold">
-                    {p.currency} {Number(p.amount).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                    {p.currency} {(Number(p.amount) / 100).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
                   </td>
                   <td className="px-5 py-3 text-zinc-500 hidden md:table-cell">
                     {{ CASH: 'Efectivo', CARD: 'Tarjeta', TRANSFER: 'Transferencia', OTHER: 'Otro' }[p.method] ?? p.method}

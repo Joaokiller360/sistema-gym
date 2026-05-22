@@ -1,6 +1,7 @@
 'use client'
 
 import { useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { PlanCard } from '@/components/gym/PlanCard'
 import { Plan } from '@/types'
 import { togglePlanActiveAction, deletePlanAction } from './actions'
@@ -11,17 +12,20 @@ interface PlansListProps {
 }
 
 export function PlansList({ plans, gymSlug }: PlansListProps) {
+  const router = useRouter()
   const [, startTransition] = useTransition()
 
   function handleToggle(planId: string, active: boolean) {
     startTransition(async () => {
       await togglePlanActiveAction(gymSlug, planId, active)
+      router.refresh()
     })
   }
 
   function handleDelete(planId: string) {
     startTransition(async () => {
       await deletePlanAction(gymSlug, planId)
+      router.refresh()
     })
   }
 

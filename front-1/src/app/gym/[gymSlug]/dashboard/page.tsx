@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { cookies } from 'next/headers'
 import { Users, TrendingUp, CheckSquare, Calendar, UserPlus, ClipboardList, Dumbbell, CreditCard, BarChart2, Package } from 'lucide-react'
 import Link from 'next/link'
@@ -5,12 +6,14 @@ import { apiFetch } from '@/lib/api'
 import { verifyToken } from '@/lib/auth'
 import { KpiCard } from '@/components/shared/KpiCard'
 import { Member, Attendance, Plan, Class, Gym } from '@/types'
+import { NewMemberModal } from '../members/NewMemberModal'
 
 interface MembersResponse { data: Member[]; total: number }
 interface FinancialReport { totalRevenue: number; currency: string }
 
 interface Props {
   params: Promise<{ gymSlug: string }>
+  searchParams: Promise<{ new?: string }>
 }
 
 function startOfDay(d: Date) {
@@ -23,8 +26,9 @@ function startOfMonth(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), 1).toISOString()
 }
 
-export default async function GymDashboardPage({ params }: Props) {
+export default async function GymDashboardPage({ params, searchParams }: Props) {
   const { gymSlug } = await params
+  const { new: newParam } = await searchParams
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value ?? ''
 
@@ -39,11 +43,13 @@ export default async function GymDashboardPage({ params }: Props) {
     : null
   const gymIdParam = isSuperAdmin && gym ? `&gymId=${gym.id}` : ''
 
+  const gymHeader = { headers: { 'x-gym-slug': gymSlug } }
+
   const [membersRaw, attendanceRaw, plans, classes, financial] = await Promise.all([
-    apiFetch<MembersResponse | Member[]>(`/members?status=active&limit=5`, token),
-    apiFetch<Attendance[]>(`/attendance?${qs}`, token),
-    apiFetch<Plan[]>(`/plans`, token),
-    apiFetch<Class[]>(`/classes`, token),
+    apiFetch<MembersResponse | Member[]>(`/members?status=active&limit=5`, token, gymHeader),
+    apiFetch<Attendance[]>(`/attendance?${qs}`, token, gymHeader),
+    apiFetch<Plan[]>(`/plans`, token, gymHeader),
+    apiFetch<Class[]>(`/classes`, token, gymHeader),
     apiFetch<FinancialReport>(`/reports/financial?startDate=${startOfMonth(now)}${gymIdParam}`, token),
   ])
 
@@ -60,7 +66,7 @@ export default async function GymDashboardPage({ params }: Props) {
     : []
 
   const QUICK_LINKS = [
-    { href: `members/new`, label: 'Nuevo miembro', icon: UserPlus, color: 'bg-[#1fad9d]/10 text-[#1fad9d] hover:bg-[#1fad9d]/20' },
+    { href: `?new=member`, label: 'Nuevo miembro', icon: UserPlus, color: 'bg-[#1fad9d]/10 text-[#1fad9d] hover:bg-[#1fad9d]/20' },
     { href: `attendance`, label: 'Asistencia', icon: CheckSquare, color: 'bg-[#fffb00]/30 text-black hover:bg-[#fffb00]/50' },
     { href: `trainers`, label: 'Entrenadores', icon: Dumbbell, color: 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200' },
     { href: `plans`, label: 'Planes', icon: ClipboardList, color: 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200' },
@@ -94,7 +100,7 @@ export default async function GymDashboardPage({ params }: Props) {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard title="Miembros activos" value={activeMembers} icon={Users} />
-        <KpiCard title="Ingresos del mes" value={`${currency} ${monthRevenue.toLocaleString('es-AR')}`} icon={TrendingUp} />
+        <KpiCard title="Ingresos del mes" value={`${currency} ${(monthRevenue / 100).toLocaleString('es-AR')}`} icon={TrendingUp} />
         <KpiCard title="Asistencia hoy" value={todayAttendance} icon={CheckSquare} />
         <KpiCard title="Clases activas" value={activeClasses} icon={Calendar} />
       </div>
@@ -134,6 +140,12 @@ export default async function GymDashboardPage({ params }: Props) {
           )}
         </div>
       </div>
+
+      {newParam === 'member' && (
+        <Suspense>
+          <NewMemberModal gymSlug={gymSlug} />
+        </Suspense>
+      )}
     </div>
   )
 }

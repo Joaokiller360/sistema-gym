@@ -22,11 +22,15 @@ import {
   X,
   Dumbbell,
   ChevronLeft,
+  Moon,
+  Sun,
+  ShoppingCart,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logoutAction } from '@/lib/logout'
+import { useTheme } from '@/components/providers/ThemeProvider'
 
-const NAV_GROUPS = [
+const BASE_NAV_GROUPS = [
   {
     label: 'Principal',
     items: [
@@ -44,6 +48,7 @@ const NAV_GROUPS = [
       { label: 'Clases', icon: Calendar, path: 'classes' },
       { label: 'Inventario', icon: Box, path: 'inventory' },
     ],
+    storeItem: { label: 'Tienda', icon: ShoppingCart, path: 'store' },
   },
   {
     label: 'Gestión',
@@ -60,28 +65,34 @@ interface GymSidebarProps {
   gymSlug: string
   gymName: string
   gymLogo?: string
+  gymPlan?: string
   userEmail: string
   userRole?: string
+  storeEnabled?: boolean
 }
 
 function NavContent({
   gymSlug,
   gymName,
+  gymPlan,
   userEmail,
   userRole,
   pathname,
   onClose,
   isPending,
   onLogout,
+  storeEnabled,
 }: {
   gymSlug: string
   gymName: string
+  gymPlan?: string
   userEmail: string
   userRole?: string
   pathname: string
   onClose?: () => void
   isPending: boolean
   onLogout: () => void
+  storeEnabled?: boolean
 }) {
   const base = `/gym/${gymSlug}`
 
@@ -95,7 +106,13 @@ function NavContent({
           </div>
           <div className="leading-none min-w-0">
             <p className="font-bold text-white text-sm truncate">{gymName}</p>
-            <p className="text-xs text-white/40 mt-0.5">Panel de gestión</p>
+            {gymPlan ? (
+              <span className="inline-block mt-0.5 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-[#fffb00]/20 text-[#fffb00]">
+                {gymPlan}
+              </span>
+            ) : (
+              <p className="text-xs text-white/40 mt-0.5">Panel de gestión</p>
+            )}
           </div>
         </div>
         {onClose && (
@@ -120,35 +137,40 @@ function NavContent({
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
-        {NAV_GROUPS.map((group) => (
-          <div key={group.label}>
-            <p className="px-3 mb-1.5 text-[10px] font-bold uppercase tracking-widest text-white/30">
-              {group.label}
-            </p>
-            <div className="space-y-0.5">
-              {group.items.map(({ label, icon: Icon, path }) => {
-                const href = `${base}/${path}`
-                const active = pathname === href || pathname.startsWith(href + '/')
-                return (
-                  <Link
-                    key={path}
-                    href={href}
-                    onClick={onClose}
-                    className={cn(
-                      'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
-                      active
-                        ? 'bg-[#fffb00] text-black'
-                        : 'text-white/60 hover:bg-white/5 hover:text-white',
-                    )}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    {label}
-                  </Link>
-                )
-              })}
+        {BASE_NAV_GROUPS.map((group) => {
+          const items = 'storeItem' in group && storeEnabled
+            ? [group.items[0], (group as any).storeItem, ...group.items.slice(1)]
+            : group.items
+          return (
+            <div key={group.label}>
+              <p className="px-3 mb-1.5 text-[10px] font-bold uppercase tracking-widest text-white/30">
+                {group.label}
+              </p>
+              <div className="space-y-0.5">
+                {items.map(({ label, icon: Icon, path }: { label: string; icon: any; path: string }) => {
+                  const href = `${base}/${path}`
+                  const active = pathname === href || pathname.startsWith(href + '/')
+                  return (
+                    <Link
+                      key={path}
+                      href={href}
+                      onClick={onClose}
+                      className={cn(
+                        'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
+                        active
+                          ? 'bg-[#fffb00] text-black'
+                          : 'text-white/60 hover:bg-white/5 hover:text-white',
+                      )}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      {label}
+                    </Link>
+                  )
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </nav>
 
       {/* Footer */}
@@ -156,6 +178,7 @@ function NavContent({
         <div className="px-3 py-1.5">
           <p className="text-xs text-white/40 truncate">{userEmail}</p>
         </div>
+        <ThemeToggleButton />
         <button
           onClick={onLogout}
           disabled={isPending}
@@ -169,7 +192,20 @@ function NavContent({
   )
 }
 
-export function GymSidebar({ gymSlug, gymName, userEmail, userRole }: GymSidebarProps) {
+function ThemeToggleButton() {
+  const { theme, toggle } = useTheme()
+  return (
+    <button
+      onClick={toggle}
+      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-white/60 hover:bg-white/5 hover:text-white transition-all"
+    >
+      {theme === 'dark' ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
+      {theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
+    </button>
+  )
+}
+
+export function GymSidebar({ gymSlug, gymName, gymPlan, userEmail, userRole, storeEnabled }: GymSidebarProps) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -187,11 +223,13 @@ export function GymSidebar({ gymSlug, gymName, userEmail, userRole }: GymSidebar
         <NavContent
           gymSlug={gymSlug}
           gymName={gymName}
+          gymPlan={gymPlan}
           userEmail={userEmail}
           userRole={userRole}
           pathname={pathname}
           isPending={isPending}
           onLogout={handleLogout}
+          storeEnabled={storeEnabled}
         />
       </aside>
 
@@ -223,12 +261,14 @@ export function GymSidebar({ gymSlug, gymName, userEmail, userRole }: GymSidebar
             <NavContent
               gymSlug={gymSlug}
               gymName={gymName}
+              gymPlan={gymPlan}
               userEmail={userEmail}
               userRole={userRole}
               pathname={pathname}
               onClose={() => setMobileOpen(false)}
               isPending={isPending}
               onLogout={handleLogout}
+              storeEnabled={storeEnabled}
             />
           </div>
         </div>

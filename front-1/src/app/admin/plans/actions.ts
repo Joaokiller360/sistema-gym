@@ -21,14 +21,12 @@ const planSchema = z.object({
 
 export async function updateSubscriptionPlanAction(
   id: string,
-  data: { label?: string; price?: string | number; currency?: string; maxMembers?: number | null; features?: string[]; isActive?: boolean },
+  data: { label?: string; price?: string | number; currency?: string; maxMembers?: number | null; storeEnabled?: boolean; features?: string[]; isActive?: boolean },
 ): Promise<{ error?: string }> {
   const token = await getToken()
   const payload = {
     ...data,
-    ...(data.price != null
-      ? { price: String(Math.round(parseFloat(String(data.price)) * 100)) }
-      : {}),
+    ...(data.price != null ? { price: Math.round(Number(data.price)) } : {}),
   }
   const result = await apiFetch(`/admin/subscription-plans/${id}`, token, {
     method: 'PATCH',
@@ -40,14 +38,14 @@ export async function updateSubscriptionPlanAction(
 }
 
 export async function createSubscriptionPlanAction(
-  data: { key: string; label: string; price: string | number; currency: string; maxMembers?: number | null; features?: string[] },
+  data: { key: string; label: string; price: string | number; currency: string; maxMembers?: number | null; storeEnabled?: boolean; features?: string[] },
 ): Promise<{ error?: string }> {
   const token = await getToken()
   const result = await apiFetch('/admin/subscription-plans', token, {
     method: 'POST',
     body: JSON.stringify({
       ...data,
-      price: String(Math.round(parseFloat(String(data.price)) * 100)),
+      price: Math.round(Number(data.price)),
     }),
   })
   if (!result) return { error: 'Error al crear el plan' }

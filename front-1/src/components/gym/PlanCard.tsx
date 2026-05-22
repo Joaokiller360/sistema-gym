@@ -32,6 +32,12 @@ interface PlanCardProps {
 
 export function PlanCard({ plan, gymSlug, onToggleActive, onDelete }: PlanCardProps) {
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [isActive, setIsActive] = useState(plan.isActive)
+
+  function handleToggle(v: boolean) {
+    setIsActive(v)
+    onToggleActive?.(plan.id, v)
+  }
 
   return (
     <>
@@ -39,7 +45,7 @@ export function PlanCard({ plan, gymSlug, onToggleActive, onDelete }: PlanCardPr
         plan.isFeatured
           ? 'border-[#fffb00] shadow-lg shadow-[#fffb00]/20'
           : 'border-zinc-200 hover:border-zinc-300'
-      } ${!plan.isActive ? 'opacity-60' : ''}`}>
+      } ${!isActive ? 'opacity-60' : ''}`}>
 
         {/* Featured ribbon */}
         {plan.isFeatured && (
@@ -63,8 +69,8 @@ export function PlanCard({ plan, gymSlug, onToggleActive, onDelete }: PlanCardPr
             </div>
             <div className="flex items-center gap-1 shrink-0 mt-1">
               <Switch
-                checked={plan.isActive}
-                onCheckedChange={(v) => onToggleActive?.(plan.id, v)}
+                checked={isActive}
+                onCheckedChange={handleToggle}
                 aria-label="Activar plan"
               />
               <DropdownMenu>
@@ -77,7 +83,7 @@ export function PlanCard({ plan, gymSlug, onToggleActive, onDelete }: PlanCardPr
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem>
                     <Link
-                      href={`/gym/${gymSlug}/plans/${plan.id}/edit`}
+                      href={`/gym/${gymSlug}/plans?edit=${plan.id}`}
                       className="flex items-center gap-2 w-full"
                     >
                       <Pencil className="h-4 w-4" />

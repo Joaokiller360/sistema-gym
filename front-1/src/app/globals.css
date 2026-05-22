@@ -112,6 +112,59 @@
   --chart-5: oklch(0.2 0 0);
 }
 
+.dark {
+  color-scheme: dark;
+
+  --background: oklch(0.13 0 0);
+  --foreground: oklch(0.95 0 0);
+
+  --card: oklch(0.18 0 0);
+  --card-foreground: oklch(0.95 0 0);
+  --popover: oklch(0.18 0 0);
+  --popover-foreground: oklch(0.95 0 0);
+
+  --primary: oklch(0.68 0.115 186);
+  --primary-foreground: oklch(0 0 0);
+
+  --secondary: oklch(0.969 0.21 110);
+  --secondary-foreground: oklch(0 0 0);
+
+  --muted: oklch(0.23 0 0);
+  --muted-foreground: oklch(0.62 0 0);
+
+  --accent: oklch(0.969 0.21 110);
+  --accent-foreground: oklch(0 0 0);
+
+  --destructive: oklch(0.628 0.258 29.2);
+
+  --border: oklch(0.28 0 0);
+  --input: oklch(0.23 0 0);
+  --ring: oklch(0.68 0.115 186);
+
+  --sidebar: oklch(0 0 0);
+  --sidebar-foreground: oklch(1 0 0);
+  --sidebar-primary: oklch(0.969 0.21 110);
+  --sidebar-primary-foreground: oklch(0 0 0);
+  --sidebar-accent: oklch(0.655 0.115 186);
+  --sidebar-accent-foreground: oklch(1 0 0);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.655 0.115 186);
+}
+
+/* Override hardcoded Tailwind utility classes in dark mode */
+.dark .bg-white { background-color: var(--card); }
+.dark .bg-zinc-50 { background-color: var(--background); }
+.dark .bg-zinc-100 { background-color: var(--muted); }
+.dark .border-zinc-200 { border-color: var(--border); }
+.dark .border-zinc-100 { border-color: var(--border); }
+.dark .divide-zinc-200 > * + * { border-color: var(--border); }
+.dark .text-zinc-500 { color: oklch(0.65 0 0); }
+.dark .text-zinc-600 { color: oklch(0.7 0 0); }
+.dark .text-zinc-700 { color: oklch(0.76 0 0); }
+.dark .text-zinc-800 { color: oklch(0.82 0 0); }
+.dark .text-zinc-900 { color: oklch(0.88 0 0); }
+.dark .text-zinc-950 { color: oklch(0.92 0 0); }
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

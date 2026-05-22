@@ -1,18 +1,21 @@
 'use server'
 
 import { cookies } from 'next/headers'
-import { redirect } from 'next/navigation'
 import { revalidateTag } from 'next/cache'
 import { z } from 'zod'
 import { apiFetch } from '@/lib/api'
 
+const ONLY_LETTERS_NUMBERS = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ0-9\s]+$/
+
 const planSchema = z.object({
-  name: z.string().min(1).max(100),
-  price: z.number().min(0),
+  name: z.string().min(1).max(100).refine(v => ONLY_LETTERS_NUMBERS.test(v), 'Solo letras y números'),
+  price: z.number().min(0).max(999),
   currency: z.string().min(1),
-  durationDays: z.number().int().min(1),
+  durationDays: z.number().int().min(1).max(100),
   daysPerWeek: z.string().min(1),
-  benefits: z.array(z.object({ value: z.string() })).default([]),
+  benefits: z.array(z.object({
+    value: z.string().refine(v => v === '' || ONLY_LETTERS_NUMBERS.test(v), 'Solo letras y números'),
+  })).default([]),
   isActive: z.boolean(),
   isFeatured: z.boolean(),
 })
@@ -40,7 +43,7 @@ function buildPayload(data: PlanActionInput) {
 export async function createPlanAction(
   gymSlug: string,
   data: PlanActionInput,
-): Promise<{ error: string }> {
+): Promise<{ error?: string }> {
   const parsed = planSchema.safeParse(data)
   if (!parsed.success) return { error: 'Datos inválidos' }
 
@@ -54,14 +57,14 @@ export async function createPlanAction(
   if (!result) return { error: 'Error al crear el plan' }
 
   revalidateTag(`plans-${gymSlug}`, 'default')
-  redirect(`/gym/${gymSlug}/plans`)
+  return {}
 }
 
 export async function updatePlanAction(
   gymSlug: string,
   planId: string,
   data: PlanActionInput,
-): Promise<{ error: string }> {
+): Promise<{ error?: string }> {
   const parsed = planSchema.safeParse(data)
   if (!parsed.success) return { error: 'Datos inválidos' }
 
@@ -76,7 +79,7 @@ export async function updatePlanAction(
 
   revalidateTag(`plans-${gymSlug}`, 'default')
   revalidateTag(`plan-${planId}`, 'default')
-  redirect(`/gym/${gymSlug}/plans`)
+  return {}
 }
 
 export async function togglePlanActiveAction(

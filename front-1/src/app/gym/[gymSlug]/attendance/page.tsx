@@ -44,9 +44,9 @@ export default async function AttendancePage({ params, searchParams }: Props) {
     apiFetch<AttendanceWithMember[]>(
       `/attendance?startDate=${startDate}&endDate=${endDate}`,
       token,
-      { next: { tags: [`attendance-${gymSlug}`] } },
+      { next: { tags: [`attendance-${gymSlug}`] }, headers: { 'x-gym-slug': gymSlug } },
     ),
-    apiFetch<MembersResponse | Member[]>('/members?limit=500', token),
+    apiFetch<MembersResponse | Member[]>('/members?limit=500', token, { headers: { 'x-gym-slug': gymSlug } }),
   ])
 
   const records = attendance ?? []

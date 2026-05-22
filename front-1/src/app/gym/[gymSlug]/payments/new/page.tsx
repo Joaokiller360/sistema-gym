@@ -19,9 +19,11 @@ export default async function NewPaymentPage({ params }: Props) {
   const [membersRaw, plans] = await Promise.all([
     apiFetch<MembersResponse | Member[]>(`/members?limit=200`, token, {
       next: { tags: [`members-${gymSlug}`] },
+      headers: { 'x-gym-slug': gymSlug },
     }),
     apiFetch<Plan[]>(`/plans`, token, {
       next: { tags: [`plans-${gymSlug}`] },
+      headers: { 'x-gym-slug': gymSlug },
     }),
   ])
 

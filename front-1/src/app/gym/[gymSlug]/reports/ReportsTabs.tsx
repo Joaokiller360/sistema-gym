@@ -79,7 +79,7 @@ export function ReportsTabs({ gymSlug, financial, retention, attendance, default
               <p className="text-sm text-muted-foreground">Ingresos totales</p>
               <p className="text-3xl font-bold mt-1">
                 {financial?.currency ?? 'ARS'}{' '}
-                {(financial?.totalRevenue ?? 0).toLocaleString('es-AR')}
+                {((financial?.totalRevenue ?? 0) / 100).toLocaleString('es-AR')}
               </p>
             </div>
             <div className="rounded-xl border bg-card p-6">
@@ -105,7 +105,7 @@ export function ReportsTabs({ gymSlug, financial, retention, attendance, default
                     <tr key={b.method} className="hover:bg-muted/30">
                       <td className="px-4 py-3 font-medium">{METHOD_LABELS[b.method] ?? b.method}</td>
                       <td className="px-4 py-3 text-muted-foreground">{b.count}</td>
-                      <td className="px-4 py-3">{financial!.currency} {(b.total ?? 0).toLocaleString('es-AR')}</td>
+                      <td className="px-4 py-3">{financial!.currency} {((b.total ?? 0) / 100).toLocaleString('es-AR')}</td>
                     </tr>
                   ))}
                 </tbody>

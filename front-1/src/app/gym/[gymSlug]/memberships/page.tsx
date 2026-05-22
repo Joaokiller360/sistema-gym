@@ -22,10 +22,11 @@ export default async function MembershipsPage({ params, searchParams }: Props) {
     apiFetch<MembershipWithRelations[]>(
       `/memberships?${qs.toString()}`,
       token,
-      { next: { tags: [`memberships-${gymSlug}`] } },
+      { next: { tags: [`memberships-${gymSlug}`] }, headers: { 'x-gym-slug': gymSlug } },
     ).then(r => r ?? []),
     apiFetch<Plan[]>('/plans', token, {
       next: { tags: [`plans-${gymSlug}`] },
+      headers: { 'x-gym-slug': gymSlug },
     }).then(r => r ?? []),
   ])
 

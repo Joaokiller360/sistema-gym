@@ -10,6 +10,49 @@ async function getToken() {
   return store.get('session')?.value ?? ''
 }
 
+const updateMemberSchema = z.object({
+  firstName: z.string().min(1).max(80),
+  lastName: z.string().min(1).max(80),
+  email: z.string().email(),
+  phone: z.string().max(10).regex(/^\d*$/, 'Solo números').optional().or(z.literal('')),
+  birthDate: z.string().optional().or(z.literal('')),
+})
+
+export type UpdateMemberInput = z.infer<typeof updateMemberSchema>
+
+export async function updateMemberAction(
+  gymSlug: string,
+  memberId: string,
+  data: UpdateMemberInput,
+): Promise<{ error?: string }> {
+  const parsed = updateMemberSchema.safeParse(data)
+  if (!parsed.success) return { error: 'Datos inválidos' }
+
+  const token = await getToken()
+  const phone = parsed.data.phone?.trim()
+  const birthDate = parsed.data.birthDate?.trim()
+
+  const payload: Record<string, unknown> = {
+    firstName: parsed.data.firstName.trim(),
+    lastName: parsed.data.lastName.trim(),
+    email: parsed.data.email.trim().toLowerCase(),
+    phone: phone && phone.length >= 7 ? phone : null,
+    ...(birthDate ? { birthDate: new Date(birthDate).toISOString() } : { birthDate: null }),
+  }
+
+  const result = await apiFetchWithError(`/members/${memberId}`, token, {
+    method: 'PATCH',
+    headers: { 'x-gym-slug': gymSlug },
+    body: JSON.stringify(payload),
+  })
+
+  if ('error' in result) return { error: result.error }
+
+  revalidateTag(`member-${memberId}`, 'default')
+  revalidateTag(`members-${gymSlug}`, 'default')
+  return {}
+}
+
 export async function toggleMemberActiveAction(
   gymSlug: string,
   memberId: string,
@@ -18,6 +61,7 @@ export async function toggleMemberActiveAction(
   const token = await getToken()
   const result = await apiFetch(`/members/${memberId}`, token, {
     method: 'PATCH',
+    headers: { 'x-gym-slug': gymSlug },
     body: JSON.stringify({ isActive }),
   })
   if (!result) return { error: 'Error al actualizar el estado' }
@@ -39,6 +83,7 @@ export async function assignPlanAction(
   gymSlug: string,
   memberId: string,
   data: { planId: string; startDate: string; durationDays: number; price: number; currency: string; method: 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER' },
+  activeMembershipId?: string,
 ): Promise<{ error?: string }> {
   const parsed = assignPlanSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
@@ -48,8 +93,17 @@ export async function assignPlanAction(
   end.setDate(end.getDate() + parsed.data.durationDays)
 
   const token = await getToken()
+
+  if (activeMembershipId) {
+    await apiFetch(`/memberships/${activeMembershipId}/cancel`, token, {
+      method: 'PATCH',
+      headers: { 'x-gym-slug': gymSlug },
+    })
+  }
+
   const membershipResult = await apiFetchWithError<{ id: string }>('/memberships', token, {
     method: 'POST',
+    headers: { 'x-gym-slug': gymSlug },
     body: JSON.stringify({
       memberId,
       planId: parsed.data.planId,
@@ -62,6 +116,7 @@ export async function assignPlanAction(
 
   await apiFetch('/payments', token, {
     method: 'POST',
+    headers: { 'x-gym-slug': gymSlug },
     body: JSON.stringify({
       memberId,
       membershipId: membershipResult.data.id,
@@ -119,6 +174,7 @@ export async function changeMemberPlanAction(
 
   const result = await apiFetchWithError<{ proration: ProratedResult }>(`/memberships/${membershipId}/change-plan`, token, {
     method: 'POST',
+    headers: { 'x-gym-slug': gymSlug },
     body: JSON.stringify(body),
   })
   if ('error' in result) return { error: result.error }
@@ -134,9 +190,23 @@ export async function deletePaymentAction(
   paymentId: string,
 ): Promise<{ error?: string }> {
   const token = await getToken()
-  const result = await apiFetch(`/payments/${paymentId}`, token, { method: 'DELETE' })
+  const result = await apiFetch(`/payments/${paymentId}`, token, { method: 'DELETE', headers: { 'x-gym-slug': gymSlug } })
   if (result === null) return { error: 'Error al eliminar el pago' }
   revalidateTag(`member-${memberId}-payments`, 'default')
+  revalidateTag(`members-${gymSlug}`, 'default')
+  return {}
+}
+
+export async function deleteMemberAction(
+  gymSlug: string,
+  memberId: string,
+): Promise<{ error?: string }> {
+  const token = await getToken()
+  const result = await apiFetch(`/members/${memberId}`, token, {
+    method: 'DELETE',
+    headers: { 'x-gym-slug': gymSlug },
+  })
+  if (result === null) return { error: 'Error al eliminar el miembro' }
   revalidateTag(`members-${gymSlug}`, 'default')
   return {}
 }
@@ -158,7 +228,12 @@ export async function registerPaymentAction(
   const token = await getToken()
   const result = await apiFetch('/payments', token, {
     method: 'POST',
-    body: JSON.stringify({ ...parsed.data, memberId }),
+    headers: { 'x-gym-slug': gymSlug },
+    body: JSON.stringify({
+      ...parsed.data,
+      memberId,
+      amount: String(Math.round(parsed.data.amount * 100)),
+    }),
   })
 
   if (!result) return { error: 'Error al registrar el pago' }
