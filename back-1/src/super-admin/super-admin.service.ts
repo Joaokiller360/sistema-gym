@@ -515,13 +515,13 @@ export class SuperAdminService {
 
   async createSubscriptionPlan(data: any) {
     const payload = { ...data };
-    if (data.price !== undefined) payload.price = centsToDecimal(data.price);
+    if (data.price !== undefined) payload.price = Math.round(Number(data.price) * 100);
     return this.prisma.subscriptionPlan.create({ data: payload });
   }
 
   async updateSubscriptionPlan(id: string, data: any) {
     const payload = { ...data };
-    if (data.price !== undefined) payload.price = centsToDecimal(data.price);
+    if (data.price !== undefined) payload.price = Math.round(Number(data.price) * 100);
     return this.prisma.subscriptionPlan.update({ where: { id }, data: payload });
   }
 
