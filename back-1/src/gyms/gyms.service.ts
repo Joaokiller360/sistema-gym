@@ -10,20 +10,15 @@ export class GymsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findBySlug(slug: string) {
-    const gym = await this.prisma.gym.findUnique({
-      where: { slug },
-      include: { plans: { where: { isActive: true }, select: { storeEnabled: true } } },
-    });
+    const gym = await this.prisma.gym.findUnique({ where: { slug } });
     if (!gym) throw new NotFoundException('Gym not found');
     const subscriptionPlan = await this.prisma.subscriptionPlan.findUnique({
       where: { key: gym.subscriptionPlan },
       select: { storeEnabled: true },
     });
-    const storeEnabled =
-      (subscriptionPlan?.storeEnabled ?? false) &&
-      gym.plans.some(p => p.storeEnabled);
-    const { plans, ...gymData } = gym;
-    return { ...gymData, storeEnabled };
+    const storeEnabled = subscriptionPlan?.storeEnabled ?? false;
+    console.log(`[findBySlug] slug=${slug} subscriptionPlan=${gym.subscriptionPlan} subPlanStoreEnabled=${subscriptionPlan?.storeEnabled} → storeEnabled=${storeEnabled}`);
+    return { ...gym, storeEnabled };
   }
 
   async getStatus(slug: string) {
