@@ -69,6 +69,7 @@ model Gym {
   currency         String   @default("USD")
   schedule         Json?
   subscriptionPlan String   @default("BASIC")
+  storeEnabled     Boolean  @default(false)
   subscriptionStatus      GymSubscriptionStatus @default(ACTIVE)
   subscriptionExpiresAt   DateTime?
   subscriptionGraceEndsAt DateTime?
@@ -89,6 +90,9 @@ model Gym {
   campaigns           EmailCampaign[]
   templates           EmailTemplate[]
   gymBillingPayments  GymBillingPayment[]
+  products            Product[]
+  productSales        ProductSale[]
+  memberCredits       MemberProductCredit[]
 
   @@map("gyms")
 }
@@ -179,6 +183,7 @@ model Member {
   payments         Payment[]
   attendances      Attendance[]
   classEnrollments ClassEnrollment[]
+  productCredits   MemberProductCredit[]
 
   @@index([gymId])
   @@index([branchId])
@@ -407,6 +412,7 @@ model SubscriptionPlan {
   durationDays Int      @default(30)
   graceDays    Int      @default(5)
   maxMembers   Int?
+  storeEnabled Boolean  @default(false)
   features     Json     @default("[]")
   isActive     Boolean  @default(true)
   sortOrder    Int      @default(0)
@@ -451,4 +457,84 @@ model EmailCampaign {
 
   @@index([gymId])
   @@map("email_campaigns")
+}
+
+// ── Store / Mini-tienda ────────────────────────────────────
+
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  price       Int
+  cost        Int?
+  stock       Int      @default(0)
+  category    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  gymId String
+  gym   Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  saleItems   ProductSaleItem[]
+  credits     MemberProductCredit[]
+
+  @@index([gymId])
+  @@map("products")
+}
+
+model ProductSale {
+  id        String        @id @default(uuid())
+  total     Int
+  method    PaymentMethod @default(CASH)
+  notes     String?
+  createdAt DateTime      @default(now())
+
+  gymId String
+  gym   Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  items   ProductSaleItem[]
+  credits MemberProductCredit[]
+
+  @@index([gymId])
+  @@map("product_sales")
+}
+
+model ProductSaleItem {
+  id        String @id @default(uuid())
+  quantity  Int
+  unitPrice Int
+
+  saleId    String
+  sale      ProductSale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product     @relation(fields: [productId], references: [id])
+
+  @@index([saleId])
+  @@index([productId])
+  @@map("product_sale_items")
+}
+
+model MemberProductCredit {
+  id        String    @id @default(uuid())
+  quantity  Int
+  unitPrice Int
+  isPaid    Boolean   @default(false)
+  paidAt    DateTime?
+  notes     String?
+  createdAt DateTime  @default(now())
+
+  gymId     String
+  gym       Gym     @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  memberId  String
+  member    Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  paidSaleId String?
+  paidSale   ProductSale? @relation(fields: [paidSaleId], references: [id], onDelete: SetNull)
+
+  @@index([gymId])
+  @@index([memberId])
+  @@index([productId])
+  @@map("member_product_credits")
 }

@@ -20,6 +20,7 @@ import { ReportsModule } from './reports/reports.module';
 import { CommunicationsModule } from './communications/communications.module';
 import { MarketingModule } from './marketing/marketing.module';
 import { BranchesModule } from './branches/branches.module';
+import { StoreModule } from './store/store.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { BranchesModule } from './branches/branches.module';
     CommunicationsModule,
     MarketingModule,
     BranchesModule,
+    StoreModule,
   ],
   controllers: [AppController],
   providers: [AppService],
