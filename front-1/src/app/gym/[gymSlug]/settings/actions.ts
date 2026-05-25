@@ -1,7 +1,7 @@
 'use server'
 
 import { cookies } from 'next/headers'
-import { revalidateTag } from 'next/cache'
+import { updateTag } from 'next/cache'
 import { z } from 'zod'
 import { apiFetch, apiFetchWithError } from '@/lib/api'
 
@@ -46,7 +46,7 @@ export async function uploadGymLogoAction(
   }
 
   const data = (await res.json().catch(() => ({}))) as { logoUrl?: string; url?: string }
-  revalidateTag(`gym-${gymSlug}`, 'default')
+  updateTag(`gym-${gymSlug}`)
   const raw = data.logoUrl ?? data.url ?? ''
   return { logoUrl: raw.startsWith('/') ? `${BACKEND_URL}${raw}` : raw }
 }
@@ -68,7 +68,7 @@ export async function updateGymSettingsAction(
 
   if (!result) return { error: 'Error al guardar los cambios' }
 
-  revalidateTag(`gym-${gymSlug}`, 'default')
+  updateTag(`gym-${gymSlug}`)
   return {}
 }
 

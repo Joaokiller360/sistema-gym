@@ -25,12 +25,16 @@ import {
   Moon,
   Sun,
   ShoppingCart,
+  type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logoutAction } from '@/lib/logout'
 import { useTheme } from '@/components/providers/ThemeProvider'
 
-const BASE_NAV_GROUPS = [
+type NavItem = { label: string; icon: LucideIcon; path: string }
+type NavGroup = { label: string; items: NavItem[]; storeItem?: NavItem }
+
+const BASE_NAV_GROUPS: NavGroup[] = [
   {
     label: 'Principal',
     items: [
@@ -138,8 +142,8 @@ function NavContent({
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
         {BASE_NAV_GROUPS.map((group) => {
-          const items = 'storeItem' in group && storeEnabled
-            ? [group.items[0], (group as any).storeItem, ...group.items.slice(1)]
+          const items = group.storeItem && storeEnabled
+            ? [group.items[0], group.storeItem, ...group.items.slice(1)]
             : group.items
           return (
             <div key={group.label}>
@@ -147,7 +151,7 @@ function NavContent({
                 {group.label}
               </p>
               <div className="space-y-0.5">
-                {items.map(({ label, icon: Icon, path }: { label: string; icon: any; path: string }) => {
+                {items.map(({ label, icon: Icon, path }) => {
                   const href = `${base}/${path}`
                   const active = pathname === href || pathname.startsWith(href + '/')
                   return (

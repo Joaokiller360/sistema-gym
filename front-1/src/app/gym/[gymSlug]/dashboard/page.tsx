@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import { cookies } from 'next/headers'
-import { Users, TrendingUp, CheckSquare, Calendar, UserPlus, ClipboardList, Dumbbell, CreditCard, BarChart2, Package } from 'lucide-react'
+import { Users, TrendingUp, CheckSquare, Calendar, UserPlus, ClipboardList, Dumbbell, BarChart2 } from 'lucide-react'
 import Link from 'next/link'
 import { apiFetch } from '@/lib/api'
 import { verifyToken } from '@/lib/auth'
@@ -45,7 +45,7 @@ export default async function GymDashboardPage({ params, searchParams }: Props) 
 
   const gymHeader = { headers: { 'x-gym-slug': gymSlug } }
 
-  const [membersRaw, attendanceRaw, plans, classes, financial] = await Promise.all([
+  const [membersRaw, attendanceRaw, , classes, financial] = await Promise.all([
     apiFetch<MembersResponse | Member[]>(`/members?status=active&limit=5`, token, gymHeader),
     apiFetch<Attendance[]>(`/attendance?${qs}`, token, gymHeader),
     apiFetch<Plan[]>(`/plans`, token, gymHeader),

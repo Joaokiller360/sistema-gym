@@ -22,6 +22,25 @@ interface AttendanceReport {
   peakHour: string | null
 }
 
+interface StoreCutSummary {
+  salesCount: number
+  total: number
+  byMethod: { method: string; count: number; total: number }[]
+  byProduct: { name: string; quantity: number; total: number }[]
+}
+
+interface PendingCredit {
+  id: string
+  memberId: string
+  member: { firstName: string; lastName: string }
+  productId: string
+  quantity: number
+  unitPrice: number
+  notes: string | null
+  createdAt: string
+  product: { name: string }
+}
+
 interface Props {
   params: Promise<{ gymSlug: string }>
   searchParams: Promise<{ month?: string }>
@@ -40,16 +59,26 @@ export default async function ReportsPage({ params, searchParams }: Props) {
   const targetMonth = month ? new Date(month + '-01') : now
   const startDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 1).toISOString()
   const endDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0, 23, 59, 59).toISOString()
+  const monthParam = `${targetMonth.getFullYear()}-${String(targetMonth.getMonth() + 1).padStart(2, '0')}`
 
-  const gym = isSuperAdmin
-    ? await apiFetch<Gym>(`/gyms/${gymSlug}`, token)
-    : null
+  const gym = await apiFetch<Gym>(`/gyms/${gymSlug}`, token)
   const gymIdParam = isSuperAdmin && gym ? `&gymId=${gym.id}` : ''
+  const storeEnabled = gym?.storeEnabled ?? false
 
-  const [financial, retention, attendance] = await Promise.all([
+  const [financial, retention, attendance, storeSales, pendingCredits] = await Promise.all([
     apiFetch<FinancialReport>(`/reports/financial?startDate=${startDate}&endDate=${endDate}${gymIdParam}`, token),
     apiFetch<RetentionReport>(`/reports/retention${isSuperAdmin && gym ? `?gymId=${gym.id}` : ''}`, token),
     apiFetch<AttendanceReport>(`/reports/attendance?startDate=${startDate}&endDate=${endDate}${gymIdParam}`, token),
+    storeEnabled
+      ? apiFetch<StoreCutSummary>(`/store/cuts/monthly?month=${monthParam}`, token, {
+          headers: { 'x-gym-slug': gymSlug },
+        })
+      : Promise.resolve(null),
+    storeEnabled
+      ? apiFetch<PendingCredit[]>('/store/credits', token, {
+          headers: { 'x-gym-slug': gymSlug },
+        }).then(r => r ?? [])
+      : Promise.resolve([]),
   ])
 
   const monthStr = targetMonth.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
@@ -66,7 +95,10 @@ export default async function ReportsPage({ params, searchParams }: Props) {
         financial={financial}
         retention={retention}
         attendance={attendance}
+        storeSales={storeSales}
+        storeEnabled={storeEnabled}
         defaultMonth={month ?? now.toISOString().slice(0, 7)}
+        pendingCredits={pendingCredits}
       />
     </div>
   )

@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Camera, Pencil, X, Trash2 } from 'lucide-react'
 import { updateGymAction, deleteGymAction, updateGymOwnerAction, uploadGymLogoAction } from '../actions'
+import { createHandlers } from '@/lib/input-validation'
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -81,7 +82,7 @@ export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, defa
     if (!name.trim() || !slug.trim()) { setError('Nombre y slug requeridos'); return }
     setError(null)
     startTransition(async () => {
-      const gymRes = await updateGymAction(gymId, { name, slug, subscriptionPlan: plan } as any)
+      const gymRes = await updateGymAction(gymId, { name, slug, subscriptionPlan: plan || undefined })
       if (gymRes?.error) { setError(gymRes.error); return }
 
       if (hasOwner && (newOwnerName !== ownerName || newOwnerEmail !== ownerEmail || newOwnerPassword)) {
@@ -204,11 +205,11 @@ export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, defa
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-zinc-500">Nombre</label>
-            <input value={name} onChange={e => setName(e.target.value)} disabled={isPending} className={inputClass} />
+            <input value={name} onChange={e => setName(e.target.value)} disabled={isPending} className={inputClass} {...createHandlers('text')} />
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-zinc-500">Slug</label>
-            <input value={slug} onChange={e => setSlug(e.target.value)} disabled={isPending} className={inputClass} />
+            <input value={slug} onChange={e => setSlug(e.target.value)} disabled={isPending} className={inputClass} {...createHandlers('slug')} />
           </div>
         </div>
 
@@ -233,16 +234,16 @@ export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, defa
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-zinc-500">Nombre</label>
-              <input value={newOwnerName} onChange={e => setNewOwnerName(e.target.value)} disabled={isPending} className={inputClass} />
+              <input value={newOwnerName} onChange={e => setNewOwnerName(e.target.value)} disabled={isPending} className={inputClass} {...createHandlers('name')} />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-zinc-500">Email</label>
-              <input type="email" value={newOwnerEmail} onChange={e => setNewOwnerEmail(e.target.value)} disabled={isPending} className={inputClass} />
+              <input type="email" value={newOwnerEmail} onChange={e => setNewOwnerEmail(e.target.value)} disabled={isPending} className={inputClass} {...createHandlers('email')} />
             </div>
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-zinc-500">Nueva contraseña (dejar vacío para no cambiar)</label>
-            <input type="password" value={newOwnerPassword} onChange={e => setNewOwnerPassword(e.target.value)} disabled={isPending} placeholder="••••••••" className={inputClass} />
+            <input type="password" value={newOwnerPassword} onChange={e => setNewOwnerPassword(e.target.value)} disabled={isPending} placeholder="••••••••" className={inputClass} {...createHandlers('password')} />
           </div>
         </div>
       )}

@@ -1,4 +1,3 @@
-import { Dumbbell } from 'lucide-react'
 
 interface TenantHeaderProps {
   gymName: string

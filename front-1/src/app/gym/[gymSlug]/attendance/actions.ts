@@ -1,7 +1,7 @@
 'use server'
 
 import { cookies } from 'next/headers'
-import { revalidateTag } from 'next/cache'
+import { updateTag } from 'next/cache'
 import { apiFetch } from '@/lib/api'
 
 async function getToken() {
@@ -20,7 +20,7 @@ export async function checkInAction(
     body: JSON.stringify({ memberId }),
   })
   if (!result) return { error: 'Error al registrar entrada' }
-  revalidateTag(`attendance-${gymSlug}`, 'default')
+  updateTag(`attendance-${gymSlug}`)
   return {}
 }
 
@@ -34,6 +34,6 @@ export async function checkOutAction(
     body: JSON.stringify({ memberId }),
   })
   if (!result) return { error: 'Error al registrar salida' }
-  revalidateTag(`attendance-${gymSlug}`, 'default')
+  updateTag(`attendance-${gymSlug}`)
   return {}
 }

@@ -9,23 +9,15 @@ import { Plus, Trash2, Loader2, Check, Star, Zap } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { createPlanAction, updatePlanAction } from './actions'
+import { createBlockHandlers, zodSafeField } from '@/lib/input-validation'
 
-const ONLY_LETTERS_NUMBERS = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ0-9\s]+$/
-const ALLOWED_CHAR = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ0-9\s]$/
-
-function blockInvalidChar(e: React.KeyboardEvent<HTMLInputElement>) {
-  if (e.key.length === 1 && !ALLOWED_CHAR.test(e.key)) e.preventDefault()
-}
-
-function blockInvalidPaste(e: React.ClipboardEvent<HTMLInputElement>) {
-  const text = e.clipboardData.getData('text')
-  if (!ONLY_LETTERS_NUMBERS.test(text)) e.preventDefault()
-}
+const nameHandlers = createBlockHandlers('text')
+const priceHandlers = createBlockHandlers('price')
 
 const formSchema = z.object({
   name: z.string().min(1, 'Nombre requerido').max(100, 'No se puede poner más de 100 caracteres').refine(
-    v => ONLY_LETTERS_NUMBERS.test(v),
-    'Solo se permiten letras y números',
+    zodSafeField('text'),
+    'Solo se permiten letras, números y puntuación básica',
   ),
   price: z.number({ message: 'Precio inválido' }).min(0).max(999, 'No se puede poner más de 3 caracteres'),
   currency: z.string().min(1),
@@ -33,8 +25,8 @@ const formSchema = z.object({
   daysPerWeek: z.string().min(1),
   benefits: z.array(z.object({
     value: z.string().refine(
-      v => v === '' || ONLY_LETTERS_NUMBERS.test(v),
-      'Solo se permiten letras y números',
+      v => v === '' || zodSafeField('text')(v),
+      'Solo se permiten letras, números y puntuación básica',
     ),
   })),
   isActive: z.boolean(),
@@ -143,8 +135,6 @@ export function PlanForm({ gymSlug, planId, defaultValues, onSuccess, onClose, s
   const benefits = watch('benefits')
   const isActive = watch('isActive')
   const isFeatured = watch('isFeatured')
-  const storeEnabled = watch('storeEnabled')
-
   const currencySymbol = CURRENCIES.find(c => c.value === currency)?.symbol ?? '$'
   const daysLabel = DAYS_OPTIONS.find(d => d.value === daysPerWeek)?.label ?? daysPerWeek
   const durationPreset = DURATION_PRESETS.find(p => p.days === durationDays)
@@ -162,8 +152,7 @@ export function PlanForm({ gymSlug, planId, defaultValues, onSuccess, onClose, s
             placeholder="Ej. Plan Full Access"
             disabled={isPending}
             {...register('name')}
-            onKeyDown={blockInvalidChar}
-            onPaste={blockInvalidPaste}
+            {...nameHandlers}
             className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#1fad9d] focus:border-transparent disabled:opacity-50 transition-all font-semibold"
           />
           <FieldError msg={errors.name?.message} />
@@ -183,6 +172,7 @@ export function PlanForm({ gymSlug, planId, defaultValues, onSuccess, onClose, s
                 maxLength={3}
                 disabled={isPending}
                 {...register('price', { setValueAs: v => parseFloat(String(v).replace(/[^0-9.]/g, '')) || 0 })}
+                {...priceHandlers}
                 className="w-full rounded-xl border border-zinc-200 bg-zinc-50 pl-8 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1fad9d] focus:border-transparent disabled:opacity-50 transition-all font-semibold"
               />
             </div>
@@ -289,8 +279,7 @@ export function PlanForm({ gymSlug, planId, defaultValues, onSuccess, onClose, s
                   placeholder={`Beneficio ${index + 1}`}
                   disabled={isPending}
                   {...register(`benefits.${index}.value`)}
-                  onKeyDown={blockInvalidChar}
-                  onPaste={blockInvalidPaste}
+                  {...nameHandlers}
                   className="flex-1 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#1fad9d] focus:border-transparent disabled:opacity-50 transition-all"
                 />
                 <button
@@ -320,7 +309,6 @@ export function PlanForm({ gymSlug, planId, defaultValues, onSuccess, onClose, s
             {([
               { name: 'isActive' as const, label: 'Plan activo', desc: 'Visible para los miembros' },
               { name: 'isFeatured' as const, label: 'Plan destacado', desc: 'Se muestra primero con badge dorado' },
-              { name: 'storeEnabled' as const, label: 'Incluye tienda', desc: 'Miembros con este plan acceden a la tienda' },
             ] as const).map(({ name, label, desc }) => (
               <div key={name} className="flex items-center justify-between rounded-xl border border-zinc-100 bg-zinc-50 px-4 py-3">
                 <div>

@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2, Copy, Check } from 'lucide-react'
 import { createGymAdminAction, deleteGymAdminAction, type GymAdmin } from './actions'
+import { createHandlers } from '@/lib/input-validation'
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -149,11 +150,11 @@ export function AdminsSection({ initialAdmins }: { initialAdmins: GymAdmin[] }) 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Nombre</label>
-              <input value={name} onChange={e => setName(e.target.value)} required disabled={isPending} placeholder="Juan García" className={inputClass} />
+              <input value={name} onChange={e => setName(e.target.value)} required disabled={isPending} placeholder="Juan García" className={inputClass} {...createHandlers('name')} />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} required disabled={isPending} placeholder="juan@email.com" className={inputClass} />
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} required disabled={isPending} placeholder="juan@email.com" className={inputClass} {...createHandlers('email')} />
             </div>
           </div>
           <p className="text-xs text-zinc-400">Se generará una contraseña temporal automáticamente.</p>

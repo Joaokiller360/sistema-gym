@@ -19,9 +19,6 @@ function fmt(iso: string) {
   return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
 }
 
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
 
 function dur(checkIn: string, checkOut: string) {
   const mins = Math.round((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 60_000)

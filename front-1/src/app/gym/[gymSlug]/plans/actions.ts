@@ -1,7 +1,7 @@
 'use server'
 
 import { cookies } from 'next/headers'
-import { revalidateTag } from 'next/cache'
+import { updateTag } from 'next/cache'
 import { z } from 'zod'
 import { apiFetch } from '@/lib/api'
 
@@ -58,7 +58,8 @@ export async function createPlanAction(
 
   if (!result) return { error: 'Error al crear el plan' }
 
-  revalidateTag(`plans-${gymSlug}`, 'default')
+  updateTag(`plans-${gymSlug}`)
+  updateTag(`gym-${gymSlug}`)
   return {}
 }
 
@@ -79,23 +80,26 @@ export async function updatePlanAction(
 
   if (!result) return { error: 'Error al actualizar el plan' }
 
-  revalidateTag(`plans-${gymSlug}`, 'default')
-  revalidateTag(`plan-${planId}`, 'default')
+  updateTag(`plans-${gymSlug}`)
+  updateTag(`plan-${planId}`)
+  updateTag(`gym-${gymSlug}`)
   return {}
 }
 
 export async function togglePlanActiveAction(
   gymSlug: string,
   planId: string,
-  active: boolean,
+  _active: boolean,
 ): Promise<void> {
   const token = await getToken()
   await apiFetch(`/plans/${planId}/toggle`, token, { method: 'PATCH', headers: { 'x-gym-slug': gymSlug } })
-  revalidateTag(`plans-${gymSlug}`, 'default')
+  updateTag(`plans-${gymSlug}`)
+  updateTag(`gym-${gymSlug}`)
 }
 
 export async function deletePlanAction(gymSlug: string, planId: string): Promise<void> {
   const token = await getToken()
   await apiFetch(`/plans/${planId}`, token, { method: 'DELETE', headers: { 'x-gym-slug': gymSlug } })
-  revalidateTag(`plans-${gymSlug}`, 'default')
+  updateTag(`plans-${gymSlug}`)
+  updateTag(`gym-${gymSlug}`)
 }

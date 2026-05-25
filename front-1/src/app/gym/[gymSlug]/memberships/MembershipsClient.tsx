@@ -31,6 +31,9 @@ export function MembershipsClient({ memberships, plans, gymSlug }: Props) {
     )
   }
 
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now()
+
   return (
     <>
       <div className="rounded-xl border overflow-hidden">
@@ -54,7 +57,7 @@ export function MembershipsClient({ memberships, plans, gymSlug }: Props) {
           <tbody className="divide-y">
             {memberships.map(m => {
               const daysLeft = Math.ceil(
-                (new Date(m.endDate).getTime() - Date.now()) / 86_400_000,
+                (new Date(m.endDate).getTime() - now) / 86_400_000,
               )
               const nearExpiry = m.status === 'ACTIVE' && daysLeft <= 7 && daysLeft > 0
               const overdue = m.status === 'ACTIVE' && daysLeft <= 0

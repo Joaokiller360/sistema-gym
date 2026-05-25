@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from 'react'
 import { Camera, MapPin } from 'lucide-react'
 import { toast } from 'sonner'
 import { updateGymSettingsAction, uploadGymLogoAction } from './actions'
+import { createHandlers } from '@/lib/input-validation'
 
 const MAX_SIZE = 2 * 1024 * 1024
 
@@ -36,6 +37,9 @@ interface Props {
   defaultTimezone: string
   countries: CountryOption[]
 }
+
+const inputClass = 'w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all disabled:opacity-50'
+const labelClass = 'text-xs font-bold uppercase tracking-widest text-zinc-400 block mb-1.5'
 
 function initials(name: string) {
   return name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase()
@@ -124,10 +128,10 @@ export function GymSettingsForm({
   const selectedCountry = countries.find(c => c.code === country)
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 max-w-lg">
+    <form onSubmit={handleSubmit} className="space-y-5">
       {/* Logo */}
       <div className="space-y-2">
-        <label className="text-sm font-medium">Logo</label>
+        <label className={labelClass}>Logo</label>
         <div className="flex items-center gap-4">
           <div className="relative h-16 w-16 rounded-2xl bg-[#fffb00] flex items-center justify-center shrink-0 overflow-hidden">
             {logoUrl
@@ -150,34 +154,29 @@ export function GymSettingsForm({
               <Camera className="h-4 w-4" />
               {isUploading ? 'Subiendo…' : 'Cambiar logo'}
             </button>
-            <p className="text-xs text-muted-foreground">PNG, JPG, WebP, TIFF… · Máx. 2MB</p>
+            <p className="text-xs text-zinc-400">PNG, JPG, WebP · Máx. 2MB</p>
           </div>
         </div>
         {uploadError && <p className="text-xs text-red-500">{uploadError}</p>}
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleFileChange}
-        />
+        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
       </div>
 
       {/* Nombre */}
-      <div className="space-y-1.5">
-        <label className="text-sm font-medium">Nombre del gimnasio</label>
+      <div>
+        <label className={labelClass}>Nombre del gimnasio</label>
         <input
           type="text"
           value={name}
           onChange={e => setName(e.target.value)}
           required
-          className="w-full rounded-md border px-3 py-2 text-sm bg-background"
+          className={inputClass}
+          {...createHandlers('text')}
         />
       </div>
 
       {/* Dirección */}
-      <div className="space-y-1.5">
-        <label className="text-sm font-medium">Dirección</label>
+      <div>
+        <label className={labelClass}>Dirección</label>
         <div className="relative">
           <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
           <input
@@ -185,58 +184,62 @@ export function GymSettingsForm({
             value={address}
             onChange={e => setAddress(e.target.value)}
             placeholder="Av. Principal 123, Ciudad"
-            className="w-full rounded-md border pl-9 pr-3 py-2 text-sm bg-background"
+            className={inputClass + ' pl-9'}
+            {...createHandlers('address')}
           />
         </div>
       </div>
 
-      {/* País + zona horaria */}
-      <div className="space-y-1.5">
-        <label className="text-sm font-medium">País</label>
-        <select
-          value={country}
-          onChange={e => handleCountryChange(e.target.value)}
-          className="w-full rounded-md border px-3 py-2 text-sm bg-background"
-        >
-          <option value="">— Seleccionar país —</option>
-          {countries.map(c => (
-            <option key={c.code} value={c.code}>
-              {c.label} ({c.utcOffset})
-            </option>
-          ))}
-        </select>
-        {selectedCountry && (
-          <p className="text-xs text-muted-foreground">
-            Zona horaria: <span className="font-medium">{selectedCountry.timezone}</span> · {selectedCountry.utcOffset}
-          </p>
-        )}
-        {!selectedCountry && timezone && timezone !== 'UTC' && (
-          <p className="text-xs text-muted-foreground">Zona horaria actual: <span className="font-medium">{timezone}</span></p>
-        )}
+      {/* País + Moneda — side by side */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className={labelClass}>País</label>
+          <select
+            value={country}
+            onChange={e => handleCountryChange(e.target.value)}
+            className={inputClass}
+          >
+            <option value="">— Seleccionar país —</option>
+            {countries.map(c => (
+              <option key={c.code} value={c.code}>
+                {c.label} ({c.utcOffset})
+              </option>
+            ))}
+          </select>
+          {selectedCountry && (
+            <p className="text-xs text-zinc-400 mt-1.5">
+              Zona horaria: <span className="font-medium">{selectedCountry.timezone}</span>
+            </p>
+          )}
+          {!selectedCountry && timezone && timezone !== 'UTC' && (
+            <p className="text-xs text-zinc-400 mt-1.5">Zona horaria actual: <span className="font-medium">{timezone}</span></p>
+          )}
+        </div>
+
+        <div>
+          <label className={labelClass}>Moneda</label>
+          <select
+            value={currency}
+            onChange={e => setCurrency(e.target.value as typeof CURRENCIES[number]['value'])}
+            className={inputClass}
+          >
+            {CURRENCIES.map(c => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </select>
+          <p className="text-xs text-zinc-400 mt-1.5">Usada en planes, pagos y reportes.</p>
+        </div>
       </div>
 
-      {/* Moneda */}
-      <div className="space-y-1.5">
-        <label className="text-sm font-medium">Moneda</label>
-        <select
-          value={currency}
-          onChange={e => setCurrency(e.target.value as typeof CURRENCIES[number]['value'])}
-          className="w-full rounded-md border px-3 py-2 text-sm bg-background"
+      <div className="pt-1">
+        <button
+          type="submit"
+          disabled={loading}
+          className="rounded-xl bg-black px-6 py-2.5 text-sm font-bold text-white hover:bg-zinc-800 disabled:opacity-50 transition-all"
         >
-          {CURRENCIES.map(c => (
-            <option key={c.value} value={c.value}>{c.label}</option>
-          ))}
-        </select>
-        <p className="text-xs text-muted-foreground">Se usará en planes, pagos y reportes del gimnasio.</p>
+          {loading ? 'Guardando…' : 'Guardar cambios'}
+        </button>
       </div>
-
-      <button
-        type="submit"
-        disabled={loading}
-        className="rounded-md bg-primary px-5 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
-      >
-        {loading ? 'Guardando…' : 'Guardar cambios'}
-      </button>
     </form>
   )
 }

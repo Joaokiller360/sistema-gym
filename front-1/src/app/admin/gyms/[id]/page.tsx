@@ -131,6 +131,7 @@ export default async function GymDetailPage({ params }: Props) {
         return (
           <SubscriptionSection
             gymId={id}
+            gymSlug={gym.slug}
             subscription={subscription}
             billing={billing ?? []}
             planAmount={matchedPlan ? parseFloat(String(matchedPlan.price)) : null}

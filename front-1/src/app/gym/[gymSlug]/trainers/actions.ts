@@ -1,7 +1,7 @@
 'use server'
 
 import { cookies } from 'next/headers'
-import { revalidateTag } from 'next/cache'
+import { updateTag } from 'next/cache'
 import { z } from 'zod'
 import { apiFetch } from '@/lib/api'
 
@@ -31,7 +31,7 @@ export async function createTrainerAction(
     body: JSON.stringify(parsed.data),
   })
   if (!result) return { error: 'Error al crear entrenador' }
-  revalidateTag(`trainers-${gymSlug}`, 'default')
+  updateTag(`trainers-${gymSlug}`)
   return {}
 }
 
@@ -42,6 +42,6 @@ export async function deleteTrainerAction(
   const token = await getToken()
   const result = await apiFetch(`/trainers/${trainerId}`, token, { method: 'DELETE' })
   if (result === null) return { error: 'Error al eliminar entrenador' }
-  revalidateTag(`trainers-${gymSlug}`, 'default')
+  updateTag(`trainers-${gymSlug}`)
   return {}
 }

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Search, CheckCircle2, ChevronRight, Star } from 'lucide-react'
 import { toast } from 'sonner'
 import { registerMemberPaymentAction } from './actions'
+import { createHandlers } from '@/lib/input-validation'
 import type { Member, Plan } from '@/types'
 
 const inputClass = 'w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all disabled:opacity-50'
@@ -168,6 +169,7 @@ export function NewPaymentForm({
                 onChange={e => setMemberSearch(e.target.value)}
                 placeholder="Buscar por nombre o email…"
                 className="w-full rounded-xl border border-zinc-200 bg-zinc-50 pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-black transition-all"
+                {...createHandlers('search')}
               />
             </div>
             <div className="space-y-1 max-h-52 overflow-y-auto">

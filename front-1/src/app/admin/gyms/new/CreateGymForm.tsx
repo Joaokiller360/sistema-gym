@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Camera, Check } from 'lucide-react'
 import { createGymAction, uploadGymLogoAction, type CreateGymInput } from '../actions'
+import { createHandlers } from '@/lib/input-validation'
 import type { SubscriptionPlan } from './page'
 
 const PLAN_PALETTE = [
@@ -139,6 +140,7 @@ export function CreateGymForm({ plans }: { plans: SubscriptionPlan[] }) {
             placeholder="Ej. Fitness Club Centro"
             disabled={isPending}
             className={inputClass}
+            {...createHandlers('text')}
           />
         </Field>
 
@@ -153,6 +155,7 @@ export function CreateGymForm({ plans }: { plans: SubscriptionPlan[] }) {
               placeholder="fitness-club-centro"
               disabled={isPending}
               className="flex-1 h-10 rounded-r-xl border border-zinc-200 bg-zinc-50 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+              {...createHandlers('slug')}
             />
           </div>
         </Field>
@@ -200,6 +203,7 @@ export function CreateGymForm({ plans }: { plans: SubscriptionPlan[] }) {
               placeholder="Juan Pérez"
               disabled={isPending}
               className={inputClass}
+              {...createHandlers('name')}
             />
           </Field>
 
@@ -211,6 +215,7 @@ export function CreateGymForm({ plans }: { plans: SubscriptionPlan[] }) {
               placeholder="juan@email.com"
               disabled={isPending}
               className={inputClass}
+              {...createHandlers('email')}
             />
           </Field>
         </div>

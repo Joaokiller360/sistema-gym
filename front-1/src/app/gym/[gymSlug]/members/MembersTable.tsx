@@ -3,7 +3,6 @@
 import { useRouter } from 'next/navigation'
 import { useTransition } from 'react'
 import { UserCircle2, ChevronRight } from 'lucide-react'
-import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Member } from '@/types'
 import { toggleMemberActiveAction } from './[id]/actions'
 

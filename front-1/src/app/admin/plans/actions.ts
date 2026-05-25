@@ -1,8 +1,7 @@
 'use server'
 
 import { cookies } from 'next/headers'
-import { revalidateTag } from 'next/cache'
-import { z } from 'zod'
+import { updateTag } from 'next/cache'
 import { apiFetch } from '@/lib/api'
 
 async function getToken() {
@@ -10,18 +9,11 @@ async function getToken() {
   return store.get('session')?.value ?? ''
 }
 
-const planSchema = z.object({
-  label: z.string().min(1, 'Nombre requerido'),
-  price: z.number().min(0, 'Precio inválido'),
-  currency: z.string().min(1),
-  maxMembers: z.number().int().positive().nullable().optional(),
-  features: z.array(z.string()),
-  isActive: z.boolean().optional(),
-})
 
 export async function updateSubscriptionPlanAction(
   id: string,
   data: { label?: string; price?: string | number; currency?: string; maxMembers?: number | null; storeEnabled?: boolean; features?: string[]; isActive?: boolean },
+  planKey?: string,
 ): Promise<{ error?: string }> {
   const token = await getToken()
   const payload = {
@@ -33,7 +25,17 @@ export async function updateSubscriptionPlanAction(
     body: JSON.stringify(payload),
   })
   if (!result) return { error: 'Error al actualizar el plan' }
-  revalidateTag('admin-subscription-plans', 'default')
+  updateTag('admin-subscription-plans')
+  if (planKey) {
+    const gyms = await apiFetch<{ data: { slug: string; subscriptionPlan: string }[] } | { slug: string; subscriptionPlan: string }[]>(
+      '/admin/gyms?limit=1000',
+      token,
+    )
+    const list = Array.isArray(gyms) ? gyms : gyms?.data ?? []
+    list
+      .filter(g => g.subscriptionPlan === planKey)
+      .forEach(g => updateTag(`gym-${g.slug}`))
+  }
   return {}
 }
 
@@ -49,7 +51,7 @@ export async function createSubscriptionPlanAction(
     }),
   })
   if (!result) return { error: 'Error al crear el plan' }
-  revalidateTag('admin-subscription-plans', 'default')
+  updateTag('admin-subscription-plans')
   return {}
 }
 
@@ -57,6 +59,6 @@ export async function deleteSubscriptionPlanAction(id: string): Promise<{ error?
   const token = await getToken()
   const result = await apiFetch(`/admin/subscription-plans/${id}`, token, { method: 'DELETE' })
   if (!result) return { error: 'Error al eliminar el plan' }
-  revalidateTag('admin-subscription-plans', 'default')
+  updateTag('admin-subscription-plans')
   return {}
 }

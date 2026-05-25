@@ -5,7 +5,7 @@ import { GymSettingsForm } from './GymSettingsForm'
 import { ChangePasswordForm } from './ChangePasswordForm'
 import { AdminsSection } from './AdminsSection'
 import { getGymAdminsAction } from './actions'
-import { Separator } from '@/components/ui/separator'
+import { Building2, Lock, Users } from 'lucide-react'
 
 interface CountryOption { code: string; label: string; timezone: string; utcOffset: string }
 
@@ -25,45 +25,68 @@ export default async function SettingsPage({ params }: Props) {
   ])
 
   return (
-    <div className="p-8 space-y-8 max-w-2xl">
+    <div className="p-6 lg:p-8 space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Configuración</h1>
-        <p className="text-muted-foreground text-sm mt-1">Información general del gimnasio</p>
+        <p className="text-muted-foreground text-sm mt-1">Información general y accesos del gimnasio</p>
       </div>
 
-      <Separator />
-
-      <section className="space-y-4">
-        <h2 className="text-sm font-bold uppercase tracking-widest text-zinc-400">General</h2>
-        <GymSettingsForm
-          gymSlug={gymSlug}
-          gymId={gym?.id ?? ''}
-          defaultName={gym?.name ?? ''}
-          defaultLogoUrl={gym?.logoUrl ?? null}
-          defaultCurrency={gym?.currency ?? 'USD'}
-          defaultAddress={gym?.address ?? null}
-          defaultCountry={gym?.country ?? null}
-          defaultTimezone={gym?.timezone ?? 'UTC'}
-          countries={countries ?? []}
-        />
-      </section>
-
-      <Separator />
-
-      <section className="space-y-4">
-        <h2 className="text-sm font-bold uppercase tracking-widest text-zinc-400">Seguridad</h2>
-        <ChangePasswordForm />
-      </section>
-
-      <Separator />
-
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-sm font-bold uppercase tracking-widest text-zinc-400">Administradores</h2>
-          <p className="text-xs text-zinc-400 mt-1">Usuarios con acceso completo al panel del gimnasio.</p>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        {/* General — 2/3 */}
+        <div className="lg:col-span-2 rounded-2xl border border-zinc-200 bg-white p-6 space-y-6">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
+              <Building2 className="h-4 w-4 text-zinc-500" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold">General</h2>
+              <p className="text-xs text-zinc-400">Nombre, logo, dirección y moneda</p>
+            </div>
+          </div>
+          <GymSettingsForm
+            gymSlug={gymSlug}
+            gymId={gym?.id ?? ''}
+            defaultName={gym?.name ?? ''}
+            defaultLogoUrl={gym?.logoUrl ?? null}
+            defaultCurrency={gym?.currency ?? 'USD'}
+            defaultAddress={gym?.address ?? null}
+            defaultCountry={gym?.country ?? null}
+            defaultTimezone={gym?.timezone ?? 'UTC'}
+            countries={countries ?? []}
+          />
         </div>
-        <AdminsSection initialAdmins={admins} />
-      </section>
+
+        {/* Right column */}
+        <div className="space-y-6">
+          {/* Seguridad */}
+          <div className="rounded-2xl border border-zinc-200 bg-white p-6 space-y-5">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
+                <Lock className="h-4 w-4 text-zinc-500" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold">Seguridad</h2>
+                <p className="text-xs text-zinc-400">Cambiar contraseña</p>
+              </div>
+            </div>
+            <ChangePasswordForm />
+          </div>
+
+          {/* Administradores */}
+          <div className="rounded-2xl border border-zinc-200 bg-white p-6 space-y-5">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
+                <Users className="h-4 w-4 text-zinc-500" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold">Administradores</h2>
+                <p className="text-xs text-zinc-400">Acceso completo al panel</p>
+              </div>
+            </div>
+            <AdminsSection initialAdmins={admins} />
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

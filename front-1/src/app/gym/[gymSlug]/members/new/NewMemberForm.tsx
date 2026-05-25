@@ -147,6 +147,7 @@ export function NewMemberForm({ gymSlug, onSuccess, onClose }: Props) {
           name="birthDate"
           type="date"
           disabled={isPending}
+          max={new Date().toISOString().slice(0, 10)}
         />
       </div>
 
@@ -185,6 +186,7 @@ function Field({
   disabled,
   error,
   onInput,
+  max,
 }: {
   label: string
   name: string
@@ -193,6 +195,7 @@ function Field({
   disabled?: boolean
   error?: string
   onInput?: () => void
+  max?: string
 }) {
   return (
     <div className="space-y-1.5">
@@ -203,6 +206,7 @@ function Field({
         placeholder={placeholder}
         disabled={disabled}
         onInput={onInput}
+        max={max}
         className={`w-full rounded-xl border bg-zinc-50 px-4 py-2.5 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50 transition-all ${
           error
             ? 'border-[#ff0000]/60 focus:ring-[#ff0000]/30'

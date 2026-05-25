@@ -19,9 +19,11 @@ export default async function AdminPlansPage() {
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value ?? ''
 
-  const plans = await apiFetch<SubscriptionPlan[]>('/admin/subscription-plans', token, {
+  const rawPlans = await apiFetch<SubscriptionPlan[]>('/admin/subscription-plans', token, {
     next: { tags: ['admin-subscription-plans'] },
   }) ?? []
+
+  const plans = [...rawPlans].sort((a, b) => Number(a.price) - Number(b.price))
 
   return (
     <div className="p-6 lg:p-8 space-y-6">

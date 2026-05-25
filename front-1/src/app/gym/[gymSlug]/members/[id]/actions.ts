@@ -1,7 +1,7 @@
 'use server'
 
 import { cookies } from 'next/headers'
-import { revalidateTag } from 'next/cache'
+import { updateTag } from 'next/cache'
 import { z } from 'zod'
 import { apiFetch, apiFetchWithError } from '@/lib/api'
 
@@ -48,8 +48,8 @@ export async function updateMemberAction(
 
   if ('error' in result) return { error: result.error }
 
-  revalidateTag(`member-${memberId}`, 'default')
-  revalidateTag(`members-${gymSlug}`, 'default')
+  updateTag(`member-${memberId}`)
+  updateTag(`members-${gymSlug}`)
   return {}
 }
 
@@ -65,8 +65,8 @@ export async function toggleMemberActiveAction(
     body: JSON.stringify({ isActive }),
   })
   if (!result) return { error: 'Error al actualizar el estado' }
-  revalidateTag(`member-${memberId}`, 'default')
-  revalidateTag(`members-${gymSlug}`, 'default')
+  updateTag(`member-${memberId}`)
+  updateTag(`members-${gymSlug}`)
   return {}
 }
 
@@ -126,9 +126,9 @@ export async function assignPlanAction(
     }),
   })
 
-  revalidateTag(`member-${memberId}-memberships`, 'default')
-  revalidateTag(`member-${memberId}-payments`, 'default')
-  revalidateTag(`memberships-${gymSlug}`, 'default')
+  updateTag(`member-${memberId}-memberships`)
+  updateTag(`member-${memberId}-payments`)
+  updateTag(`memberships-${gymSlug}`)
   return {}
 }
 
@@ -178,9 +178,9 @@ export async function changeMemberPlanAction(
     body: JSON.stringify(body),
   })
   if ('error' in result) return { error: result.error }
-  revalidateTag(`member-${memberId}-memberships`, 'default')
-  revalidateTag(`member-${memberId}-payments`, 'default')
-  revalidateTag(`members-${gymSlug}`, 'default')
+  updateTag(`member-${memberId}-memberships`)
+  updateTag(`member-${memberId}-payments`)
+  updateTag(`members-${gymSlug}`)
   return { proration: result.data.proration }
 }
 
@@ -192,8 +192,8 @@ export async function deletePaymentAction(
   const token = await getToken()
   const result = await apiFetch(`/payments/${paymentId}`, token, { method: 'DELETE', headers: { 'x-gym-slug': gymSlug } })
   if (result === null) return { error: 'Error al eliminar el pago' }
-  revalidateTag(`member-${memberId}-payments`, 'default')
-  revalidateTag(`members-${gymSlug}`, 'default')
+  updateTag(`member-${memberId}-payments`)
+  updateTag(`members-${gymSlug}`)
   return {}
 }
 
@@ -207,7 +207,7 @@ export async function deleteMemberAction(
     headers: { 'x-gym-slug': gymSlug },
   })
   if (result === null) return { error: 'Error al eliminar el miembro' }
-  revalidateTag(`members-${gymSlug}`, 'default')
+  updateTag(`members-${gymSlug}`)
   return {}
 }
 
@@ -237,6 +237,6 @@ export async function registerPaymentAction(
   })
 
   if (!result) return { error: 'Error al registrar el pago' }
-  revalidateTag(`member-${memberId}-payments`, 'default')
+  updateTag(`member-${memberId}-payments`)
   return {}
 }

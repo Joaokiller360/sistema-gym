@@ -4,7 +4,10 @@ import { notFound } from 'next/navigation'
 import { verifyToken } from '@/lib/auth'
 import { apiFetch } from '@/lib/api'
 import { GymSidebar } from '@/components/gym/GymSidebar'
+import { FooterBar } from '@/components/shared/FooterBar'
 import { Gym } from '@/types'
+
+interface PlatformSettings { saasName: string }
 
 interface Props {
   children: React.ReactNode
@@ -15,11 +18,13 @@ export async function generateMetadata({ params }: { params: Promise<{ gymSlug: 
   const { gymSlug } = await params
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value ?? ''
-  const gym = await apiFetch<Gym>(`/gyms/${gymSlug}`, token, {
-    next: { tags: [`gym-${gymSlug}`] },
-  })
+  const [gym, platform] = await Promise.all([
+    apiFetch<Gym>(`/gyms/${gymSlug}`, token, { next: { tags: [`gym-${gymSlug}`] } }),
+    apiFetch<PlatformSettings>('/platform-settings', token, { next: { tags: ['platform-settings'] } }),
+  ])
+  const saasName = platform?.saasName ?? 'GymOS'
   const name = gym?.name ?? gymSlug
-  return { title: `GymOS | ${name}` }
+  return { title: `${saasName} | ${name}` }
 }
 
 export default async function GymLayout({ children, params }: Props) {
@@ -56,8 +61,11 @@ export default async function GymLayout({ children, params }: Props) {
         userRole={session.role}
         storeEnabled={gym.storeEnabled}
       />
-      <main className="flex-1 overflow-y-auto pt-14 lg:pt-0">
-        {children}
+      <main className="flex-1 overflow-y-auto pt-14 lg:pt-0 flex flex-col">
+        <div className="flex-1">
+          {children}
+        </div>
+        <FooterBar />
       </main>
     </div>
   )

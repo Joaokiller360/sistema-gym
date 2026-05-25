@@ -91,6 +91,7 @@ function ProratedBreakdown({ p, currency, onDone }: { p: ProratedResult; currenc
 
 export function SubscriptionSection({
   gymId,
+  gymSlug,
   subscription,
   billing,
   planAmount,
@@ -98,6 +99,7 @@ export function SubscriptionSection({
   subPlans,
 }: {
   gymId: string
+  gymSlug: string
   subscription: SubscriptionInfo
   billing: BillingRecord[]
   planAmount: number | null
@@ -178,7 +180,7 @@ export function SubscriptionSection({
         planKey: selectedPlanKey,
         method: changePlanMethod,
         notes: changePlanNotes.trim() || undefined,
-      })
+      }, gymSlug)
       if (res.error) {
         toast.error(res.error)
       } else {

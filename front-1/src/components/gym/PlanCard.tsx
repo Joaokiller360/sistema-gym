@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { MoreHorizontal, Pencil, Trash2, Star, Zap } from 'lucide-react'
+import { MoreHorizontal, Pencil, Trash2, Star, Zap, ShoppingCart } from 'lucide-react'
 
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
@@ -109,6 +109,13 @@ export function PlanCard({ plan, gymSlug, onToggleActive, onDelete }: PlanCardPr
               : `${plan.daysPerWeek} veces por semana`}
           </div>
 
+          {plan.storeEnabled && (
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-[#1fad9d]">
+              <ShoppingCart className="h-3.5 w-3.5" />
+              Incluye tienda
+            </div>
+          )}
+
           {plan.benefits.length > 0 && (
             <ul className="space-y-1.5">
               {plan.benefits.map((b, i) => (
@@ -131,7 +138,7 @@ export function PlanCard({ plan, gymSlug, onToggleActive, onDelete }: PlanCardPr
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar plan?</AlertDialogTitle>
             <AlertDialogDescription>
-              "{plan.name}" será eliminado permanentemente. Esta acción no se puede deshacer.
+              &ldquo;{plan.name}&rdquo; será eliminado permanentemente. Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

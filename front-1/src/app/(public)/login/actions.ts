@@ -50,6 +50,20 @@ export async function loginAction(data: LoginInput): Promise<{ error: string }> 
     return { error: 'Token inválido' }
   }
 
+  if (session.role !== 'SUPER_ADMIN') {
+    const gymSlug = session.gymSlug ?? gymSlugFromBody
+    if (gymSlug) {
+      const gymRes = await fetch(`${apiUrl}/gyms/${gymSlug}`, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        cache: 'no-store',
+      }).catch(() => null)
+      const gymData = gymRes?.ok ? await gymRes.json().catch(() => null) : null
+      if (gymData && gymData.isActive === false) {
+        return { error: 'El gimnasio está deshabilitado. Contactá al administrador.' }
+      }
+    }
+  }
+
   const cookieStore = await cookies()
   cookieStore.set('session', token, {
     httpOnly: true,

@@ -51,11 +51,11 @@ export default async function MemberDetailPage({ params, searchParams }: Props) 
       next: { tags: [`member-${id}-attendance`] }, headers: { 'x-gym-slug': gymSlug },
     }),
     apiFetch<Plan[]>(`/plans`, token, { headers: { 'x-gym-slug': gymSlug } }),
-    apiFetch<any[]>('/store/products', token, {
+    apiFetch<{ id: string; name: string; price: number; stock: number; category: string | null; isActive: boolean }[]>('/store/products', token, {
       next: { tags: [`store-products-${gymSlug}`] }, headers: { 'x-gym-slug': gymSlug },
     }),
-    apiFetch<any[]>(`/store/credits/${id}`, token, {
-      next: { tags: [`store-credits-${id}`] }, headers: { 'x-gym-slug': gymSlug },
+    apiFetch<{ id: string; productId: string; quantity: number; unitPrice: number; isPaid: boolean; paidAt: string | null; notes: string | null; createdAt: string; product: { name: string; price: number } }[]>(`/store/credits/${id}`, token, {
+      cache: 'no-store', headers: { 'x-gym-slug': gymSlug },
     }),
   ])
 

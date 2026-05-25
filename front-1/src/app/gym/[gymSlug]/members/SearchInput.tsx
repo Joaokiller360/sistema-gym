@@ -33,6 +33,7 @@ export function SearchInput({ defaultValue }: { defaultValue?: string }) {
         value={value}
         onChange={handleChange}
         className="pl-8"
+        fieldType="search"
       />
     </div>
   )

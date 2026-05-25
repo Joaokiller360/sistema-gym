@@ -1,8 +1,11 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { verifyToken } from '@/lib/auth'
+import { apiFetch } from '@/lib/api'
 import { LoginForm } from './LoginForm'
 import { Dumbbell } from 'lucide-react'
+
+interface PlatformSettings { saasName: string }
 
 export default async function LoginPage() {
   const cookieStore = await cookies()
@@ -16,6 +19,11 @@ export default async function LoginPage() {
     }
   }
 
+  const platform = await apiFetch<PlatformSettings>('/platform-settings', '', {
+    next: { tags: ['platform-settings'] },
+  }).catch(() => null)
+  const saasName = platform?.saasName ?? 'GymOS'
+
   return (
     <main className="min-h-screen flex flex-col lg:flex-row">
       {/* Left panel — brand */}
@@ -24,7 +32,7 @@ export default async function LoginPage() {
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#fffb00] mb-6">
             <Dumbbell className="h-7 w-7 text-black" />
           </div>
-          <h1 className="text-5xl font-black text-white tracking-tight">GymOS</h1>
+          <h1 className="text-5xl font-black text-white tracking-tight">{saasName}</h1>
           <p className="mt-3 text-white/50 text-base leading-relaxed">
             Gestión profesional para tu gimnasio. Miembros, planes, asistencia y más en un solo lugar.
           </p>

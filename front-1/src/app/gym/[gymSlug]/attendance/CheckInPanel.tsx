@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { LogIn, LogOut, Search } from 'lucide-react'
 import { checkInAction, checkOutAction } from './actions'
+import { createHandlers } from '@/lib/input-validation'
 import { Member, Attendance } from '@/types'
 
 interface AttendanceWithMember extends Attendance {
@@ -60,6 +61,9 @@ export function CheckInPanel({ gymSlug, activeNow, members }: Props) {
     })
   }
 
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now()
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Check-in panel */}
@@ -74,6 +78,7 @@ export function CheckInPanel({ gymSlug, activeNow, members }: Props) {
             onChange={e => { setSearch(e.target.value); setSelected(null) }}
             placeholder="Buscar miembro por nombre o email…"
             className="w-full rounded-xl border border-zinc-200 bg-white pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1fad9d] focus:border-transparent transition-all"
+            {...createHandlers('search')}
           />
         </div>
 
@@ -131,7 +136,7 @@ export function CheckInPanel({ gymSlug, activeNow, members }: Props) {
               const name = a.member
                 ? `${a.member.firstName} ${a.member.lastName}`
                 : a.memberId.slice(0, 8) + '…'
-              const sinceMin = Math.round((Date.now() - new Date(a.checkIn).getTime()) / 60_000)
+              const sinceMin = Math.round((now - new Date(a.checkIn).getTime()) / 60_000)
               const since = sinceMin < 60 ? `${sinceMin} min` : `${Math.floor(sinceMin / 60)}h ${sinceMin % 60}m`
 
               return (

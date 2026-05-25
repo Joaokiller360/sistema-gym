@@ -1,8 +1,7 @@
 'use server'
 
 import { cookies } from 'next/headers'
-import { redirect } from 'next/navigation'
-import { revalidateTag } from 'next/cache'
+import { updateTag } from 'next/cache'
 import { z } from 'zod'
 import { apiFetch, apiFetchWithError } from '@/lib/api'
 
@@ -34,8 +33,8 @@ export async function uploadGymLogoAction(
   }
 
   const data = (await res.json().catch(() => ({}))) as { logoUrl?: string; url?: string }
-  revalidateTag('admin-gyms', 'default')
-  revalidateTag(`admin-gym-${gymId}`, 'default')
+  updateTag('admin-gyms')
+  updateTag(`admin-gym-${gymId}`)
   const raw = data.logoUrl ?? data.url ?? ''
   return { logoUrl: raw.startsWith('/') ? `${BACKEND_URL}${raw}` : raw }
 }
@@ -75,7 +74,7 @@ export async function createGymAction(data: CreateGymInput): Promise<{ error: st
 
   if ('error' in result) return { error: result.error }
 
-  revalidateTag('admin-gyms', 'default')
+  updateTag('admin-gyms')
   return { gymId: result.data.id }
 }
 
@@ -86,17 +85,17 @@ export async function updateGymAction(gymId: string, data: Partial<CreateGymInpu
     body: JSON.stringify(data),
   })
   if (!result) return { error: 'Error al actualizar el gimnasio' }
-  revalidateTag('admin-gyms', 'default')
-  revalidateTag(`admin-gym-${gymId}`, 'default')
-  const slug = (data as any).slug
-  if (slug) revalidateTag(`gym-${slug}`, 'default')
+  updateTag('admin-gyms')
+  updateTag(`admin-gym-${gymId}`)
+  const slug = (data as Partial<CreateGymInput>).slug
+  if (slug) updateTag(`gym-${slug}`)
 }
 
 export async function deleteGymAction(gymId: string): Promise<{ error?: string }> {
   const token = await getToken()
   const result = await apiFetch(`/admin/gyms/${gymId}`, token, { method: 'DELETE' })
   if (!result) return { error: 'Error al eliminar el gimnasio' }
-  revalidateTag('admin-gyms', 'default')
+  updateTag('admin-gyms')
   return {}
 }
 
@@ -110,7 +109,7 @@ export async function updateGymOwnerAction(
     body: JSON.stringify(ownerData),
   })
   if (!result) return { error: 'Error al actualizar el dueño' }
-  revalidateTag(`admin-gym-${gymId}`, 'default')
+  updateTag(`admin-gym-${gymId}`)
   return {}
 }
 
@@ -126,7 +125,7 @@ export async function toggleGymActiveAction(gymId: string, active: boolean): Pro
   await apiFetch(active ? `/admin/gyms/${gymId}/enable` : `/admin/gyms/${gymId}/disable`, token, {
     method: 'PATCH',
   })
-  revalidateTag('admin-gyms', 'default')
+  updateTag('admin-gyms')
 }
 
 export interface SubscriptionInfo {
@@ -174,8 +173,8 @@ export async function registerSubscriptionPaymentAction(
   })
 
   if ('error' in result) return { error: result.error }
-  revalidateTag(`admin-gym-${gymId}`, 'default')
-  revalidateTag(`admin-gym-${gymId}-subscription`, 'default')
+  updateTag(`admin-gym-${gymId}`)
+  updateTag(`admin-gym-${gymId}-subscription`)
   return {}
 }
 
@@ -192,6 +191,7 @@ export interface ProratedResult {
 export async function changeGymPlanAction(
   gymId: string,
   data: { planKey: string; amount?: number; method?: string; notes?: string },
+  gymSlug?: string,
 ): Promise<{ error?: string; proration?: ProratedResult }> {
   const token = await getToken()
   const body: Record<string, unknown> = { planKey: data.planKey }
@@ -204,10 +204,34 @@ export async function changeGymPlanAction(
     body: JSON.stringify(body),
   })
   if ('error' in result) return { error: result.error }
-  revalidateTag(`admin-gym-${gymId}`, 'default')
-  revalidateTag(`admin-gym-${gymId}-subscription`, 'default')
-  revalidateTag('admin-gyms', 'default')
+  updateTag(`admin-gym-${gymId}`)
+  updateTag(`admin-gym-${gymId}-subscription`)
+  updateTag('admin-gyms')
+  if (gymSlug) updateTag(`gym-${gymSlug}`)
   return { proration: result.data.proration }
+}
+
+export interface GymModalData {
+  members: Array<{ id: string; firstName: string; lastName: string; email: string; isActive: boolean; photoUrl: string | null }>
+  plans: Array<{ id: string; name: string; price: number; currency: string; durationDays: number; isActive: boolean; isFeatured: boolean }>
+  subscription: SubscriptionInfo | null
+  subPlans: Array<{ key: string; label?: string; price: number | string; currency: string }>
+}
+
+export async function fetchGymModalDataAction(gymId: string): Promise<GymModalData> {
+  const token = await getToken()
+  const [membersRaw, plansRaw, subscription, subPlans] = await Promise.all([
+    apiFetch<{ data: GymModalData['members'] } | GymModalData['members']>(`/members?gymId=${gymId}&limit=5`, token),
+    apiFetch<{ data: GymModalData['plans'] } | GymModalData['plans']>(`/plans?gymId=${gymId}`, token),
+    apiFetch<SubscriptionInfo>(`/admin/gyms/${gymId}/subscription`, token),
+    apiFetch<GymModalData['subPlans']>(`/admin/subscription-plans`, token),
+  ])
+  return {
+    members: membersRaw ? (Array.isArray(membersRaw) ? membersRaw : membersRaw.data).slice(0, 5) : [],
+    plans: plansRaw ? (Array.isArray(plansRaw) ? plansRaw : plansRaw.data) : [],
+    subscription: subscription ?? null,
+    subPlans: subPlans ?? [],
+  }
 }
 
 export async function deleteSubscriptionPaymentAction(
@@ -217,8 +241,8 @@ export async function deleteSubscriptionPaymentAction(
   const token = await getToken()
   const result = await apiFetchWithError<unknown>(`/payments/${paymentId}`, token, { method: 'DELETE' })
   if ('error' in result) return { error: result.error }
-  revalidateTag(`admin-gym-${gymId}`, 'default')
-  revalidateTag(`admin-gym-${gymId}-subscription`, 'default')
-  revalidateTag('admin-gyms', 'default')
+  updateTag(`admin-gym-${gymId}`)
+  updateTag(`admin-gym-${gymId}-subscription`)
+  updateTag('admin-gyms')
   return {}
 }

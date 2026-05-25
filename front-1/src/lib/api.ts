@@ -63,7 +63,7 @@ export async function apiFetchWithError<T>(
     }
 
     return { data: json as T }
-  } catch (e) {
+  } catch {
     return { error: 'Error de conexión con el servidor' }
   }
 }

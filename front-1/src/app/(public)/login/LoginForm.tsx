@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Loader2 } from 'lucide-react'
 import { loginAction } from './actions'
+import { createBlockHandlers } from '@/lib/input-validation'
 
 const schema = z.object({
   email: z.string().email('Email inválido'),
@@ -47,6 +48,7 @@ export function LoginForm() {
           placeholder="tu@email.com"
           disabled={isPending}
           {...register('email')}
+          {...createBlockHandlers('email')}
           className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#1fad9d] focus:border-transparent disabled:opacity-50 transition-all"
         />
         {errors.email && (
@@ -65,6 +67,7 @@ export function LoginForm() {
           placeholder="••••••••"
           disabled={isPending}
           {...register('password')}
+          {...createBlockHandlers('password')}
           className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#1fad9d] focus:border-transparent disabled:opacity-50 transition-all"
         />
         {errors.password && (

@@ -1,7 +1,7 @@
 'use server'
 
 import { cookies } from 'next/headers'
-import { revalidateTag } from 'next/cache'
+import { updateTag } from 'next/cache'
 import { apiFetch } from '@/lib/api'
 
 async function getToken() {
@@ -12,13 +12,13 @@ async function getToken() {
 export async function suspendMembershipAction(gymSlug: string, id: string) {
   const token = await getToken()
   await apiFetch(`/memberships/${id}/suspend`, token, { method: 'PATCH' })
-  revalidateTag(`memberships-${gymSlug}`, 'default')
+  updateTag(`memberships-${gymSlug}`)
 }
 
 export async function freezeMembershipAction(gymSlug: string, id: string) {
   const token = await getToken()
   await apiFetch(`/memberships/${id}/freeze`, token, { method: 'PATCH' })
-  revalidateTag(`memberships-${gymSlug}`, 'default')
+  updateTag(`memberships-${gymSlug}`)
 }
 
 export async function cancelMembershipAction(gymSlug: string, id: string): Promise<{ error?: string }> {
@@ -27,7 +27,7 @@ export async function cancelMembershipAction(gymSlug: string, id: string): Promi
   const res = await apiFetch(`/memberships/${id}/cancel`, token, { method: 'PATCH' })
   console.log('[cancelMembershipAction] response:', JSON.stringify(res))
   if (res === null) return { error: 'Error al cancelar la membresía' }
-  revalidateTag(`memberships-${gymSlug}`, 'default')
+  updateTag(`memberships-${gymSlug}`)
   return {}
 }
 
@@ -47,17 +47,17 @@ export async function cancelMembershipWithPaymentsAction(
     await Promise.all(list.map(p => apiFetch(`/payments/${p.id}`, token, { method: 'DELETE' })))
   }
 
-  revalidateTag(`memberships-${gymSlug}`, 'default')
-  revalidateTag(`member-${memberId}`, 'default')
-  revalidateTag(`member-${memberId}-payments`, 'default')
-  revalidateTag(`member-${memberId}-memberships`, 'default')
+  updateTag(`memberships-${gymSlug}`)
+  updateTag(`member-${memberId}`)
+  updateTag(`member-${memberId}-payments`)
+  updateTag(`member-${memberId}-memberships`)
   return {}
 }
 
 export async function unfreezeMembershipAction(gymSlug: string, id: string) {
   const token = await getToken()
   await apiFetch(`/memberships/${id}/unfreeze`, token, { method: 'PATCH' })
-  revalidateTag(`memberships-${gymSlug}`, 'default')
+  updateTag(`memberships-${gymSlug}`)
 }
 
 export async function changePlanAction(
@@ -73,6 +73,6 @@ export async function changePlanAction(
     { method: 'POST', body: JSON.stringify({ planId, method }) },
   )
   if (res === null) return { error: 'Error al cambiar el plan' }
-  revalidateTag(`memberships-${gymSlug}`, 'default')
+  updateTag(`memberships-${gymSlug}`)
   return {}
 }

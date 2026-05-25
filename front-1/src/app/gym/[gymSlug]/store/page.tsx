@@ -2,19 +2,34 @@ import { Suspense } from 'react'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { apiFetch } from '@/lib/api'
-import { Gym } from '@/types'
+import { verifyToken } from '@/lib/auth'
+import { Gym, ProductCategory } from '@/types'
 import { StoreTabs } from './StoreTabs'
 
 interface Product {
   id: string
   name: string
   description: string | null
+  imageUrl: string | null
   price: number
   cost: number | null
   stock: number
-  category: string | null
+  categoryId: string | null
+  category: { id: string; name: string; imageUrl: string | null } | null
   isActive: boolean
   _count: { saleItems: number }
+}
+
+interface CreditPeriodItem {
+  id: string
+  memberId: string
+  member: { firstName: string; lastName: string }
+  productId: string
+  quantity: number
+  unitPrice: number
+  notes: string | null
+  createdAt: string
+  product: { name: string }
 }
 
 interface CutSummary {
@@ -22,6 +37,32 @@ interface CutSummary {
   total: number
   byMethod: { method: string; count: number; total: number }[]
   byProduct: { name: string; quantity: number; total: number }[]
+  sales: { id: string; total: number; method: string; notes: string | null; createdAt: string; items: { productId: string; quantity: number; unitPrice: number; product: { name: string } }[] }[]
+  credits: {
+    count: number
+    total: number
+    byMember: { memberName: string; count: number; total: number }[]
+    items: CreditPeriodItem[]
+  }
+}
+
+interface Member {
+  id: string
+  firstName: string
+  lastName: string
+  email: string
+}
+
+interface PendingCredit {
+  id: string
+  memberId: string
+  member: { firstName: string; lastName: string }
+  productId: string
+  quantity: number
+  unitPrice: number
+  notes: string | null
+  createdAt: string
+  product: { name: string }
 }
 
 interface Props {
@@ -37,6 +78,10 @@ export default async function StorePage({ params, searchParams }: Props) {
   const token = cookieStore.get('session')?.value ?? ''
   const headers = { 'x-gym-slug': gymSlug }
 
+  const session = await verifyToken(token)
+  const isSuperAdmin = session?.role === 'SUPER_ADMIN'
+  const canDeleteSales = isSuperAdmin || session?.role === 'GYM_OWNER'
+
   const gym = await apiFetch<Gym>(`/gyms/${gymSlug}`, token, { next: { tags: [`gym-${gymSlug}`] } })
   if (!gym?.storeEnabled) redirect(`/gym/${gymSlug}/dashboard`)
 
@@ -44,13 +89,22 @@ export default async function StorePage({ params, searchParams }: Props) {
   const now = new Date()
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 
-  const [products, dailyCut, monthlyCut] = await Promise.all([
+  const [products, categories, dailyCut, monthlyCut, members, pendingCredits] = await Promise.all([
     apiFetch<Product[]>('/store/products', token, {
       next: { tags: [`store-products-${gymSlug}`] },
       headers,
     }).then(r => r ?? []),
+    apiFetch<ProductCategory[]>('/store/categories', token, {
+      next: { tags: [`store-categories-${gymSlug}`] },
+      headers,
+    }).then(r => r ?? []),
     apiFetch<CutSummary>(`/store/cuts/daily?date=${date ?? today}`, token, { headers }),
     apiFetch<CutSummary>(`/store/cuts/monthly?month=${month ?? currentMonth}`, token, { headers }),
+    apiFetch<Member[]>('/members', token, { headers }).then(r => r ?? []),
+    apiFetch<PendingCredit[]>('/store/credits', token, {
+      next: { tags: [`store-credits-${gymSlug}`] },
+      headers,
+    }).then(r => r ?? []),
   ])
 
   return (
@@ -66,11 +120,16 @@ export default async function StorePage({ params, searchParams }: Props) {
         <StoreTabs
           gymSlug={gymSlug}
           products={products}
+          categories={categories}
           dailyCut={dailyCut}
           monthlyCut={monthlyCut}
           activeTab={tab}
           dateParam={date ?? today}
           monthParam={month ?? currentMonth}
+          members={members}
+          pendingCredits={pendingCredits}
+          canDelete={isSuperAdmin}
+          canDeleteSales={canDeleteSales}
         />
       </Suspense>
     </div>

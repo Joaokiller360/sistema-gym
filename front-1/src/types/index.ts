@@ -71,6 +71,15 @@ export interface Branch {
   updatedAt: string;
 }
 
+export interface ProductCategory {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  gymId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Plan {
   id: string;
   name: string;

@@ -1,7 +1,7 @@
 'use server'
 
 import { cookies } from 'next/headers'
-import { revalidateTag } from 'next/cache'
+import { updateTag } from 'next/cache'
 import { z } from 'zod'
 import { apiFetch, apiFetchWithError } from '@/lib/api'
 
@@ -67,9 +67,9 @@ export async function registerMemberPaymentAction(
 
   if (!paymentResult) return { error: 'Membresía creada pero error al registrar el pago' }
 
-  revalidateTag(`members-${gymSlug}`, 'default')
-  revalidateTag(`memberships-${gymSlug}`, 'default')
-  revalidateTag(`member-${memberId}`, 'default')
-  revalidateTag(`member-${memberId}-memberships`, 'default')
+  updateTag(`members-${gymSlug}`)
+  updateTag(`memberships-${gymSlug}`)
+  updateTag(`member-${memberId}`)
+  updateTag(`member-${memberId}-memberships`)
   return { memberId }
 }

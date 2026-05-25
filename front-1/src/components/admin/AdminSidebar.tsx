@@ -31,6 +31,7 @@ const NAV = [
 
 interface AdminSidebarProps {
   user: { email: string }
+  saasName?: string
 }
 
 function NavContent({
@@ -39,12 +40,14 @@ function NavContent({
   onClose,
   isPending,
   onLogout,
+  saasName = 'GymOS',
 }: {
   user: { email: string }
   pathname: string
   onClose?: () => void
   isPending: boolean
   onLogout: () => void
+  saasName?: string
 }) {
   return (
     <div className="flex flex-col h-full bg-black">
@@ -55,7 +58,7 @@ function NavContent({
             <Dumbbell className="h-4 w-4 text-black" />
           </div>
           <div className="leading-none">
-            <p className="font-bold text-white">GymOs</p>
+            <p className="font-bold text-white">{saasName}</p>
             <p className="text-xs text-white/40 mt-0.5">Super Admin</p>
           </div>
         </div>
@@ -124,7 +127,7 @@ function ThemeToggleButton() {
   )
 }
 
-export function AdminSidebar({ user }: AdminSidebarProps) {
+export function AdminSidebar({ user, saasName = 'GymOS' }: AdminSidebarProps) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -144,6 +147,7 @@ export function AdminSidebar({ user }: AdminSidebarProps) {
           pathname={pathname}
           isPending={isPending}
           onLogout={handleLogout}
+          saasName={saasName}
         />
       </aside>
 
@@ -153,7 +157,7 @@ export function AdminSidebar({ user }: AdminSidebarProps) {
           <div className="flex items-center justify-center w-7 h-7 rounded-md bg-[#fffb00]">
             <Dumbbell className="h-3.5 w-3.5 text-black" />
           </div>
-          <span className="font-bold text-white text-sm">GymOS Admin</span>
+          <span className="font-bold text-white text-sm">{saasName} Admin</span>
         </div>
         <button
           onClick={() => setMobileOpen(true)}
@@ -178,6 +182,7 @@ export function AdminSidebar({ user }: AdminSidebarProps) {
               onClose={() => setMobileOpen(false)}
               isPending={isPending}
               onLogout={handleLogout}
+              saasName={saasName}
             />
           </div>
         </div>

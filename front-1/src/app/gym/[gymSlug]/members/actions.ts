@@ -1,7 +1,7 @@
 'use server'
 
 import { cookies } from 'next/headers'
-import { revalidateTag } from 'next/cache'
+import { updateTag } from 'next/cache'
 import { z } from 'zod'
 import { apiFetchWithError } from '@/lib/api'
 
@@ -56,6 +56,6 @@ export async function createMemberAction(
     return { error: result.error }
   }
 
-  revalidateTag(`members-${gymSlug}`, 'default')
+  updateTag(`members-${gymSlug}`)
   return { memberId: result.data.id }
 }
