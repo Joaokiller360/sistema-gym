@@ -215,23 +215,37 @@ export class StoreService {
     const productMap = new Map(products.map(p => [p.id, p]));
 
     for (const item of items) {
-      if (!productMap.has(item.productId)) throw new NotFoundException(`Producto ${item.productId} no encontrado`);
+      const product = productMap.get(item.productId);
+      if (!product) throw new NotFoundException(`Producto ${item.productId} no encontrado`);
+      if (!product.isActive) throw new BadRequestException(`Producto "${product.name}" no está activo`);
+      if (product.stock < item.quantity) throw new BadRequestException(`Stock insuficiente para "${product.name}"`);
     }
 
-    const created = await this.prisma.$transaction(
-      items.map(item =>
-        this.prisma.memberProductCredit.create({
-          data: {
-            gymId,
-            memberId,
-            productId: item.productId,
-            quantity: item.quantity,
-            unitPrice: productMap.get(item.productId)!.price,
-            notes,
-          },
-        }),
-      ),
-    );
+    const created = await this.prisma.$transaction(async tx => {
+      const credits = await Promise.all(
+        items.map(item =>
+          tx.memberProductCredit.create({
+            data: {
+              gymId,
+              memberId,
+              productId: item.productId,
+              quantity: item.quantity,
+              unitPrice: productMap.get(item.productId)!.price,
+              notes,
+            },
+          }),
+        ),
+      );
+
+      for (const item of items) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { decrement: item.quantity } },
+        });
+      }
+
+      return credits;
+    });
 
     return created;
   }
