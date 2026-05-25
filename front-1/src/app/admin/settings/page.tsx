@@ -14,7 +14,7 @@ export default async function AdminSettingsPage() {
           <p className="text-muted-foreground text-sm mt-1">Identidad, landing page, footer y términos de la plataforma</p>
         </div>
         <Link
-          href="/"
+          href="/inicio"
           target="_blank"
           className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-500 hover:border-zinc-400 hover:text-black transition-all shrink-0"
         >

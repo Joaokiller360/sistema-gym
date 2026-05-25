@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { verifyToken } from '@/lib/auth'
 import { apiFetch } from '@/lib/api'
 import { AdminSidebar } from '@/components/admin/AdminSidebar'
@@ -11,10 +11,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value
 
-  if (!token) notFound()
+  if (!token) redirect('/inicio')
 
   const session = await verifyToken(token)
-  if (!session || session.role !== 'SUPER_ADMIN') notFound()
+  if (!session) redirect('/inicio')
+  if (session.role !== 'SUPER_ADMIN') notFound()
 
   const platform = await apiFetch<PlatformSettings>('/platform-settings', token, {
     next: { tags: ['platform-settings'] },

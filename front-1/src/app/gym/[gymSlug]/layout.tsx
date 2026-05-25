@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { cookies } from 'next/headers'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { verifyToken } from '@/lib/auth'
 import { apiFetch } from '@/lib/api'
 import { GymSidebar } from '@/components/gym/GymSidebar'
@@ -32,10 +32,10 @@ export default async function GymLayout({ children, params }: Props) {
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value
 
-  if (!token) notFound()
+  if (!token) redirect('/inicio')
 
   const session = await verifyToken(token)
-  if (!session) notFound()
+  if (!session) redirect('/inicio')
 
   const isSuperAdmin = session.role === 'SUPER_ADMIN'
   const gymRoles = ['GYM_OWNER', 'GYM_ADMIN', 'TRAINER', 'RECEPTIONIST']

@@ -15,7 +15,7 @@ export default async function LoginPage() {
     const session = await verifyToken(token)
     if (session) {
       if (session.role === 'SUPER_ADMIN') redirect('/admin/dashboard')
-      else redirect(`/gym/${session.gymSlug}/dashboard`)
+      else if (session.gymSlug) redirect(`/gym/${session.gymSlug}/dashboard`)
     }
   }
 

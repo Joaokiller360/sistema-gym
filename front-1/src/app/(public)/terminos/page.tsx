@@ -41,7 +41,7 @@ export default async function TermsPage() {
       {/* Navbar */}
       <nav className="sticky top-0 z-50 bg-black/90 backdrop-blur-md border-b border-white/10">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5">
+          <Link href="/inicio" className="flex items-center gap-2.5">
             <div className="h-8 w-8 rounded-lg flex items-center justify-center overflow-hidden shrink-0" style={{ background: primaryColor }}>
               {settings.logoUrl
                 ? <img src={settings.logoUrl} alt={settings.saasName} className="h-full w-full object-cover" />
@@ -57,7 +57,7 @@ export default async function TermsPage() {
       </nav>
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
-        <Link href="/" className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors mb-8">
+        <Link href="/inicio" className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors mb-8">
           <ArrowLeft className="h-4 w-4" />
           Volver al inicio
         </Link>
