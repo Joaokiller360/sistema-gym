@@ -1,4 +1,11 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import {
+  Controller, Get, Post, Patch, Delete,
+  Body, Param, UseGuards, UseInterceptors,
+  UploadedFile, BadRequestException,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
 import { SuperAdminService } from './super-admin.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -118,6 +125,31 @@ export class SuperAdminController {
   @Get('dashboard')
   getDashboard() {
     return this.superAdminService.getDashboard();
+  }
+
+  @Post('platform-settings/logo')
+  @UseInterceptors(
+    FileInterceptor('logo', {
+      storage: diskStorage({
+        destination: './uploads/logos',
+        filename: (_req, file, cb) => {
+          const ext = extname(file.originalname);
+          cb(null, `platform-${Date.now()}${ext}`);
+        },
+      }),
+      fileFilter: (_req, file, cb) => {
+        if (!file.mimetype.match(/^image\/(jpeg|png|webp|gif)$/)) {
+          return cb(new BadRequestException('Only image files allowed'), false);
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: 2 * 1024 * 1024 },
+    }),
+  )
+  uploadPlatformLogo(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Logo es requerido');
+    const logoUrl = `/uploads/logos/${file.filename}`;
+    return this.superAdminService.updatePlatformLogo(logoUrl);
   }
 
   @Patch('platform-settings')

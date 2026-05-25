@@ -537,8 +537,19 @@ export class SuperAdminService {
     });
   }
 
+  async updatePlatformLogo(logoUrl: string) {
+    return this.prisma.platformSettings.upsert({
+      where: { id: '1' },
+      create: { id: '1', logoUrl },
+      update: { logoUrl },
+    });
+  }
+
   async updatePlatformSettings(data: {
     saasName?: string;
+    logoUrl?: string | null;
+    creatorName?: string | null;
+    creatorUrl?: string | null;
     footerText?: string | null;
     footerLinks?: Array<{ label: string; url: string }>;
     footerShowPoweredBy?: boolean;

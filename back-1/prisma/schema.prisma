@@ -586,6 +586,9 @@ model PlanStore {
 model PlatformSettings {
   id                  String   @id @default("1")
   saasName            String   @default("GymSystem")
+  logoUrl             String?
+  creatorName         String?
+  creatorUrl          String?
   footerText          String?
   footerLinks         Json     @default("[]")
   footerShowPoweredBy Boolean  @default(true)
