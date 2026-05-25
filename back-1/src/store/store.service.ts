@@ -8,15 +8,16 @@ export class StoreService {
   // ── Products ────────────────────────────────────────────
 
   async findAllProducts(gymId: string, query: any) {
-    const { search, category, isActive } = query;
+    const { search, categoryId, isActive } = query;
     const where: any = { gymId };
     if (search) where.name = { contains: search, mode: 'insensitive' };
-    if (category) where.category = category;
+    if (categoryId) where.categoryId = categoryId;
     if (isActive !== undefined) where.isActive = isActive === 'true';
 
     return this.prisma.product.findMany({
       where,
       include: {
+        category: true,
         _count: { select: { saleItems: true } },
       },
       orderBy: { name: 'asc' },
@@ -257,5 +258,32 @@ export class StoreService {
     const product = await this.prisma.product.findFirst({ where: { id, gymId } });
     if (!product) throw new NotFoundException('Producto no encontrado');
     return product;
+  }
+
+  // ── Categories ───────────────────────────────────────────
+
+  async findAllCategories(gymId: string) {
+    return this.prisma.productCategory.findMany({
+      where: { gymId },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async createCategory(gymId: string, data: { name: string; imageUrl?: string }) {
+    return this.prisma.productCategory.create({
+      data: { ...data, gymId },
+    });
+  }
+
+  async updateCategory(id: string, gymId: string, data: { name?: string; imageUrl?: string }) {
+    const cat = await this.prisma.productCategory.findFirst({ where: { id, gymId } });
+    if (!cat) throw new NotFoundException('Categoría no encontrada');
+    return this.prisma.productCategory.update({ where: { id }, data });
+  }
+
+  async deleteCategory(id: string, gymId: string) {
+    const cat = await this.prisma.productCategory.findFirst({ where: { id, gymId } });
+    if (!cat) throw new NotFoundException('Categoría no encontrada');
+    return this.prisma.productCategory.delete({ where: { id } });
   }
 }

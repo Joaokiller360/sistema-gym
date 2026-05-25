@@ -62,6 +62,33 @@ export class StoreController {
     return this.storeService.getMonthlyCut(req.gymId, month ?? defaultMonth);
   }
 
+  // ── Categories ────────────────────────────────────────
+  @Get('categories')
+  findAllCategories(@Req() req: any) {
+    return this.storeService.findAllCategories(req.gymId);
+  }
+
+  @Post('categories')
+  @UseGuards(RolesGuard)
+  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  createCategory(@Req() req: any, @Body() body: any) {
+    return this.storeService.createCategory(req.gymId, body);
+  }
+
+  @Patch('categories/:id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  updateCategory(@Param('id') id: string, @Req() req: any, @Body() body: any) {
+    return this.storeService.updateCategory(id, req.gymId, body);
+  }
+
+  @Delete('categories/:id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  deleteCategory(@Param('id') id: string, @Req() req: any) {
+    return this.storeService.deleteCategory(id, req.gymId);
+  }
+
   // ── Member credits ────────────────────────────────────
   @Post('credits')
   @UseGuards(RolesGuard)
