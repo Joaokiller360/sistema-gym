@@ -46,7 +46,7 @@ export class MarketingService {
     const campaign = await this.prisma.emailCampaign.findFirst({
       where: { id: campaignId, gymId },
     });
-    if (!campaign) throw new NotFoundException('Campaign not found');
+    if (!campaign) throw new NotFoundException('Campo no encontrado');
 
     return this.prisma.emailCampaign.update({
       where: { id: campaignId },
@@ -58,7 +58,7 @@ export class MarketingService {
     const campaign = await this.prisma.emailCampaign.findFirst({
       where: { id, gymId },
     });
-    if (!campaign) throw new NotFoundException('Campaign not found');
+    if (!campaign) throw new NotFoundException('Campo no encontrado');
     return {
       id: campaign.id,
       name: campaign.name,

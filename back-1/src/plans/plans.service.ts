@@ -17,7 +17,7 @@ export class PlansService {
   }
 
   async create(gymId: string, data: any) {
-    if (!gymId) throw new BadRequestException('gymId is required');
+    if (!gymId) throw new BadRequestException('gymId es requerido');
     const payload = { ...data, gymId };
     if (data.price !== undefined) payload.price = Math.round(Number(data.price));
     return this.prisma.plan.create({ data: payload });
@@ -42,7 +42,7 @@ export class PlansService {
 
   private async assertExists(id: string, gymId?: string) {
     const plan = await this.prisma.plan.findFirst({ where: gymId ? { id, gymId } : { id } });
-    if (!plan) throw new NotFoundException('Plan not found');
+    if (!plan) throw new NotFoundException('Plan no encontrado');
     return plan;
   }
 }

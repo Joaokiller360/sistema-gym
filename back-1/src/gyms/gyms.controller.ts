@@ -76,7 +76,7 @@ export class GymsController {
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    if (!file) throw new BadRequestException('File is required');
+    if (!file) throw new BadRequestException('Logo es requerido');
     return this.gymsService.updateLogo(id, `/uploads/logos/${file.filename}`);
   }
 

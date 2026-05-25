@@ -19,13 +19,14 @@ export class TenantGuard implements CanActivate {
           where: { slug: gymSlug },
           select: { id: true },
         });
-        if (gym) request.gymId = gym.id;
+        if (!gym) throw new ForbiddenException('Gimnasio no encontrado');
+        request.gymId = gym.id;
       }
       return true;
     }
 
     if (!user.gymId) {
-      throw new ForbiddenException('No gym assigned to this user');
+      throw new ForbiddenException('Usuario no asociado a ningún gimnasio');
     }
 
     const gym = await this.prisma.gym.findUnique({

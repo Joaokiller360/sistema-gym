@@ -5,6 +5,11 @@ import { TenantGuard } from '../common/guards/tenant.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
+import {
+  CreateProductDto, UpdateProductDto,
+  CreateCategoryDto, UpdateCategoryDto,
+  CreateSaleDto, AssignCreditsDto, PayCreditsDto,
+} from './dto/store.dto';
 
 @Controller('store')
 @UseGuards(JwtAuthGuard, TenantGuard)
@@ -20,14 +25,14 @@ export class StoreController {
   @Post('products')
   @UseGuards(RolesGuard)
   @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
-  createProduct(@Req() req: any, @Body() body: any) {
+  createProduct(@Req() req: any, @Body() body: CreateProductDto) {
     return this.storeService.createProduct(req.gymId, body);
   }
 
   @Patch('products/:id')
   @UseGuards(RolesGuard)
   @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
-  updateProduct(@Param('id') id: string, @Req() req: any, @Body() body: any) {
+  updateProduct(@Param('id') id: string, @Req() req: any, @Body() body: UpdateProductDto) {
     return this.storeService.updateProduct(id, req.gymId, body);
   }
 
@@ -40,7 +45,7 @@ export class StoreController {
 
   // ── Sales ─────────────────────────────────────────────
   @Post('sales')
-  createSale(@Req() req: any, @Body() body: any) {
+  createSale(@Req() req: any, @Body() body: CreateSaleDto) {
     return this.storeService.createSale(req.gymId, body);
   }
 
@@ -71,14 +76,14 @@ export class StoreController {
   @Post('categories')
   @UseGuards(RolesGuard)
   @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
-  createCategory(@Req() req: any, @Body() body: any) {
+  createCategory(@Req() req: any, @Body() body: CreateCategoryDto) {
     return this.storeService.createCategory(req.gymId, body);
   }
 
   @Patch('categories/:id')
   @UseGuards(RolesGuard)
   @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
-  updateCategory(@Param('id') id: string, @Req() req: any, @Body() body: any) {
+  updateCategory(@Param('id') id: string, @Req() req: any, @Body() body: UpdateCategoryDto) {
     return this.storeService.updateCategory(id, req.gymId, body);
   }
 
@@ -93,7 +98,7 @@ export class StoreController {
   @Post('credits')
   @UseGuards(RolesGuard)
   @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
-  assignCredits(@Req() req: any, @Body() body: any) {
+  assignCredits(@Req() req: any, @Body() body: AssignCreditsDto) {
     return this.storeService.assignCredits(req.gymId, body);
   }
 
@@ -105,7 +110,7 @@ export class StoreController {
   @Post('credits/pay')
   @UseGuards(RolesGuard)
   @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
-  payCredits(@Req() req: any, @Body() body: any) {
+  payCredits(@Req() req: any, @Body() body: PayCreditsDto) {
     return this.storeService.payCredits(req.gymId, body);
   }
 }

@@ -24,7 +24,7 @@ export class PaymentsService {
   }
 
   async create(gymId: string, data: any) {
-    if (!gymId) throw new BadRequestException('gymId is required');
+    if (!gymId) throw new BadRequestException('gymId es requerido');
     const payload = { ...data, gymId };
     if (data.amount !== undefined) payload.amount = Math.round(Number(data.amount));
     return this.prisma.payment.create({ data: payload });
@@ -38,7 +38,7 @@ export class PaymentsService {
         membership: { include: { plan: true } },
       },
     });
-    if (!payment) throw new NotFoundException('Payment not found');
+    if (!payment) throw new NotFoundException('Pago no encontrado');
     return payment;
   }
 

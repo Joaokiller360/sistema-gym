@@ -24,7 +24,7 @@ export class InventoryService {
       where: { id, gymId },
       include: { maintenances: { orderBy: { createdAt: 'desc' } } },
     });
-    if (!item) throw new NotFoundException('Inventory item not found');
+    if (!item) throw new NotFoundException('Item no encontrado en el inventario');
     return item;
   }
 
@@ -51,7 +51,7 @@ export class InventoryService {
 
   private async assertExists(id: string, gymId: string) {
     const item = await this.prisma.inventoryItem.findFirst({ where: { id, gymId } });
-    if (!item) throw new NotFoundException('Inventory item not found');
+    if (!item) throw new NotFoundException('Item no encontrado en el inventario');
     return item;
   }
 }

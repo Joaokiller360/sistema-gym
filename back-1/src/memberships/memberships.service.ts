@@ -149,13 +149,13 @@ export class MembershipsService {
     console.log('[MembershipsService.cancel] id:', id, 'gymId:', gymId);
     const m = await this.prisma.membership.findFirst({ where: { id, gymId } });
     console.log('[MembershipsService.cancel] found:', JSON.stringify(m));
-    if (!m) throw new NotFoundException('Membership not found');
+    if (!m) throw new NotFoundException('Miembresía no encontrada');
     return this.prisma.membership.update({ where: { id }, data: { status: 'CANCELLED' } });
   }
 
   private async assertExists(id: string, gymId: string) {
     const m = await this.prisma.membership.findFirst({ where: { id, gymId } });
-    if (!m) throw new NotFoundException('Membership not found');
+    if (!m) throw new NotFoundException('Miembresía no encontrada');
     return m;
   }
 }

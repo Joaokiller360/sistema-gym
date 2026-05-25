@@ -62,7 +62,7 @@ export class MembersService {
         attendances: { orderBy: { checkIn: 'desc' }, take: 50 },
       },
     });
-    if (!member) throw new NotFoundException('Member not found');
+    if (!member) throw new NotFoundException('Miembro no encontrado');
     return member;
   }
 
@@ -78,7 +78,7 @@ export class MembersService {
 
   private async assertExists(id: string, gymId: string) {
     const member = await this.prisma.member.findFirst({ where: { id, gymId } });
-    if (!member) throw new NotFoundException('Member not found');
+    if (!member) throw new NotFoundException('Miembro no encontrado');
     return member;
   }
 }

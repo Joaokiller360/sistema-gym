@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -122,7 +122,9 @@ export class StoreService {
   // ── Daily / Monthly cuts ─────────────────────────────────
 
   async getDailyCut(gymId: string, date: string) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new BadRequestException('date debe ser YYYY-MM-DD');
     const day = new Date(date);
+    if (isNaN(day.getTime())) throw new BadRequestException('date inválida');
     const nextDay = new Date(day);
     nextDay.setDate(day.getDate() + 1);
 
@@ -135,7 +137,9 @@ export class StoreService {
   }
 
   async getMonthlyCut(gymId: string, month: string) {
+    if (!/^\d{4}-\d{2}$/.test(month)) throw new BadRequestException('month debe ser YYYY-MM');
     const [year, m] = month.split('-').map(Number);
+    if (m < 1 || m > 12) throw new BadRequestException('month inválido');
     const start = new Date(year, m - 1, 1);
     const end = new Date(year, m, 1);
 
@@ -180,6 +184,9 @@ export class StoreService {
   async assignCredits(gymId: string, data: { memberId: string; items: { productId: string; quantity: number }[]; notes?: string }) {
     const { memberId, items, notes } = data;
     if (!items?.length) throw new BadRequestException('Debe incluir al menos un producto');
+
+    const member = await this.prisma.member.findFirst({ where: { id: memberId, gymId } });
+    if (!member) throw new NotFoundException('Miembro no encontrado en este gimnasio');
 
     const products = await this.prisma.product.findMany({
       where: { id: { in: items.map(i => i.productId) }, gymId },
