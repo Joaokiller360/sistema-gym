@@ -3,6 +3,11 @@ export interface FooterLink {
   url: string
 }
 
+export interface LandingFeature {
+  title: string
+  description: string
+}
+
 export interface PlatformSettings {
   saasName: string
   logoUrl: string | null
@@ -11,6 +16,14 @@ export interface PlatformSettings {
   footerShowPoweredBy: boolean
   creatorName: string | null
   creatorUrl: string | null
+  heroTitle: string | null
+  heroSubtitle: string | null
+  heroCtaText: string | null
+  heroCtaUrl: string | null
+  primaryColor: string | null
+  landingFeatures: LandingFeature[]
+  landingShowPlans: boolean
+  termsContent: string | null
 }
 
 export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
@@ -21,4 +34,12 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   footerShowPoweredBy: true,
   creatorName: null,
   creatorUrl: null,
+  heroTitle: null,
+  heroSubtitle: null,
+  heroCtaText: null,
+  heroCtaUrl: null,
+  primaryColor: '#fffb00',
+  landingFeatures: [],
+  landingShowPlans: true,
+  termsContent: null,
 }

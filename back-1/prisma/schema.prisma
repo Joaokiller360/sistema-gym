@@ -595,6 +595,7 @@ model PlatformSettings {
   heroTitle           String?
   heroSubtitle        String?
   heroCtaText         String?
+  heroCtaUrl          String?
   primaryColor        String?
   landingFeatures     Json     @default("[]")
   landingShowPlans    Boolean  @default(true)

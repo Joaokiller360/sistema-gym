@@ -3,23 +3,24 @@ const API_URL = process.env.API_URL ?? 'http://localhost:3001/api/v1'
 export async function apiFetch<T>(
   path: string,
   token: string,
-  options?: RequestInit,
+  options?: RequestInit & { silent?: boolean },
 ): Promise<T | null> {
+  const { silent, ...fetchOptions } = options ?? {}
   try {
     const res = await fetch(`${API_URL}${path}`, {
-      ...options,
+      ...fetchOptions,
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
-        ...options?.headers,
+        ...fetchOptions?.headers,
       },
     })
 
     const text = await res.text()
 
     if (!res.ok) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.error(`[apiFetch] ${options?.method ?? 'GET'} ${path} → ${res.status}:`, text)
+      if (!silent && process.env.NODE_ENV !== 'production') {
+        console.error(`[apiFetch] ${fetchOptions?.method ?? 'GET'} ${path} → ${res.status}:`, text)
       }
       return null
     }
@@ -27,7 +28,7 @@ export async function apiFetch<T>(
     if (!text) return {} as T
     return JSON.parse(text) as T
   } catch (e) {
-    if (process.env.NODE_ENV !== 'production') {
+    if (!silent && process.env.NODE_ENV !== 'production') {
       console.error(`[apiFetch] ${path}:`, e)
     }
     return null

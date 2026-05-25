@@ -556,6 +556,7 @@ export class SuperAdminService {
     heroTitle?: string | null;
     heroSubtitle?: string | null;
     heroCtaText?: string | null;
+    heroCtaUrl?: string | null;
     primaryColor?: string | null;
     landingFeatures?: Array<{ title: string; description: string }>;
     landingShowPlans?: boolean;
