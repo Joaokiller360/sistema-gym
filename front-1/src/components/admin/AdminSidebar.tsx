@@ -16,6 +16,7 @@ import {
   X,
   Moon,
   Sun,
+  UserCircle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logoutAction } from '@/lib/logout'
@@ -27,6 +28,7 @@ const NAV = [
   { label: 'Ingresos', href: '/admin/income', icon: TrendingUp },
   { label: 'Planes', href: '/admin/plans', icon: CreditCard },
   { label: 'Configuración', href: '/admin/settings', icon: Settings },
+  { label: 'Mi perfil', href: '/admin/profile', icon: UserCircle },
 ]
 
 interface AdminSidebarProps {
