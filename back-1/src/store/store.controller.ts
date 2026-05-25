@@ -38,7 +38,7 @@ export class StoreController {
 
   @Delete('products/:id')
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN)
   deleteProduct(@Param('id') id: string, @Req() req: any) {
     return this.storeService.deleteProduct(id, req.gymId);
   }
@@ -56,7 +56,7 @@ export class StoreController {
 
   @Delete('sales/:id')
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN)
   deleteSale(@Param('id') id: string, @Req() req: any) {
     return this.storeService.deleteSale(id, req.gymId);
   }
@@ -96,7 +96,7 @@ export class StoreController {
 
   @Delete('categories/:id')
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN)
   deleteCategory(@Param('id') id: string, @Req() req: any) {
     return this.storeService.deleteCategory(id, req.gymId);
   }

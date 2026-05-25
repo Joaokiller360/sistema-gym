@@ -37,6 +37,18 @@ export class StoreService {
 
   async deleteProduct(id: string, gymId: string) {
     await this.assertProductExists(id, gymId);
+
+    const [saleItemCount, creditCount] = await Promise.all([
+      this.prisma.productSaleItem.count({ where: { productId: id } }),
+      this.prisma.memberProductCredit.count({ where: { productId: id } }),
+    ]);
+
+    if (saleItemCount > 0 || creditCount > 0) {
+      throw new BadRequestException(
+        'No se puede eliminar un producto con ventas o créditos registrados. Desactivalo en su lugar.',
+      );
+    }
+
     return this.prisma.product.delete({ where: { id } });
   }
 
@@ -149,12 +161,22 @@ export class StoreService {
     const nextDay = new Date(day);
     nextDay.setDate(day.getDate() + 1);
 
-    const sales = await this.prisma.productSale.findMany({
-      where: { gymId, createdAt: { gte: day, lt: nextDay } },
-      include: { items: { include: { product: { select: { name: true } } } } },
-    });
+    const [sales, credits] = await Promise.all([
+      this.prisma.productSale.findMany({
+        where: { gymId, createdAt: { gte: day, lt: nextDay } },
+        include: { items: { include: { product: { select: { name: true } } } } },
+      }),
+      this.prisma.memberProductCredit.findMany({
+        where: { gymId, createdAt: { gte: day, lt: nextDay } },
+        include: {
+          member: { select: { firstName: true, lastName: true } },
+          product: { select: { name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
 
-    return this.summarizeSales(sales);
+    return { ...this.summarizeSales(sales), credits: this.summarizeCredits(credits) };
   }
 
   async getMonthlyCut(gymId: string, month: string) {
@@ -164,12 +186,53 @@ export class StoreService {
     const start = new Date(year, m - 1, 1);
     const end = new Date(year, m, 1);
 
-    const sales = await this.prisma.productSale.findMany({
-      where: { gymId, createdAt: { gte: start, lt: end } },
-      include: { items: { include: { product: { select: { name: true } } } } },
-    });
+    const [sales, credits] = await Promise.all([
+      this.prisma.productSale.findMany({
+        where: { gymId, createdAt: { gte: start, lt: end } },
+        include: { items: { include: { product: { select: { name: true } } } } },
+      }),
+      this.prisma.memberProductCredit.findMany({
+        where: { gymId, createdAt: { gte: start, lt: end } },
+        include: {
+          member: { select: { firstName: true, lastName: true } },
+          product: { select: { name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
 
-    return this.summarizeSales(sales);
+    return { ...this.summarizeSales(sales), credits: this.summarizeCredits(credits) };
+  }
+
+  async getAllPendingCredits(gymId: string) {
+    return this.prisma.memberProductCredit.findMany({
+      where: { gymId, isPaid: false },
+      include: {
+        member: { select: { firstName: true, lastName: true } },
+        product: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  private summarizeCredits(credits: any[]) {
+    const byMember: Record<string, { memberName: string; count: number; total: number }> = {};
+    let total = 0;
+
+    for (const c of credits) {
+      total += c.unitPrice * c.quantity;
+      const memberName = `${c.member.firstName} ${c.member.lastName}`;
+      byMember[c.memberId] = byMember[c.memberId] ?? { memberName, count: 0, total: 0 };
+      byMember[c.memberId].count++;
+      byMember[c.memberId].total += c.unitPrice * c.quantity;
+    }
+
+    return {
+      count: credits.length,
+      total,
+      byMember: Object.values(byMember),
+      items: credits,
+    };
   }
 
   private summarizeSales(sales: any[]) {
@@ -248,17 +311,6 @@ export class StoreService {
     });
 
     return created;
-  }
-
-  async getAllPendingCredits(gymId: string) {
-    return this.prisma.memberProductCredit.findMany({
-      where: { gymId, isPaid: false },
-      include: {
-        member: { select: { firstName: true, lastName: true } },
-        product: { select: { name: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
   }
 
   async getMemberCredits(gymId: string, memberId: string) {
