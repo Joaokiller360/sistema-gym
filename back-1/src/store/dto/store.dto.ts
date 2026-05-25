@@ -8,150 +8,160 @@ import { Type } from 'class-transformer';
 const SAFE_TEXT = /^[\p{L}\p{N}\s.,\-_'()/]+$/u;
 
 export class CreateProductDto {
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(100)
-  @Matches(SAFE_TEXT, { message: 'name: solo letras, números y puntuación básica' })
+  @IsString({ message: 'El nombre debe ser texto' })
+  @IsNotEmpty({ message: 'El nombre es requerido' })
+  @MaxLength(100, { message: 'El nombre no puede superar los 100 caracteres' })
+  @Matches(SAFE_TEXT, { message: 'El nombre solo puede contener letras, números y puntuación básica' })
   name: string;
 
-  @IsString()
+  @IsString({ message: 'La descripción debe ser texto' })
   @IsOptional()
-  @MaxLength(500)
+  @MaxLength(500, { message: 'La descripción no puede superar los 500 caracteres' })
   description?: string;
 
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @IsPositive()
+  @IsInt({ message: 'El precio debe ser un número entero (en centavos)' })
+  @IsPositive({ message: 'El precio debe ser mayor a 0' })
   price: number;
 
-  @IsInt()
-  @Min(0)
+  @IsInt({ message: 'El costo debe ser un número entero (en centavos)' })
+  @Min(0, { message: 'El costo no puede ser negativo' })
+  @IsOptional()
+  cost?: number;
+
+  @IsInt({ message: 'El stock debe ser un número entero' })
+  @Min(0, { message: 'El stock no puede ser negativo' })
   stock: number;
 
-  @IsString()
+  @IsString({ message: 'La URL de imagen debe ser texto' })
   @IsOptional()
-  @MaxLength(300)
+  @MaxLength(300, { message: 'La URL de imagen no puede superar los 300 caracteres' })
   imageUrl?: string;
 
-  @IsUUID()
+  @IsUUID('4', { message: 'La categoría seleccionada no es válida' })
   @IsOptional()
   categoryId?: string;
 
-  @IsBoolean()
+  @IsBoolean({ message: 'El estado debe ser verdadero o falso' })
   @IsOptional()
   isActive?: boolean;
 }
 
 export class UpdateProductDto {
-  @IsString()
+  @IsString({ message: 'El nombre debe ser texto' })
   @IsOptional()
-  @MaxLength(100)
-  @Matches(SAFE_TEXT, { message: 'name: solo letras, números y puntuación básica' })
+  @MaxLength(100, { message: 'El nombre no puede superar los 100 caracteres' })
+  @Matches(SAFE_TEXT, { message: 'El nombre solo puede contener letras, números y puntuación básica' })
   name?: string;
 
-  @IsString()
+  @IsString({ message: 'La descripción debe ser texto' })
   @IsOptional()
-  @MaxLength(500)
+  @MaxLength(500, { message: 'La descripción no puede superar los 500 caracteres' })
   description?: string;
 
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @IsPositive()
+  @IsInt({ message: 'El precio debe ser un número entero (en centavos)' })
+  @IsPositive({ message: 'El precio debe ser mayor a 0' })
   @IsOptional()
   price?: number;
 
-  @IsInt()
-  @Min(0)
+  @IsInt({ message: 'El costo debe ser un número entero (en centavos)' })
+  @Min(0, { message: 'El costo no puede ser negativo' })
+  @IsOptional()
+  cost?: number;
+
+  @IsInt({ message: 'El stock debe ser un número entero' })
+  @Min(0, { message: 'El stock no puede ser negativo' })
   @IsOptional()
   stock?: number;
 
-  @IsString()
+  @IsString({ message: 'La URL de imagen debe ser texto' })
   @IsOptional()
-  @MaxLength(300)
+  @MaxLength(300, { message: 'La URL de imagen no puede superar los 300 caracteres' })
   imageUrl?: string;
 
-  @IsUUID()
+  @IsUUID('4', { message: 'La categoría seleccionada no es válida' })
   @IsOptional()
   categoryId?: string;
 
-  @IsBoolean()
+  @IsBoolean({ message: 'El estado debe ser verdadero o falso' })
   @IsOptional()
   isActive?: boolean;
 }
 
 export class CreateCategoryDto {
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(80)
-  @Matches(SAFE_TEXT, { message: 'name: solo letras, números y puntuación básica' })
+  @IsString({ message: 'El nombre debe ser texto' })
+  @IsNotEmpty({ message: 'El nombre es requerido' })
+  @MaxLength(80, { message: 'El nombre no puede superar los 80 caracteres' })
+  @Matches(SAFE_TEXT, { message: 'El nombre solo puede contener letras, números y puntuación básica' })
   name: string;
 
-  @IsString()
+  @IsString({ message: 'La URL de imagen debe ser texto' })
   @IsOptional()
-  @MaxLength(300)
+  @MaxLength(300, { message: 'La URL de imagen no puede superar los 300 caracteres' })
   imageUrl?: string;
 }
 
 export class UpdateCategoryDto {
-  @IsString()
+  @IsString({ message: 'El nombre debe ser texto' })
   @IsOptional()
-  @MaxLength(80)
-  @Matches(SAFE_TEXT, { message: 'name: solo letras, números y puntuación básica' })
+  @MaxLength(80, { message: 'El nombre no puede superar los 80 caracteres' })
+  @Matches(SAFE_TEXT, { message: 'El nombre solo puede contener letras, números y puntuación básica' })
   name?: string;
 
-  @IsString()
+  @IsString({ message: 'La URL de imagen debe ser texto' })
   @IsOptional()
-  @MaxLength(300)
+  @MaxLength(300, { message: 'La URL de imagen no puede superar los 300 caracteres' })
   imageUrl?: string;
 }
 
 export class SaleItemDto {
-  @IsUUID()
+  @IsUUID('4', { message: 'El ID del producto no es válido' })
   productId: string;
 
-  @IsInt()
-  @Min(1)
+  @IsInt({ message: 'La cantidad debe ser un número entero' })
+  @Min(1, { message: 'La cantidad debe ser al menos 1' })
   quantity: number;
 }
 
 export class CreateSaleDto {
-  @IsArray()
-  @ArrayMinSize(1)
+  @IsArray({ message: 'Los items deben ser una lista' })
+  @ArrayMinSize(1, { message: 'Debe incluir al menos un producto' })
   @ValidateNested({ each: true })
   @Type(() => SaleItemDto)
   items: SaleItemDto[];
 
-  @IsString()
-  @IsIn(['CASH', 'CARD', 'TRANSFER', 'OTHER'])
+  @IsString({ message: 'El método de pago debe ser texto' })
+  @IsIn(['CASH', 'CARD', 'TRANSFER', 'OTHER'], { message: 'Método de pago inválido' })
   method: string;
 
-  @IsString()
+  @IsString({ message: 'Las notas deben ser texto' })
   @IsOptional()
-  @MaxLength(300)
+  @MaxLength(300, { message: 'Las notas no pueden superar los 300 caracteres' })
   notes?: string;
 }
 
 export class AssignCreditsDto {
-  @IsUUID()
+  @IsUUID('4', { message: 'El ID del miembro no es válido' })
   memberId: string;
 
-  @IsArray()
-  @ArrayMinSize(1)
+  @IsArray({ message: 'Los items deben ser una lista' })
+  @ArrayMinSize(1, { message: 'Debe incluir al menos un producto' })
   @ValidateNested({ each: true })
   @Type(() => SaleItemDto)
   items: SaleItemDto[];
 
-  @IsString()
+  @IsString({ message: 'Las notas deben ser texto' })
   @IsOptional()
-  @MaxLength(300)
+  @MaxLength(300, { message: 'Las notas no pueden superar los 300 caracteres' })
   notes?: string;
 }
 
 export class PayCreditsDto {
-  @IsArray()
-  @ArrayMinSize(1)
-  @IsUUID('4', { each: true })
+  @IsArray({ message: 'Los IDs deben ser una lista' })
+  @ArrayMinSize(1, { message: 'Debe incluir al menos un crédito' })
+  @IsUUID('4', { each: true, message: 'Uno o más IDs de crédito no son válidos' })
   creditIds: string[];
 
-  @IsString()
-  @IsIn(['CASH', 'CARD', 'TRANSFER', 'OTHER'])
+  @IsString({ message: 'El método de pago debe ser texto' })
+  @IsIn(['CASH', 'CARD', 'TRANSFER', 'OTHER'], { message: 'Método de pago inválido' })
   method: string;
 }
