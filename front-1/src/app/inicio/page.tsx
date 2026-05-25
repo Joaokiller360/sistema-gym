@@ -350,7 +350,7 @@ export default async function LandingPage() {
   const heroTitle = settings.heroTitle || `Gestión profesional para tu gimnasio`
   const heroSubtitle = settings.heroSubtitle || 'Todo lo que necesitás para administrar tu gimnasio en un solo lugar. Miembros, pagos, reportes y más.'
   const heroCtaText = settings.heroCtaText || 'Comenzar ahora'
-  const heroCtaUrl = settings.heroCtaUrl || '/login'
+  const heroCtaUrl = settings.heroCtaUrl || '/inicio'
 
   return (
     <div className="min-h-screen flex flex-col bg-white dark:bg-black">
