@@ -592,6 +592,13 @@ model PlatformSettings {
   footerText          String?
   footerLinks         Json     @default("[]")
   footerShowPoweredBy Boolean  @default(true)
+  heroTitle           String?
+  heroSubtitle        String?
+  heroCtaText         String?
+  primaryColor        String?
+  landingFeatures     Json     @default("[]")
+  landingShowPlans    Boolean  @default(true)
+  termsContent        String?
   updatedAt           DateTime @updatedAt
 
   @@map("platform_settings")

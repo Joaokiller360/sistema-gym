@@ -14,4 +14,9 @@ export class AppController {
   getPlatformSettings() {
     return this.appService.getPlatformSettings();
   }
+
+  @Get('subscription-plans')
+  getSubscriptionPlans() {
+    return this.appService.getPublicSubscriptionPlans();
+  }
 }

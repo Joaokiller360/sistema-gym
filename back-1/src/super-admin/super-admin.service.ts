@@ -553,6 +553,13 @@ export class SuperAdminService {
     footerText?: string | null;
     footerLinks?: Array<{ label: string; url: string }>;
     footerShowPoweredBy?: boolean;
+    heroTitle?: string | null;
+    heroSubtitle?: string | null;
+    heroCtaText?: string | null;
+    primaryColor?: string | null;
+    landingFeatures?: Array<{ title: string; description: string }>;
+    landingShowPlans?: boolean;
+    termsContent?: string | null;
   }) {
     return this.prisma.platformSettings.upsert({
       where: { id: '1' },

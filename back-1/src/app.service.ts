@@ -16,4 +16,11 @@ export class AppService {
       update: {},
     });
   }
+
+  getPublicSubscriptionPlans() {
+    return this.prisma.subscriptionPlan.findMany({
+      where: { isActive: true },
+      orderBy: { price: 'asc' },
+    });
+  }
 }
