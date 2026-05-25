@@ -580,3 +580,16 @@ model PlanStore {
   @@index([gymId])
   @@map("plan_store")
 }
+
+// ── Platform Settings (singleton) ───────────────────────────
+
+model PlatformSettings {
+  id                  String   @id @default("1")
+  saasName            String   @default("GymSystem")
+  footerText          String?
+  footerLinks         Json     @default("[]")
+  footerShowPoweredBy Boolean  @default(true)
+  updatedAt           DateTime @updatedAt
+
+  @@map("platform_settings")
+}

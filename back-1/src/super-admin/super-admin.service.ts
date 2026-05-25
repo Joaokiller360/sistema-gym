@@ -529,6 +529,27 @@ export class SuperAdminService {
     return this.prisma.subscriptionPlan.delete({ where: { id } });
   }
 
+  async getPlatformSettings() {
+    return this.prisma.platformSettings.upsert({
+      where: { id: '1' },
+      create: { id: '1' },
+      update: {},
+    });
+  }
+
+  async updatePlatformSettings(data: {
+    saasName?: string;
+    footerText?: string | null;
+    footerLinks?: Array<{ label: string; url: string }>;
+    footerShowPoweredBy?: boolean;
+  }) {
+    return this.prisma.platformSettings.upsert({
+      where: { id: '1' },
+      create: { id: '1', ...data },
+      update: data,
+    });
+  }
+
   async getDashboard() {
     const [totalGyms, activeGyms, totalUsers, totalMembers] = await Promise.all([
       this.prisma.gym.count(),

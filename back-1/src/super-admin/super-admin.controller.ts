@@ -119,4 +119,9 @@ export class SuperAdminController {
   getDashboard() {
     return this.superAdminService.getDashboard();
   }
+
+  @Patch('platform-settings')
+  updatePlatformSettings(@Body() body: any) {
+    return this.superAdminService.updatePlatformSettings(body);
+  }
 }

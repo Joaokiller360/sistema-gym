@@ -9,4 +9,9 @@ export class AppController {
   getHello(): string {
     return this.appService.getHello();
   }
+
+  @Get('platform-settings')
+  getPlatformSettings() {
+    return this.appService.getPlatformSettings();
+  }
 }
