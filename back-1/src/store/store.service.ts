@@ -97,6 +97,27 @@ export class StoreService {
     return sale;
   }
 
+  async deleteSale(id: string, gymId: string) {
+    const sale = await this.prisma.productSale.findFirst({
+      where: { id, gymId },
+      include: { items: true },
+    });
+    if (!sale) throw new NotFoundException('Venta no encontrada');
+
+    await this.prisma.$transaction(async tx => {
+      for (const item of sale.items) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { increment: item.quantity } },
+        });
+      }
+      await tx.productSaleItem.deleteMany({ where: { saleId: id } });
+      await tx.productSale.delete({ where: { id } });
+    });
+
+    return { message: 'Venta eliminada y stock restaurado' };
+  }
+
   async findSales(gymId: string, query: any) {
     const { startDate, endDate } = query;
     const where: any = { gymId };

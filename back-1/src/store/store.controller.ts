@@ -54,6 +54,13 @@ export class StoreController {
     return this.storeService.findSales(req.gymId, query);
   }
 
+  @Delete('sales/:id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  deleteSale(@Param('id') id: string, @Req() req: any) {
+    return this.storeService.deleteSale(id, req.gymId);
+  }
+
   // ── Cuts ──────────────────────────────────────────────
   @Get('cuts/daily')
   getDailyCut(@Req() req: any, @Query('date') date: string) {
