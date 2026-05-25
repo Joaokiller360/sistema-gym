@@ -109,6 +109,11 @@ export class StoreController {
     return this.storeService.assignCredits(req.gymId, body);
   }
 
+  @Get('credits')
+  getAllCredits(@Req() req: any) {
+    return this.storeService.getAllPendingCredits(req.gymId);
+  }
+
   @Get('credits/:memberId')
   getMemberCredits(@Param('memberId') memberId: string, @Req() req: any) {
     return this.storeService.getMemberCredits(req.gymId, memberId);

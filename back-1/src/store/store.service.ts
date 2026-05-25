@@ -250,6 +250,17 @@ export class StoreService {
     return created;
   }
 
+  async getAllPendingCredits(gymId: string) {
+    return this.prisma.memberProductCredit.findMany({
+      where: { gymId, isPaid: false },
+      include: {
+        member: { select: { firstName: true, lastName: true } },
+        product: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async getMemberCredits(gymId: string, memberId: string) {
     return this.prisma.memberProductCredit.findMany({
       where: { gymId, memberId },
