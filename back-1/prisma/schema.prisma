@@ -57,6 +57,29 @@ enum CampaignStatus {
   CANCELLED
 }
 
+enum TicketPriority {
+  URGENT
+  HIGH
+  NORMAL
+  LOW
+  NOTIFICATION
+}
+
+enum TicketCategory {
+  BUG
+  BILLING
+  ACCESS
+  FEATURE
+  OTHER
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
 model Gym {
   id               String   @id @default(uuid())
   name             String
@@ -94,6 +117,7 @@ model Gym {
   productCategories   ProductCategory[]
   productSales        ProductSale[]
   memberCredits       MemberProductCredit[]
+  supportTickets      SupportTicket[]
 
   @@map("gyms")
 }
@@ -579,6 +603,28 @@ model PlanStore {
 
   @@index([gymId])
   @@map("plan_store")
+}
+
+// ── Support Tickets ─────────────────────────────────────────
+
+model SupportTicket {
+  id             String         @id @default(uuid())
+  title          String
+  description    String
+  priority       TicketPriority @default(NORMAL)
+  category       TicketCategory @default(OTHER)
+  status         TicketStatus   @default(OPEN)
+  adminNotes     String?
+  createdByEmail String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  gymId String
+  gym   Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@index([gymId])
+  @@index([status])
+  @@map("support_tickets")
 }
 
 // ── Platform Settings (singleton) ───────────────────────────
