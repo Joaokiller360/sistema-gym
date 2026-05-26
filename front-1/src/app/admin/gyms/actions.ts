@@ -1,6 +1,7 @@
 'use server'
 
 import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
 import { updateTag } from 'next/cache'
 import { z } from 'zod'
 import { apiFetch, apiFetchWithError } from '@/lib/api'
@@ -96,7 +97,7 @@ export async function deleteGymAction(gymId: string): Promise<{ error?: string }
   const result = await apiFetch(`/admin/gyms/${gymId}`, token, { method: 'DELETE' })
   if (!result) return { error: 'Error al eliminar el gimnasio' }
   updateTag('admin-gyms')
-  return {}
+  redirect('/admin/gyms')
 }
 
 export async function updateGymOwnerAction(
@@ -169,7 +170,7 @@ export async function registerSubscriptionPaymentAction(
   const token = await getToken()
   const result = await apiFetchWithError(`/admin/gyms/${gymId}/subscription-payment`, token, {
     method: 'POST',
-    body: JSON.stringify({ ...parsed.data, amount: parsed.data.amount / 100 }),
+    body: JSON.stringify({ ...parsed.data, amount: parsed.data.amount * 10000 }),
   })
 
   if ('error' in result) return { error: result.error }

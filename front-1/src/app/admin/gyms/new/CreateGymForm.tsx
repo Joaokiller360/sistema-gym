@@ -2,8 +2,8 @@
 
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Camera, Check } from 'lucide-react'
-import { createGymAction, uploadGymLogoAction, type CreateGymInput } from '../actions'
+import { Camera, Check, CreditCard } from 'lucide-react'
+import { createGymAction, uploadGymLogoAction, registerSubscriptionPaymentAction, type CreateGymInput } from '../actions'
 import { createHandlers } from '@/lib/input-validation'
 import type { SubscriptionPlan } from './page'
 
@@ -42,11 +42,19 @@ const inputClass = 'w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-
 
 const MAX_SIZE = 2 * 1024 * 1024
 
+const todayYM = new Date().toISOString().slice(0, 7)
+
+function monthToNote(ym: string) {
+  const [y, m] = ym.split('-')
+  const name = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('es-AR', { month: 'long' })
+  return `Pago mensual ${name} ${y}`
+}
+
 function initials(name: string) {
   return name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase()
 }
 
-export function CreateGymForm({ plans }: { plans: SubscriptionPlan[] }) {
+export function CreateGymForm({ plans, onSuccess }: { plans: SubscriptionPlan[]; onSuccess?: () => void }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [serverError, setServerError] = useState<string | null>(null)
@@ -56,6 +64,9 @@ export function CreateGymForm({ plans }: { plans: SubscriptionPlan[] }) {
   const [slug, setSlug] = useState('')
   const [slugManual, setSlugManual] = useState(false)
   const [plan, setPlan] = useState(() => plans[0]?.key ?? '')
+
+  const [payMethod, setPayMethod] = useState<'CASH' | 'CARD' | 'TRANSFER' | 'OTHER'>('CASH')
+  const [payMonth, setPayMonth] = useState(todayYM)
 
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
@@ -98,6 +109,9 @@ export function CreateGymForm({ plans }: { plans: SubscriptionPlan[] }) {
     return Object.keys(e).length === 0
   }
 
+  const selectedPlanObj = plans.find(p => p.key === plan)
+  const isPaidPlan = (selectedPlanObj?.price ?? 0) > 0
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!validate()) return
@@ -122,7 +136,25 @@ export function CreateGymForm({ plans }: { plans: SubscriptionPlan[] }) {
         await uploadGymLogoAction(result.gymId, fd)
       }
 
-      router.push('/admin/gyms')
+      if (isPaidPlan && selectedPlanObj) {
+        const payResult = await registerSubscriptionPaymentAction(result.gymId, {
+          amount: selectedPlanObj.price,
+          currency: selectedPlanObj.currency as 'USD' | 'ARS' | 'EUR',
+          method: payMethod,
+          notes: monthToNote(payMonth),
+        })
+        if (payResult.error) {
+          setServerError(`Gimnasio creado. Error al registrar pago inicial: ${payResult.error}`)
+          router.push(`/admin/gyms/${result.gymId}`)
+          return
+        }
+      }
+
+      if (onSuccess) {
+        onSuccess()
+      } else {
+        router.push('/admin/gyms')
+      }
     })
   }
 
@@ -265,6 +297,50 @@ export function CreateGymForm({ plans }: { plans: SubscriptionPlan[] }) {
           })}
         </div>
       </section>
+
+      {/* Payment — only for paid plans */}
+      {isPaidPlan && selectedPlanObj && (
+        <section className="bg-white rounded-2xl border border-zinc-200 p-6 space-y-4">
+          <div className="flex items-center gap-2">
+            <CreditCard className="h-4 w-4 text-zinc-400" />
+            <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-400">Pago inicial</h2>
+          </div>
+
+          <div className="rounded-xl bg-zinc-50 border border-zinc-200 px-4 py-3 flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Monto a cobrar</span>
+            <span className="text-sm font-bold">
+              {selectedPlanObj.currency} {selectedPlanObj.price.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+            </span>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Método de pago</label>
+            <select
+              value={payMethod}
+              onChange={e => setPayMethod(e.target.value as typeof payMethod)}
+              disabled={isPending}
+              className={inputClass}
+            >
+              <option value="CASH">Efectivo</option>
+              <option value="CARD">Tarjeta</option>
+              <option value="TRANSFER">Transferencia</option>
+              <option value="OTHER">Otro</option>
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Mes</label>
+            <input
+              type="month"
+              value={payMonth}
+              onChange={e => setPayMonth(e.target.value)}
+              disabled={isPending}
+              className={inputClass}
+            />
+            <p className="text-xs text-zinc-400">{monthToNote(payMonth)}</p>
+          </div>
+        </section>
+      )}
 
       {serverError && (
         <div className="rounded-xl bg-[#ff0000]/8 border border-[#ff0000]/20 px-4 py-3 text-sm text-[#cc0000] font-medium">

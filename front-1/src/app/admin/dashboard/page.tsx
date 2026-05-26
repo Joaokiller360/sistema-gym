@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers'
 import Link from 'next/link'
-import { Building2, Users, ChevronRight, TrendingUp, DollarSign } from 'lucide-react'
+import { Building2, Users, ChevronRight, TrendingUp, DollarSign, LifeBuoy, CreditCard, Settings, ArrowUpRight, AlertTriangle, ArrowUp, Minus, ArrowDown, Bell, Circle, Clock, CheckCircle2 } from 'lucide-react'
 import { KpiCard } from '@/components/shared/KpiCard'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { apiFetch } from '@/lib/api'
@@ -31,6 +31,17 @@ interface BillingRecord {
   createdAt: string
 }
 
+interface SupportTicket {
+  id: string
+  title: string
+  description: string
+  status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED'
+  priority: 'URGENT' | 'HIGH' | 'NORMAL' | 'LOW' | 'NOTIFICATION'
+  category: string
+  gymName?: string | null
+  createdAt: string
+}
+
 function startOfDay(d: Date) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()) }
 function endOfDay(d: Date) { return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999) }
 function startOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth(), 1) }
@@ -46,30 +57,18 @@ function gymBillingRevenue(records: BillingRecord[], from: Date, to: Date): { am
   })
   if (filtered.length === 0) return null
 
-  const sorted = [...filtered].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-  const deduped: BillingRecord[] = []
-  for (const record of sorted) {
-    if (record.periodStart && record.periodEnd) {
-      const pStart = new Date(record.periodStart).getTime()
-      const pEnd = new Date(record.periodEnd).getTime()
-      const idx = deduped.findIndex(r => {
-        if (!r.periodStart || !r.periodEnd) return false
-        const rStart = new Date(r.periodStart).getTime()
-        const rEnd = new Date(r.periodEnd).getTime()
-        return rStart < pEnd && rEnd > pStart
-      })
-      if (idx !== -1) deduped.splice(idx, 1)
-    }
-    deduped.push(record)
-  }
-
   const byCurrency: Record<string, number> = {}
-  for (const b of deduped) {
-    byCurrency[b.currency] = (byCurrency[b.currency] ?? 0) + parseFloat(b.amount)
+  for (const b of filtered) {
+    const amt = parseFloat(b.amount)
+    if (!isNaN(amt)) {
+      byCurrency[b.currency] = (byCurrency[b.currency] ?? 0) + amt
+    }
   }
   const entries = Object.entries(byCurrency)
   if (entries.length === 0) return null
-  return { currency: entries[0][0], amount: entries[0][1] }
+  const [currency, amount] = entries.sort((a, b) => b[1] - a[1])[0]
+  if (amount <= 0) return null
+  return { currency, amount }
 }
 
 function sumBilling(perGym: BillingRecord[][], from: Date, to: Date): { amount: number; currency: string } | null {
@@ -82,6 +81,7 @@ function sumBilling(perGym: BillingRecord[][], from: Date, to: Date): { amount: 
   const entries = Object.entries(byCurrency)
   if (entries.length === 0) return null
   const [currency, amount] = entries.sort((a, b) => b[1] - a[1])[0]
+  if (amount <= 0) return null
   return { amount, currency }
 }
 
@@ -98,10 +98,11 @@ export default async function AdminDashboardPage() {
   const dayEnd = endOfDay(now)
   const monthStart = startOfMonth(now)
 
-  const [stats, gymsRaw, allGymsRaw] = await Promise.all([
+  const [stats, gymsRaw, allGymsRaw, ticketsRaw] = await Promise.all([
     apiFetch<DashboardStats>(`/admin/dashboard`, token),
     apiFetch<GymListResponse | Gym[]>(`/admin/gyms?limit=5`, token),
     apiFetch<GymListResponse | Gym[]>(`/admin/gyms?limit=200`, token),
+    apiFetch<SupportTicket[] | { data: SupportTicket[] }>(`/support/tickets?all=true`, token, { silent: true }),
   ])
 
   const allGyms: Gym[] = allGymsRaw
@@ -128,6 +129,14 @@ export default async function AdminDashboardPage() {
   )
 
   const countMap = Object.fromEntries(counts.map(c => [c.gymId, c]))
+
+  const tickets: SupportTicket[] = ticketsRaw
+    ? (Array.isArray(ticketsRaw) ? ticketsRaw : ticketsRaw.data)
+    : []
+  const latestTickets = tickets
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 5)
+  const openTickets = tickets.filter(t => t.status === 'OPEN' || t.status === 'IN_PROGRESS').length
 
   return (
     <div className="p-8 space-y-8">
@@ -169,6 +178,91 @@ export default async function AdminDashboardPage() {
           </p>
         </div>
       </div>
+
+      {/* Quick access */}
+      <div className="space-y-3">
+        <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-400">Accesos rápidos</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {([
+            { href: '/admin/gyms', icon: Building2, label: 'Gimnasios', desc: `${stats?.totalGyms ?? 0} registrados` },
+            { href: '/admin/income', icon: DollarSign, label: 'Ingresos', desc: 'Facturación' },
+            { href: '/admin/support', icon: LifeBuoy, label: 'Soporte', desc: openTickets > 0 ? `${openTickets} abierto${openTickets !== 1 ? 's' : ''}` : 'Sin pendientes' },
+            { href: '/admin/plans', icon: CreditCard, label: 'Planes', desc: 'Suscripciones' },
+            { href: '/admin/settings', icon: Settings, label: 'Configuración', desc: 'Ajustes globales' },
+          ] as const).map(({ href, icon: Icon, label, desc }) => (
+            <Link
+              key={href}
+              href={href}
+              className="group rounded-2xl border border-zinc-200 bg-white p-4 hover:border-zinc-300 hover:shadow-sm transition-all space-y-3"
+            >
+              <div className="flex items-center justify-between">
+                <div className="h-9 w-9 rounded-xl bg-zinc-100 flex items-center justify-center group-hover:bg-[#fffb00] transition-colors">
+                  <Icon className="h-4 w-4 text-zinc-600 group-hover:text-black transition-colors" />
+                </div>
+                <ArrowUpRight className="h-3.5 w-3.5 text-zinc-300 group-hover:text-zinc-500 transition-colors" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-zinc-800">{label}</p>
+                <p className="text-xs text-zinc-400 mt-0.5">{desc}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      {/* Latest support tickets */}
+      {latestTickets.length > 0 && (
+        <div className="rounded-2xl border border-zinc-200 bg-white overflow-hidden">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100">
+            <div className="flex items-center gap-2">
+              <LifeBuoy className="h-4 w-4 text-zinc-400" />
+              <h2 className="font-semibold text-sm">Últimos tickets de soporte</h2>
+              {openTickets > 0 && (
+                <span className="rounded-full bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 leading-none">{openTickets}</span>
+              )}
+            </div>
+            <Link href="/admin/support" className="text-xs font-semibold text-[#1fad9d] hover:text-[#0e7a70] transition-colors flex items-center gap-1">
+              Ver todos <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+          <ul className="divide-y divide-zinc-100">
+            {latestTickets.map(t => {
+              const priorityConfig = {
+                URGENT: { color: 'bg-red-50 text-red-600 border-red-200', icon: <AlertTriangle className="h-3 w-3" />, label: 'Urgente' },
+                HIGH: { color: 'bg-orange-50 text-orange-600 border-orange-200', icon: <ArrowUp className="h-3 w-3" />, label: 'Alta' },
+                NORMAL: { color: 'bg-blue-50 text-blue-600 border-blue-200', icon: <Minus className="h-3 w-3" />, label: 'Normal' },
+                LOW: { color: 'bg-zinc-50 text-zinc-500 border-zinc-200', icon: <ArrowDown className="h-3 w-3" />, label: 'Baja' },
+                NOTIFICATION: { color: 'bg-[#1fad9d]/10 text-[#0e7a70] border-[#1fad9d]/30', icon: <Bell className="h-3 w-3" />, label: 'Notif.' },
+              }[t.priority]
+              const statusConfig = {
+                OPEN: { color: 'bg-amber-50 text-amber-600 border-amber-200', icon: <Circle className="h-3 w-3" />, label: 'Abierto' },
+                IN_PROGRESS: { color: 'bg-blue-50 text-blue-600 border-blue-200', icon: <Clock className="h-3 w-3" />, label: 'En proceso' },
+                RESOLVED: { color: 'bg-[#1fad9d]/10 text-[#0e7a70] border-[#1fad9d]/30', icon: <CheckCircle2 className="h-3 w-3" />, label: 'Resuelto' },
+                CLOSED: { color: 'bg-zinc-50 text-zinc-400 border-zinc-200', icon: <CheckCircle2 className="h-3 w-3" />, label: 'Cerrado' },
+              }[t.status]
+              return (
+                <li key={t.id} className="flex items-center gap-4 px-6 py-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusConfig.color}`}>
+                        {statusConfig.icon}{statusConfig.label}
+                      </span>
+                      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${priorityConfig.color}`}>
+                        {priorityConfig.icon}{priorityConfig.label}
+                      </span>
+                      {t.gymName && (
+                        <span className="text-[10px] text-zinc-400 bg-zinc-50 border border-zinc-200 rounded-full px-2 py-0.5">{t.gymName}</span>
+                      )}
+                    </div>
+                    <p className="text-sm font-semibold text-zinc-700 truncate">{t.title}</p>
+                  </div>
+                  <p className="text-xs text-zinc-400 shrink-0">{new Date(t.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}</p>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
 
       {/* Recent gyms table */}
       <div className="rounded-2xl border border-zinc-200 bg-white overflow-hidden">

@@ -25,6 +25,7 @@ import {
   Moon,
   Sun,
   ShoppingCart,
+  LifeBuoy,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -61,6 +62,7 @@ const BASE_NAV_GROUPS: NavGroup[] = [
       { label: 'Marketing', icon: Megaphone, path: 'marketing' },
       { label: 'Comunicaciones', icon: MessageSquare, path: 'communications' },
       { label: 'Configuración', icon: Settings, path: 'settings' },
+      { label: 'Soporte', icon: LifeBuoy, path: 'support' },
     ],
   },
 ]

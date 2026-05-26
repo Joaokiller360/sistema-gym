@@ -1,13 +1,16 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Building2, ExternalLink, MapPin, Globe, Clock, CreditCard, ShoppingBag, Calendar, Users, Star, ArrowRightLeft, CheckCircle2, AlertTriangle, Ban, Loader2 } from 'lucide-react'
+import { Building2, ExternalLink, MapPin, Globe, Clock, CreditCard, ShoppingBag, Calendar, Users, Star, ArrowRightLeft, CheckCircle2, AlertTriangle, Ban, Loader2, Plus } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Gym } from '@/types'
 import { toggleGymActiveAction, fetchGymModalDataAction, changeGymPlanAction, type GymModalData, type ProratedResult } from './actions'
+import { CreateGymForm } from './new/CreateGymForm'
+import type { SubscriptionPlan } from './new/page'
 
 function initials(name: string) {
   return name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase()
@@ -63,9 +66,11 @@ function ProratedBreakdown({ p, currency, onDone }: { p: ProratedResult; currenc
   )
 }
 
-export function GymTable({ gyms }: { gyms: Gym[] }) {
+export function GymTable({ gyms, plans }: { gyms: Gym[]; plans: SubscriptionPlan[] }) {
+  const router = useRouter()
   const [, startTransition] = useTransition()
   const [selected, setSelected] = useState<Gym | null>(null)
+  const [newGymOpen, setNewGymOpen] = useState(false)
   const [modalData, setModalData] = useState<GymModalData | null>(null)
   const [loadingModal, setLoadingModal] = useState(false)
 
@@ -132,12 +137,43 @@ export function GymTable({ gyms }: { gyms: Gym[] }) {
     p => p.key.toUpperCase() !== modalData.subscription?.subscriptionPlan?.toUpperCase()
   ) ?? []
 
+  const newGymModal = (
+    <Dialog open={newGymOpen} onOpenChange={v => { if (!v) setNewGymOpen(false) }}>
+      <DialogContent className="sm:max-w-2xl max-h-[92vh] overflow-y-auto" showCloseButton>
+        <div className="space-y-1 mb-2">
+          <h2 className="text-lg font-black tracking-tight">Nuevo gimnasio</h2>
+          <p className="text-xs text-zinc-400">Registrá un nuevo gimnasio en la plataforma</p>
+        </div>
+        <CreateGymForm
+          plans={plans}
+          onSuccess={() => {
+            setNewGymOpen(false)
+            router.refresh()
+          }}
+        />
+      </DialogContent>
+    </Dialog>
+  )
+
   if (gyms.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed py-20 text-sm text-muted-foreground">
-        <Building2 className="h-12 w-12 mb-3 opacity-20" />
-        No se encontraron gimnasios.
-      </div>
+      <>
+        <div className="flex items-center justify-end">
+          <button
+            type="button"
+            onClick={() => setNewGymOpen(true)}
+            className="flex items-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-bold text-white hover:bg-zinc-800 transition-all"
+          >
+            <Plus className="h-4 w-4" />
+            Nuevo gimnasio
+          </button>
+        </div>
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed py-20 text-sm text-muted-foreground">
+          <Building2 className="h-12 w-12 mb-3 opacity-20" />
+          No se encontraron gimnasios.
+        </div>
+        {newGymModal}
+      </>
     )
   }
 
@@ -145,6 +181,20 @@ export function GymTable({ gyms }: { gyms: Gym[] }) {
 
   return (
     <>
+      {/* New gym button */}
+      <div className="flex items-center justify-end">
+        <button
+          type="button"
+          onClick={() => setNewGymOpen(true)}
+          className="flex items-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-bold text-white hover:bg-zinc-800 transition-all"
+        >
+          <Plus className="h-4 w-4" />
+          Nuevo gimnasio
+        </button>
+      </div>
+
+      {newGymModal}
+
       {/* Mobile cards */}
       <div className="space-y-2 sm:hidden">
         {gyms.map(gym => (

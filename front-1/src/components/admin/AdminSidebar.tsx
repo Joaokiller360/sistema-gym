@@ -17,6 +17,7 @@ import {
   Moon,
   Sun,
   UserCircle,
+  LifeBuoy,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logoutAction } from '@/lib/logout'
@@ -29,6 +30,7 @@ const NAV = [
   { label: 'Planes', href: '/admin/plans', icon: CreditCard },
   { label: 'Configuración', href: '/admin/settings', icon: Settings },
   { label: 'Mi perfil', href: '/admin/profile', icon: UserCircle },
+  { label: 'Soporte', href: '/admin/support', icon: LifeBuoy },
 ]
 
 interface AdminSidebarProps {
