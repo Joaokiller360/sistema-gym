@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class MembersService {
@@ -51,7 +52,14 @@ export class MembersService {
         }
       }
     }
-    return this.prisma.member.create({ data: { ...data, gymId } });
+    try {
+      return await this.prisma.member.create({ data: { ...data, gymId } });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException(`Ya existe un miembro con el nombre "${data.firstName} ${data.lastName}" en este gimnasio.`);
+      }
+      throw e;
+    }
   }
 
   async findOne(id: string, gymId: string) {
@@ -75,7 +83,14 @@ export class MembersService {
       const lastName = data.lastName ?? current!.lastName;
       await this.assertNameUnique(gymId, firstName, lastName, id);
     }
-    return this.prisma.member.update({ where: { id }, data });
+    try {
+      return await this.prisma.member.update({ where: { id }, data });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException(`Ya existe un miembro con ese nombre en este gimnasio.`);
+      }
+      throw e;
+    }
   }
 
   async remove(id: string, gymId: string) {

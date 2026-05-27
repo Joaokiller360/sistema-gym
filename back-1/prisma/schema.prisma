@@ -214,6 +214,7 @@ model Member {
 
   @@index([gymId])
   @@index([branchId])
+  @@unique([gymId, firstName, lastName])
   @@map("members")
 }
 
