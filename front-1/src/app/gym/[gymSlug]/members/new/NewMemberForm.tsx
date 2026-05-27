@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createMemberAction } from '../actions'
 
@@ -53,9 +53,11 @@ export function NewMemberForm({ gymSlug, onSuccess, onClose }: Props) {
   const [serverError, setServerError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [isPending, startTransition] = useTransition()
+  const submittingRef = useRef(false)
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (submittingRef.current) return
     setServerError(null)
     const fd = new FormData(e.currentTarget)
     const data = {
@@ -72,17 +74,22 @@ export function NewMemberForm({ gymSlug, onSuccess, onClose }: Props) {
       return
     }
     setFieldErrors({})
+    submittingRef.current = true
 
     startTransition(async () => {
-      const result = await createMemberAction(gymSlug, data)
-      if ('error' in result) {
-        setServerError(result.error)
-        return
-      }
-      if (onSuccess) {
-        onSuccess(result.memberId)
-      } else {
-        router.push(`/gym/${gymSlug}/members`)
+      try {
+        const result = await createMemberAction(gymSlug, data)
+        if ('error' in result) {
+          setServerError(result.error)
+          return
+        }
+        if (onSuccess) {
+          onSuccess(result.memberId)
+        } else {
+          router.push(`/gym/${gymSlug}/members`)
+        }
+      } finally {
+        submittingRef.current = false
       }
     })
   }

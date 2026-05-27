@@ -40,6 +40,17 @@ export async function updateMemberAction(
     ...(birthDate ? { birthDate: new Date(birthDate).toISOString() } : { birthDate: null }),
   }
 
+  const existing = await apiFetch<{ id: string; firstName: string; lastName: string }[]>('/members', token, {
+    cache: 'no-store',
+    headers: { 'x-gym-slug': gymSlug },
+  })
+  if (existing) {
+    const normalized = `${(payload.firstName as string).toLowerCase()} ${(payload.lastName as string).toLowerCase()}`
+    if (existing.some(m => m.id !== memberId && `${m.firstName.toLowerCase()} ${m.lastName.toLowerCase()}` === normalized)) {
+      return { error: 'Ya existe un miembro con ese nombre y apellido' }
+    }
+  }
+
   const result = await apiFetchWithError(`/members/${memberId}`, token, {
     method: 'PATCH',
     headers: { 'x-gym-slug': gymSlug },
@@ -208,6 +219,7 @@ export async function deleteMemberAction(
   })
   if (result === null) return { error: 'Error al eliminar el miembro' }
   updateTag(`members-${gymSlug}`)
+  updateTag(`member-${memberId}`)
   return {}
 }
 

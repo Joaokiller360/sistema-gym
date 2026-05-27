@@ -5,6 +5,8 @@ import { KpiCard } from '@/components/shared/KpiCard'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { apiFetch } from '@/lib/api'
 import { Gym } from '@/types'
+import { NewsSection } from '@/app/gym/[gymSlug]/dashboard/NewsSection'
+import { TutorialsSection } from '@/app/gym/[gymSlug]/dashboard/TutorialsSection'
 
 interface DashboardStats {
   totalGyms: number
@@ -263,6 +265,12 @@ export default async function AdminDashboardPage() {
           </ul>
         </div>
       )}
+
+      {/* News & Tutorials — managed here, visible in gym dashboards */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <NewsSection canManage={true} />
+        <TutorialsSection canManage={true} />
+      </div>
 
       {/* Recent gyms table */}
       <div className="rounded-2xl border border-zinc-200 bg-white overflow-hidden">

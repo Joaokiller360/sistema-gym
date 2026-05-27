@@ -110,6 +110,7 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
 
   return (
     <Tabs defaultValue="membership">
+      <div className="overflow-x-auto">
       <TabsList variant="line">
         <TabsTrigger value="membership">Membresía</TabsTrigger>
         <TabsTrigger value="payments">Pagos</TabsTrigger>
@@ -124,6 +125,7 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
         </TabsTrigger>
         <TabsTrigger value="communications">Comunicaciones</TabsTrigger>
       </TabsList>
+      </div>
 
       {/* ── Membresía ─────────────────────────────────────── */}
       <TabsContent value="membership" className="mt-4 space-y-4">
@@ -227,20 +229,20 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
             <table className="w-full text-sm">
               <thead className="bg-zinc-50 border-b border-zinc-200">
                 <tr>
-                  <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">Fecha</th>
-                  <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-500 hidden sm:table-cell">Notas</th>
-                  <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">Método</th>
-                  <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">Monto</th>
+                  <th className="text-left px-3 sm:px-5 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">Fecha</th>
+                  <th className="text-left px-3 sm:px-5 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-500 hidden sm:table-cell">Notas</th>
+                  <th className="text-left px-3 sm:px-5 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">Método</th>
+                  <th className="text-right px-3 sm:px-5 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">Monto</th>
                   <th className="px-3 py-3 w-10" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
                 {payments.map(p => (
                   <tr key={p.id} className={`hover:bg-zinc-50 ${deletingId === p.id ? 'opacity-50' : ''}`}>
-                    <td className="px-5 py-3.5">{formatDate(p.createdAt)}</td>
-                    <td className="px-5 py-3.5 text-muted-foreground hidden sm:table-cell">{p.notes ?? '—'}</td>
-                    <td className="px-5 py-3.5 text-muted-foreground">{METHOD_LABELS[p.method] ?? p.method}</td>
-                    <td className="px-5 py-3.5 font-bold text-right">
+                    <td className="px-3 sm:px-5 py-3.5">{formatDate(p.createdAt)}</td>
+                    <td className="px-3 sm:px-5 py-3.5 text-muted-foreground hidden sm:table-cell">{p.notes ?? '—'}</td>
+                    <td className="px-3 sm:px-5 py-3.5 text-muted-foreground">{METHOD_LABELS[p.method] ?? p.method}</td>
+                    <td className="px-3 sm:px-5 py-3.5 font-bold text-right">
                       {parseFloat(String(p.amount)).toLocaleString('es-AR', { style: 'currency', currency: p.currency })}
                     </td>
                     <td className="px-3 py-3.5">

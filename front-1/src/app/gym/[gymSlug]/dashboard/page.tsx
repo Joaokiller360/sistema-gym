@@ -7,6 +7,8 @@ import { verifyToken } from '@/lib/auth'
 import { KpiCard } from '@/components/shared/KpiCard'
 import { Member, Attendance, Plan, Class, Gym } from '@/types'
 import { NewMemberModal } from '../members/NewMemberModal'
+import { NewsSection } from './NewsSection'
+import { TutorialsSection } from './TutorialsSection'
 
 interface MembersResponse { data: Member[]; total: number }
 interface FinancialReport { totalRevenue: number; currency: string }
@@ -139,6 +141,11 @@ export default async function GymDashboardPage({ params, searchParams }: Props) 
             </ul>
           )}
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <NewsSection canManage={false} />
+        <TutorialsSection canManage={false} />
       </div>
 
       {newParam === 'member' && (

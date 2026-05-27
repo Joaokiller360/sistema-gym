@@ -62,7 +62,7 @@ export default async function MemberDetailPage({ params, searchParams }: Props) 
   if (!member) notFound()
 
   return (
-    <div className="p-6 sm:p-8 space-y-6 max-w-3xl">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 max-w-3xl">
       {/* Back */}
       <Link
         href={`/gym/${gymSlug}/members`}
@@ -76,19 +76,19 @@ export default async function MemberDetailPage({ params, searchParams }: Props) 
       </Link>
 
       {/* Profile card */}
-      <div className="bg-white rounded-2xl border border-zinc-200 p-6 space-y-5">
-        <div className="flex items-start gap-5 flex-wrap">
+      <div className="bg-white rounded-2xl border border-zinc-200 p-4 sm:p-6 space-y-4 sm:space-y-5">
+        <div className="flex items-start gap-3 sm:gap-5 flex-wrap">
           {/* Avatar */}
-          <div className="h-16 w-16 rounded-2xl bg-[#1fad9d]/10 flex items-center justify-center shrink-0">
-            <span className="text-xl font-black text-[#1fad9d]">
+          <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-2xl bg-[#1fad9d]/10 flex items-center justify-center shrink-0">
+            <span className="text-base sm:text-xl font-black text-[#1fad9d]">
               {initials(`${member.firstName} ${member.lastName}`)}
             </span>
           </div>
 
           {/* Info */}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl font-black tracking-tight">
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight">
                 {member.firstName} {member.lastName}
               </h1>
               <StatusBadge status={member.isActive ? 'active' : 'inactive'} />

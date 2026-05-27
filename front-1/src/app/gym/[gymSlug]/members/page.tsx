@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
 import { Plus } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
 import { verifyToken } from '@/lib/auth'
@@ -77,6 +78,7 @@ export default async function MembersPage({ params, searchParams }: Props) {
   if (selectedMemberId) {
     const [member, mbs, pays, att, pls] = await Promise.all([
       apiFetch<Member>(`/members/${selectedMemberId}`, token, {
+        silent: true,
         next: { tags: [`member-${selectedMemberId}`] },
         headers: { 'x-gym-slug': gymSlug },
       }),
@@ -94,6 +96,9 @@ export default async function MembersPage({ params, searchParams }: Props) {
       }),
       apiFetch<Plan[]>(`/plans`, token, { headers: { 'x-gym-slug': gymSlug } }),
     ])
+    if (!member) {
+      redirect(`/gym/${gymSlug}/members?${currentParams.toString()}`)
+    }
     selectedMember = member
     memberships = mbs ?? []
     payments = pays ?? []
