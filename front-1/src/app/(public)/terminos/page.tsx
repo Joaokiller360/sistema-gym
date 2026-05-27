@@ -5,7 +5,7 @@ import { DEFAULT_PLATFORM_SETTINGS, type PlatformSettings } from '../../admin/se
 
 async function getSettings(): Promise<PlatformSettings> {
   const data = await apiFetch<PlatformSettings>('/platform-settings', '', {
-    next: { tags: ['platform-settings'] },
+    next: { tags: ['platform-settings'], revalidate: 300 },
   })
   if (!data) return DEFAULT_PLATFORM_SETTINGS
   return { ...DEFAULT_PLATFORM_SETTINGS, ...data, footerLinks: data.footerLinks ?? [], landingFeatures: data.landingFeatures ?? [] }

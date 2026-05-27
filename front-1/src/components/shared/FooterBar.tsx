@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import { apiFetch } from '@/lib/api'
 
 interface PlatformSettings {
@@ -22,7 +23,7 @@ const DEFAULTS: PlatformSettings = {
 
 export async function FooterBar() {
   const settings = await apiFetch<PlatformSettings>('/platform-settings', '', {
-    next: { tags: ['platform-settings'] },
+    next: { tags: ['platform-settings'], revalidate: 300 },
   }).catch(() => null) ?? DEFAULTS
 
   const hasContent =
@@ -39,7 +40,7 @@ export async function FooterBar() {
         {settings.footerShowPoweredBy && (
           <span className="flex items-center gap-1.5">
             {settings.logoUrl && (
-              <img src={settings.logoUrl} alt={settings.saasName} className="h-4 w-4 rounded object-cover" />
+              <Image src={settings.logoUrl} alt={settings.saasName} width={16} height={16} className="rounded object-cover" />
             )}
             Desarrollado por{' '}
             <span className="font-semibold text-zinc-600 dark:text-zinc-400">

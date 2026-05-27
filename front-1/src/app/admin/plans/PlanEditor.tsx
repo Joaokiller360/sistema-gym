@@ -2,8 +2,8 @@
 
 import { useState, useTransition, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Trash2, Check, X, Pencil, GripVertical, Star } from 'lucide-react'
-import { updateSubscriptionPlanAction, deleteSubscriptionPlanAction, createSubscriptionPlanAction } from './actions'
+import { Plus, Trash2, Check, X, Pencil, GripVertical, Star, Tag } from 'lucide-react'
+import { updateSubscriptionPlanAction, deleteSubscriptionPlanAction, createSubscriptionPlanAction, setSubscriptionPlanDiscountAction, toggleSubscriptionPlanDiscountAction } from './actions'
 import { createBlockHandlers } from '@/lib/input-validation'
 
 const textHandlers = createBlockHandlers('text')
@@ -22,6 +22,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 
@@ -36,6 +37,14 @@ interface SubscriptionPlan {
   features: string[]
   isActive: boolean
   sortOrder: number
+  discountPercent: number
+  discountActive: boolean
+  finalPrice: number
+  discountSaving: number
+  yearlyPrice: number | null
+  yearlyFinalPrice: number | null
+  yearlySaving: number | null
+  yearlyMonthlyEquivalent: number | null
 }
 
 const CURRENCIES = ['USD', 'ARS', 'EUR', 'BRL', 'MXN']
@@ -234,9 +243,14 @@ function PlanFormBody({
 function EditPlanCard({ plan }: { plan: SubscriptionPlan }) {
   const router = useRouter()
   const [editOpen, setEditOpen] = useState(false)
+  const [discountOpen, setDiscountOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [discountActive, setDiscountActive] = useState(plan.discountActive)
+  const [discountPct, setDiscountPct] = useState(String(plan.discountPercent ?? 0))
+  const [yearlyPrice, setYearlyPrice] = useState(plan.yearlyPrice != null ? String(plan.yearlyPrice) : '')
+  const [discountError, setDiscountError] = useState<string | null>(null)
 
   const [fields, setFields] = useState<PlanFormFields>({
     label: plan.label,
@@ -286,6 +300,30 @@ function EditPlanCard({ plan }: { plan: SubscriptionPlan }) {
     })
   }
 
+  function handleToggleDiscount() {
+    setDiscountActive(v => !v)
+    startTransition(async () => {
+      await toggleSubscriptionPlanDiscountAction(plan.id)
+      router.refresh()
+    })
+  }
+
+  function handleSaveDiscount() {
+    setDiscountError(null)
+    const pct = Math.min(100, Math.max(0, Number(discountPct) || 0))
+    const yearly = yearlyPrice !== '' ? Number(yearlyPrice) : undefined
+    startTransition(async () => {
+      const res = await setSubscriptionPlanDiscountAction(plan.id, { discountPercent: pct, ...(yearly !== undefined && { yearlyPrice: yearly }) })
+      if (res.error) { setDiscountError(res.error); return }
+      router.refresh()
+      setDiscountOpen(false)
+    })
+  }
+
+  const hasDiscount = (plan.discountPercent ?? 0) > 0
+  const discountIsOn = discountActive && hasDiscount
+  const fmt = (v: number) => `${plan.currency} ${v.toLocaleString('es-AR')}`
+
   const borderColor = PLAN_COLORS[plan.key] ?? 'border-zinc-200'
 
   return (
@@ -299,18 +337,38 @@ function EditPlanCard({ plan }: { plan: SubscriptionPlan }) {
                 <span className="text-[10px] font-bold bg-zinc-100 text-zinc-500 px-2 py-0.5 rounded-full">Inactivo</span>
               )}
             </div>
-            <p className="text-2xl font-black mt-1">
-              {Number(plan.price) === 0 ? 'Gratis' : `${plan.currency} ${Number(plan.price).toLocaleString('es-AR')}/mes`}
-            </p>
+            <div className="mt-1">
+              {discountIsOn ? (
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="text-2xl font-black">{fmt(plan.finalPrice)}/mes</span>
+                  <span className="text-sm text-zinc-400 line-through">{fmt(plan.price)}</span>
+                  <span className="text-xs font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">
+                    {plan.discountPercent}% OFF
+                  </span>
+                </div>
+              ) : (
+                <p className="text-2xl font-black">
+                  {Number(plan.price) === 0 ? 'Gratis' : `${fmt(plan.price)}/mes`}
+                </p>
+              )}
+              {discountIsOn && plan.yearlyMonthlyEquivalent != null && (
+                <p className="text-xs font-semibold text-[#1fad9d] mt-0.5">
+                  Solo {fmt(plan.yearlyMonthlyEquivalent)}/mes pagando anual
+                </p>
+              )}
+            </div>
             <p className="text-xs text-zinc-400 mt-0.5">
               {plan.maxMembers == null ? 'Miembros ilimitados' : `Hasta ${plan.maxMembers} miembros`}
             </p>
           </div>
           <div className="flex gap-2 shrink-0">
-            <button onClick={() => { resetFields(); setEditOpen(true) }} className="h-8 w-8 flex items-center justify-center rounded-lg border border-zinc-200 text-zinc-400 hover:border-zinc-400 hover:text-black transition-colors">
+            <button onClick={() => setDiscountOpen(true)} aria-label={`Gestionar descuento ${plan.label}`} className={`h-8 w-8 flex items-center justify-center rounded-lg border transition-colors ${discountIsOn ? 'border-emerald-300 text-emerald-600 bg-emerald-50' : 'border-zinc-200 text-zinc-400 hover:border-[#1fad9d]/50 hover:text-[#1fad9d]'}`}>
+              <Tag className="h-3.5 w-3.5" />
+            </button>
+            <button onClick={() => { resetFields(); setEditOpen(true) }} aria-label={`Editar plan ${plan.label}`} className="h-8 w-8 flex items-center justify-center rounded-lg border border-zinc-200 text-zinc-400 hover:border-zinc-400 hover:text-black transition-colors">
               <Pencil className="h-3.5 w-3.5" />
             </button>
-            <button onClick={() => setDeleteOpen(true)} className="h-8 w-8 flex items-center justify-center rounded-lg border border-zinc-200 text-zinc-400 hover:border-[#ff0000]/30 hover:text-[#ff0000] transition-colors">
+            <button onClick={() => setDeleteOpen(true)} aria-label={`Eliminar plan ${plan.label}`} className="h-8 w-8 flex items-center justify-center rounded-lg border border-zinc-200 text-zinc-400 hover:border-[#ff0000]/30 hover:text-[#ff0000] transition-colors">
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -368,6 +426,81 @@ function EditPlanCard({ plan }: { plan: SubscriptionPlan }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={discountOpen} onOpenChange={setDiscountOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Tag className="h-4 w-4 text-[#1fad9d]" />
+              Descuento — {plan.label}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-1">
+            <div>
+              <label className="text-xs font-bold uppercase tracking-widest text-zinc-400 block mb-1">Descuento (%)</label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={discountPct}
+                onChange={e => {
+                  const v = e.target.value.replace(/\D/g, '').slice(0, 3)
+                  const n = Math.min(100, Number(v))
+                  setDiscountPct(v === '' ? '' : String(n))
+                }}
+                className={inputClass}
+                placeholder="0"
+              />
+            </div>
+
+            {Number(discountPct) > 0 && (
+              <div className="flex items-center justify-between rounded-xl border px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">Descuento activo</p>
+                  <p className="text-xs text-zinc-400">
+                    {discountIsOn
+                      ? `Aplicando ${plan.discountPercent}% — ahorro ${fmt(plan.discountSaving)}/mes`
+                      : 'Descuento pausado'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleToggleDiscount}
+                  disabled={isPending}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-50 ${discountActive ? 'bg-[#1fad9d]' : 'bg-zinc-200'}`}
+                >
+                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${discountActive ? 'translate-x-4' : 'translate-x-1'}`} />
+                </button>
+              </div>
+            )}
+            <div>
+              <label className="text-xs font-bold uppercase tracking-widest text-zinc-400 block mb-1">Precio anual (opcional)</label>
+              <input
+                type="number"
+                min={0}
+                value={yearlyPrice}
+                onChange={e => setYearlyPrice(e.target.value)}
+                className={inputClass}
+                placeholder="Dejar vacío para no ofrecer"
+              />
+              {discountIsOn && plan.yearlyMonthlyEquivalent != null && (
+                <p className="text-xs text-zinc-400 mt-1">Equivale a {fmt(plan.yearlyMonthlyEquivalent)}/mes</p>
+              )}
+            </div>
+          </div>
+
+          {discountError && <p className="text-xs text-[#ff0000] font-medium px-1">{discountError}</p>}
+          <DialogFooter>
+            <button onClick={() => { setDiscountOpen(false); setDiscountError(null) }} className="rounded-xl border border-zinc-200 px-4 py-2 text-sm font-semibold text-zinc-600 hover:border-zinc-300 transition-all">
+              Cancelar
+            </button>
+            <button onClick={handleSaveDiscount} disabled={isPending} className="rounded-xl bg-black px-4 py-2 text-sm font-bold text-white hover:bg-zinc-800 disabled:opacity-50 transition-all">
+              {isPending ? 'Guardando…' : 'Guardar'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 
-const PUBLIC_PATHS = ['/login', '/unauthorized']
+const PUBLIC_PATHS = ['/login', '/unauthorized', '/inicio', '/terminos']
+
+const GYM_ROLES = ['GYM_OWNER', 'GYM_ADMIN', 'TRAINER', 'RECEPTIONIST'] as const
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+  if (pathname === '/' || PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next()
   }
 
@@ -31,7 +33,7 @@ export async function proxy(request: NextRequest) {
   if (gymSlugMatch) {
     const urlSlug = gymSlugMatch[1]
     if (session.role === 'SUPER_ADMIN') return NextResponse.next()
-    if (session.role !== 'GYM_OWNER' || session.gymSlug !== urlSlug) {
+    if (!GYM_ROLES.includes(session.role as typeof GYM_ROLES[number]) || session.gymSlug !== urlSlug) {
       return NextResponse.redirect(new URL('/unauthorized', request.url))
     }
   }

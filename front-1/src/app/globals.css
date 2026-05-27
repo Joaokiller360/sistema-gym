@@ -165,6 +165,14 @@
 .dark .text-zinc-900 { color: oklch(0.88 0 0); }
 .dark .text-zinc-950 { color: oklch(0.92 0 0); }
 
+/* Landing hero gradient — end color flips with theme */
+.landing-h1-gradient {
+  background-image: linear-gradient(135deg, var(--pc, #fffb00) 0%, #18181b 70%);
+}
+.dark .landing-h1-gradient {
+  background-image: linear-gradient(135deg, var(--pc, #fffb00) 0%, #ffffff 70%);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

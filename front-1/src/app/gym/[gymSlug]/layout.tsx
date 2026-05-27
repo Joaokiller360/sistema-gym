@@ -20,7 +20,7 @@ export async function generateMetadata({ params }: { params: Promise<{ gymSlug: 
   const token = cookieStore.get('session')?.value ?? ''
   const [gym, platform] = await Promise.all([
     apiFetch<Gym>(`/gyms/${gymSlug}`, token, { next: { tags: [`gym-${gymSlug}`] } }),
-    apiFetch<PlatformSettings>('/platform-settings', token, { next: { tags: ['platform-settings'] } }),
+    apiFetch<PlatformSettings>('/platform-settings', token, { next: { tags: ['platform-settings'], revalidate: 300 } }),
   ])
   const saasName = platform?.saasName ?? 'GymOS'
   const name = gym?.name ?? gymSlug

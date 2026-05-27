@@ -25,7 +25,7 @@ export async function apiFetch<T>(
       return null
     }
 
-    if (!text) return {} as T
+    if (!text) return null
     return JSON.parse(text) as T
   } catch (e) {
     if (!silent && process.env.NODE_ENV !== 'production') {

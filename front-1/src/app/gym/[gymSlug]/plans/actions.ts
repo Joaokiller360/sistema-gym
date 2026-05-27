@@ -103,3 +103,4 @@ export async function deletePlanAction(gymSlug: string, planId: string): Promise
   updateTag(`plans-${gymSlug}`)
   updateTag(`gym-${gymSlug}`)
 }
+

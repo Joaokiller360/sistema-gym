@@ -1,3 +1,4 @@
+import Image from 'next/image'
 
 interface TenantHeaderProps {
   gymName: string
@@ -16,9 +17,9 @@ function initials(name: string) {
 export function TenantHeader({ gymName, gymLogo }: TenantHeaderProps) {
   return (
     <div className="flex items-center gap-3 px-5 py-5 border-b border-white/10">
-      <div className="h-9 w-9 rounded-xl bg-[#fffb00] flex items-center justify-center shrink-0 overflow-hidden">
+      <div className="h-9 w-9 rounded-xl bg-[#fffb00] flex items-center justify-center shrink-0 overflow-hidden relative">
         {gymLogo ? (
-          <img src={gymLogo} alt={gymName} className="h-full w-full object-cover" />
+          <Image src={gymLogo} alt={gymName} fill className="object-cover" sizes="36px" />
         ) : (
           <span className="text-black font-black text-sm">{initials(gymName)}</span>
         )}

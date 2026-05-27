@@ -62,3 +62,27 @@ export async function deleteSubscriptionPlanAction(id: string): Promise<{ error?
   updateTag('admin-subscription-plans')
   return {}
 }
+
+export async function setSubscriptionPlanDiscountAction(
+  id: string,
+  data: { discountPercent: number; yearlyPrice?: number },
+): Promise<{ error?: string }> {
+  const token = await getToken()
+  const body: Record<string, unknown> = { discountPercent: data.discountPercent }
+  if (data.yearlyPrice !== undefined) body.yearlyPrice = Math.round(data.yearlyPrice * 100)
+  const result = await apiFetch(`/admin/subscription-plans/${id}/discount`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+  if (!result) return { error: 'Error al actualizar el descuento' }
+  updateTag('admin-subscription-plans')
+  return {}
+}
+
+export async function toggleSubscriptionPlanDiscountAction(id: string): Promise<{ error?: string }> {
+  const token = await getToken()
+  const result = await apiFetch(`/admin/subscription-plans/${id}/discount/toggle`, token, { method: 'PATCH' })
+  if (!result) return { error: 'Error al alternar el descuento' }
+  updateTag('admin-subscription-plans')
+  return {}
+}

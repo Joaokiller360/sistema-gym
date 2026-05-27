@@ -13,6 +13,14 @@ interface SubscriptionPlan {
   features: string[]
   isActive: boolean
   sortOrder: number
+  discountPercent: number
+  discountActive: boolean
+  finalPrice: number
+  discountSaving: number
+  yearlyPrice: number | null
+  yearlyFinalPrice: number | null
+  yearlySaving: number | null
+  yearlyMonthlyEquivalent: number | null
 }
 
 export default async function AdminPlansPage() {

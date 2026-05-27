@@ -156,7 +156,7 @@ export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, defa
     <form onSubmit={handleSave} className="rounded-2xl border-2 border-zinc-200 bg-white p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h3 className="font-bold text-sm">Editar gimnasio</h3>
-        <button type="button" onClick={() => setOpen(false)} className="text-zinc-400 hover:text-zinc-700">
+        <button type="button" onClick={() => setOpen(false)} aria-label="Cerrar formulario" className="text-zinc-400 hover:text-zinc-700">
           <X className="h-4 w-4" />
         </button>
       </div>

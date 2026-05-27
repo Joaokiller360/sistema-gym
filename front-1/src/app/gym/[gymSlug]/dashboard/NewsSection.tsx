@@ -30,6 +30,8 @@ export function NewsSection({ canManage }: Props) {
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [saving, setSaving] = useState(false)
+  const [confirmId, setConfirmId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const load = useCallback(async () => {
     const res = await fetch('/api/v1/content/news')
@@ -63,10 +65,21 @@ export function NewsSection({ canManage }: Props) {
   }
 
   async function handleDelete(id: string) {
-    await fetch(`/api/v1/content/news/${id}`, { method: 'DELETE' })
+    const snapshot = items
+    setDeleting(true)
+    const res = await fetch(`/api/v1/content/news/${id}`, { method: 'DELETE' })
+    setDeleting(false)
+    setConfirmId(null)
+    if (!res.ok) {
+      toast.error('Error al eliminar la novedad')
+      setItems(snapshot)
+      return
+    }
     setItems(prev => prev.filter(i => i.id !== id))
     toast.success('Novedad eliminada')
   }
+
+  const itemToDelete = confirmId ? items.find(i => i.id === confirmId) : null
 
   return (
     <>
@@ -109,7 +122,8 @@ export function NewsSection({ canManage }: Props) {
                   </div>
                   {canManage && (
                     <button
-                      onClick={() => handleDelete(item.id)}
+                      onClick={() => setConfirmId(item.id)}
+                      aria-label={`Eliminar novedad: ${item.title}`}
                       className="text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0 mt-1"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -122,6 +136,37 @@ export function NewsSection({ canManage }: Props) {
         )}
       </div>
 
+      {/* Confirm delete dialog */}
+      <Dialog open={!!confirmId} onOpenChange={v => { if (!v) setConfirmId(null) }}>
+        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Eliminar novedad</DialogTitle>
+            <DialogDescription>
+              {itemToDelete
+                ? `¿Eliminás "${itemToDelete.title}"? Esta acción no se puede deshacer.`
+                : '¿Confirmás la eliminación?'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={() => confirmId && handleDelete(confirmId)}
+              disabled={deleting}
+              className="flex-1 rounded-lg bg-red-500 text-white text-sm font-medium py-2 hover:bg-red-600 transition-colors disabled:opacity-50"
+            >
+              {deleting ? 'Eliminando...' : 'Eliminar'}
+            </button>
+            <button
+              onClick={() => setConfirmId(null)}
+              disabled={deleting}
+              className="flex-1 rounded-lg border text-sm font-medium py-2 hover:bg-muted transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add news dialog */}
       <Dialog open={open} onOpenChange={v => { setOpen(v); if (!v) resetForm() }}>
         <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-md">
           <DialogHeader>

@@ -18,7 +18,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (session.role !== 'SUPER_ADMIN') notFound()
 
   const platform = await apiFetch<PlatformSettings>('/platform-settings', token, {
-    next: { tags: ['platform-settings'] },
+    next: { tags: ['platform-settings'], revalidate: 300 },
   })
   const saasName = platform?.saasName ?? 'GymOS'
 

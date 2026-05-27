@@ -6,17 +6,23 @@ import { sanitizeShortText } from '@/lib/sanitize'
 const BACKEND = process.env.API_URL ?? 'http://localhost:3001/api/v1'
 const YOUTUBE_URL_RE = /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[A-Za-z0-9_-]{11}/
 
-async function getVerifiedSuperAdmin() {
+async function getVerifiedUser() {
   const store = await cookies()
   const token = store.get('session')?.value
   if (!token) return null
   const session = await verifyToken(token)
-  if (!session || session.role !== 'SUPER_ADMIN') return null
+  if (!session) return null
   return { token, session }
 }
 
+async function getVerifiedSuperAdmin() {
+  const auth = await getVerifiedUser()
+  if (!auth || auth.session.role !== 'SUPER_ADMIN') return null
+  return auth
+}
+
 export async function GET() {
-  const auth = await getVerifiedSuperAdmin()
+  const auth = await getVerifiedUser()
   if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const res = await fetch(`${BACKEND}/content/tutorials`, {

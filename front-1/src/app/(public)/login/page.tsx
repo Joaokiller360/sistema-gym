@@ -20,7 +20,7 @@ export default async function LoginPage() {
   }
 
   const platform = await apiFetch<PlatformSettings>('/platform-settings', '', {
-    next: { tags: ['platform-settings'] },
+    next: { tags: ['platform-settings'], revalidate: 300 },
   }).catch(() => null)
   const saasName = platform?.saasName ?? 'GymOS'
 

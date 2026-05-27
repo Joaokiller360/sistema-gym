@@ -37,6 +37,8 @@ export function TutorialsSection({ canManage }: Props) {
   const [url, setUrl] = useState('')
   const [saving, setSaving] = useState(false)
   const [activeItem, setActiveItem] = useState<TutorialItem | null>(null)
+  const [confirmId, setConfirmId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const load = useCallback(async () => {
     const res = await fetch('/api/v1/content/tutorials')
@@ -70,11 +72,22 @@ export function TutorialsSection({ canManage }: Props) {
   }
 
   async function handleDelete(id: string) {
-    await fetch(`/api/v1/content/tutorials/${id}`, { method: 'DELETE' })
+    const snapshot = items
+    setDeleting(true)
+    const res = await fetch(`/api/v1/content/tutorials/${id}`, { method: 'DELETE' })
+    setDeleting(false)
+    setConfirmId(null)
+    if (!res.ok) {
+      toast.error('Error al eliminar el tutorial')
+      setItems(snapshot)
+      return
+    }
     setItems(prev => prev.filter(i => i.id !== id))
     if (activeItem?.id === id) setActiveItem(null)
     toast.success('Tutorial eliminado')
   }
+
+  const itemToDelete = confirmId ? items.find(i => i.id === confirmId) : null
 
   return (
     <>
@@ -108,13 +121,15 @@ export function TutorialsSection({ canManage }: Props) {
                 <div className="flex items-center justify-between px-4 py-3 bg-muted/20">
                   <button
                     onClick={() => setActiveItem(t)}
+                    aria-label={`Ver tutorial: ${t.title}`}
                     className="text-sm font-medium text-left hover:text-[#1fad9d] transition-colors flex-1"
                   >
                     {t.title}
                   </button>
                   {canManage && (
                     <button
-                      onClick={() => handleDelete(t.id)}
+                      onClick={() => setConfirmId(t.id)}
+                      aria-label={`Eliminar tutorial: ${t.title}`}
                       className="ml-3 text-muted-foreground hover:text-red-500 transition-colors"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -126,6 +141,36 @@ export function TutorialsSection({ canManage }: Props) {
           </div>
         )}
       </div>
+
+      {/* Confirm delete dialog */}
+      <Dialog open={!!confirmId} onOpenChange={v => { if (!v) setConfirmId(null) }}>
+        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Eliminar tutorial</DialogTitle>
+            <DialogDescription>
+              {itemToDelete
+                ? `¿Eliminás "${itemToDelete.title}"? Esta acción no se puede deshacer.`
+                : '¿Confirmás la eliminación?'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={() => confirmId && handleDelete(confirmId)}
+              disabled={deleting}
+              className="flex-1 rounded-lg bg-red-500 text-white text-sm font-medium py-2 hover:bg-red-600 transition-colors disabled:opacity-50"
+            >
+              {deleting ? 'Eliminando...' : 'Eliminar'}
+            </button>
+            <button
+              onClick={() => setConfirmId(null)}
+              disabled={deleting}
+              className="flex-1 rounded-lg border text-sm font-medium py-2 hover:bg-muted transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Video player modal */}
       <Dialog open={!!activeItem} onOpenChange={v => { if (!v) setActiveItem(null) }}>

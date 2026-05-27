@@ -13,7 +13,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>('light')
 
   useEffect(() => {
-    const stored = (sessionStorage.getItem('theme') as Theme | null) === 'dark' ? 'dark' : 'light'
+    const stored = (localStorage.getItem('theme') as Theme | null) === 'dark' ? 'dark' : 'light'
     setTheme(stored)
     document.documentElement.classList.toggle('dark', stored === 'dark')
   }, [])
@@ -22,7 +22,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const next: Theme = theme === 'light' ? 'dark' : 'light'
     setTheme(next)
     document.documentElement.classList.toggle('dark', next === 'dark')
-    sessionStorage.setItem('theme', next)
+    localStorage.setItem('theme', next)
   }
 
   return (

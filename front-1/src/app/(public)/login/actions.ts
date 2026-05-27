@@ -31,23 +31,25 @@ export async function loginAction(data: LoginInput): Promise<{ error: string }> 
     })
 
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
-      return { error: body.message ?? 'Credenciales incorrectas' }
+      const status = res.status
+      if (status === 401 || status === 403) return { error: 'Credenciales incorrectas' }
+      if (status >= 500) return { error: 'Error del servidor. Intentá más tarde.' }
+      return { error: 'Credenciales incorrectas' }
     }
 
     const body = await res.json()
     token = body.access_token ?? body.token
-    if (!token) return { error: 'Respuesta inválida del servidor' }
+    if (!token) return { error: 'Error del servidor. Intentá más tarde.' }
 
     // Cache gym slug from response body as fallback if JWT doesn't include it
     gymSlugFromBody = body.gym?.slug ?? body.gymSlug ?? null
   } catch {
-    return { error: 'Error de conexión con el servidor' }
+    return { error: 'Error de conexión. Verificá tu internet e intentá de nuevo.' }
   }
 
   const session = await verifyToken(token)
   if (!session) {
-    return { error: 'Token inválido' }
+    return { error: 'Sesión inválida. Intentá nuevamente.' }
   }
 
   if (session.role !== 'SUPER_ADMIN') {
@@ -70,7 +72,7 @@ export async function loginAction(data: LoginInput): Promise<{ error: string }> 
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
-    maxAge: session.exp - Math.floor(Date.now() / 1000),
+    maxAge: Math.max(60, session.exp - Math.floor(Date.now() / 1000)),
   })
 
   if (session.role === 'SUPER_ADMIN') {
