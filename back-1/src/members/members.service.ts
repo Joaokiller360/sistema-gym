@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -35,6 +35,7 @@ export class MembersService {
   }
 
   async create(gymId: string, data: any) {
+    await this.assertNameUnique(gymId, data.firstName, data.lastName);
     const gym = await this.prisma.gym.findUnique({ where: { id: gymId }, select: { subscriptionPlan: true } });
     if (gym?.subscriptionPlan) {
       const planDef = await this.prisma.subscriptionPlan.findUnique({
@@ -68,6 +69,12 @@ export class MembersService {
 
   async update(id: string, gymId: string, data: any) {
     await this.assertExists(id, gymId);
+    if (data.firstName !== undefined || data.lastName !== undefined) {
+      const current = await this.prisma.member.findUnique({ where: { id }, select: { firstName: true, lastName: true } });
+      const firstName = data.firstName ?? current!.firstName;
+      const lastName = data.lastName ?? current!.lastName;
+      await this.assertNameUnique(gymId, firstName, lastName, id);
+    }
     return this.prisma.member.update({ where: { id }, data });
   }
 
@@ -80,5 +87,19 @@ export class MembersService {
     const member = await this.prisma.member.findFirst({ where: { id, gymId } });
     if (!member) throw new NotFoundException('Miembro no encontrado');
     return member;
+  }
+
+  private async assertNameUnique(gymId: string, firstName: string, lastName: string, excludeId?: string) {
+    const existing = await this.prisma.member.findFirst({
+      where: {
+        gymId,
+        firstName: { equals: firstName, mode: 'insensitive' },
+        lastName: { equals: lastName, mode: 'insensitive' },
+        ...(excludeId ? { NOT: { id: excludeId } } : {}),
+      },
+    });
+    if (existing) {
+      throw new ConflictException(`Ya existe un miembro con el nombre "${firstName} ${lastName}" en este gimnasio.`);
+    }
   }
 }
