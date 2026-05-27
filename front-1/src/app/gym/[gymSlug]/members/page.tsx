@@ -25,8 +25,10 @@ interface Props {
 
 export default async function MembersPage({ params, searchParams }: Props) {
   const { gymSlug } = await params
-  const { q, status, page: pageStr, member: selectedMemberId, new: newParam } = await searchParams
+  const { q, status, page: pageStr, member: rawMemberId, new: newParam } = await searchParams
   const page = Math.max(1, parseInt(pageStr ?? '1', 10))
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  const selectedMemberId = rawMemberId && UUID_RE.test(rawMemberId) ? rawMemberId : undefined
 
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value ?? ''

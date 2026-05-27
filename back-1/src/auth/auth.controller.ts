@@ -14,6 +14,21 @@ export class AuthController {
     return this.authService.login(body.email, body.password);
   }
 
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
+  refresh(@Body() body: { refresh_token: string }) {
+    if (!body.refresh_token) throw new Error('refresh_token requerido');
+    return this.authService.refresh(body.refresh_token);
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  logout(@Body() body: { refresh_token: string }) {
+    if (!body.refresh_token) return { message: 'Sesión cerrada' };
+    return this.authService.logout(body.refresh_token);
+  }
+
   @Get('me')
   @UseGuards(JwtAuthGuard)
   getMe(@Req() req: any) {
@@ -28,6 +43,7 @@ export class AuthController {
 
   @Patch('change-password')
   @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   changePassword(@Req() req: any, @Body() body: { currentPassword: string; newPassword: string }) {
     return this.authService.changePassword(req.user.userId, body.currentPassword, body.newPassword);
   }

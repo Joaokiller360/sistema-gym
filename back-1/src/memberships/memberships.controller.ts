@@ -5,6 +5,7 @@ import { TenantGuard } from '../common/guards/tenant.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
+import { CreateMembershipDto } from './dto/create-membership.dto';
 
 @Controller('memberships')
 @UseGuards(JwtAuthGuard, TenantGuard)
@@ -19,7 +20,7 @@ export class MembershipsController {
   @Post()
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN, Role.RECEPTIONIST)
-  create(@Req() req: any, @Body() body: any) {
+  create(@Req() req: any, @Body() body: CreateMembershipDto) {
     return this.membershipsService.create(req.gymId, body);
   }
 

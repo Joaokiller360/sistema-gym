@@ -5,6 +5,7 @@ import { TenantGuard } from '../common/guards/tenant.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
+import { CreateCommunicationDto } from './dto/communication.dto';
 
 @Controller('communications')
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
@@ -18,7 +19,7 @@ export class CommunicationsController {
   }
 
   @Post('send')
-  send(@Req() req: any, @Body() body: any) {
+  send(@Req() req: any, @Body() body: CreateCommunicationDto) {
     return this.communicationsService.send(req.gymId, body);
   }
 }

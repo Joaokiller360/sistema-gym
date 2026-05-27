@@ -12,10 +12,22 @@ async function getToken() {
 
 // ── Products ───────────────────────────────────────────────
 
+function safePublicUrl() {
+  return z.string().url().refine(
+    (u) => {
+      try {
+        const parsed = new URL(u)
+        return parsed.protocol === 'https:' && !['localhost', '127.0.0.1', '0.0.0.0'].includes(parsed.hostname) && !parsed.hostname.startsWith('169.254.') && !parsed.hostname.startsWith('10.') && !parsed.hostname.startsWith('192.168.')
+      } catch { return false }
+    },
+    'URL debe ser HTTPS pública'
+  )
+}
+
 const productSchema = z.object({
   name: z.string().min(1).max(80),
   description: z.string().max(200).optional().or(z.literal('')),
-  imageUrl: z.string().url().optional().or(z.literal('')),
+  imageUrl: safePublicUrl().optional().or(z.literal('')),
   price: z.number().min(0.01),
   cost: z.number().min(0).optional(),
   stock: z.number().int().min(0),
@@ -185,7 +197,7 @@ export async function deleteSaleAction(gymSlug: string, id: string): Promise<{ e
 
 const categorySchema = z.object({
   name: z.string().min(1).max(60),
-  imageUrl: z.string().url().optional().or(z.literal('')),
+  imageUrl: safePublicUrl().optional().or(z.literal('')),
 })
 
 export type CategoryInput = z.infer<typeof categorySchema>

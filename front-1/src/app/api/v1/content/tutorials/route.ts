@@ -1,18 +1,26 @@
 import { cookies } from 'next/headers'
+import { NextResponse } from 'next/server'
+import { verifyToken } from '@/lib/auth'
 import { sanitizeShortText } from '@/lib/sanitize'
 
 const BACKEND = process.env.API_URL ?? 'http://localhost:3001/api/v1'
 const YOUTUBE_URL_RE = /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[A-Za-z0-9_-]{11}/
 
-async function getToken() {
+async function getVerifiedSuperAdmin() {
   const store = await cookies()
-  return store.get('session')?.value ?? ''
+  const token = store.get('session')?.value
+  if (!token) return null
+  const session = await verifyToken(token)
+  if (!session || session.role !== 'SUPER_ADMIN') return null
+  return { token, session }
 }
 
 export async function GET() {
-  const token = await getToken()
+  const auth = await getVerifiedSuperAdmin()
+  if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const res = await fetch(`${BACKEND}/content/tutorials`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${auth.token}` },
     cache: 'no-store',
   })
   const data = await res.text()
@@ -20,7 +28,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const token = await getToken()
+  const auth = await getVerifiedSuperAdmin()
+  if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const raw = await request.json()
   const title = sanitizeShortText(raw?.title)
   const videoUrl = typeof raw?.videoUrl === 'string' ? raw.videoUrl.trim() : ''
@@ -31,7 +41,7 @@ export async function POST(request: Request) {
 
   const res = await fetch(`${BACKEND}/content/tutorials`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${auth.token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ title, videoUrl }),
   })
   const data = await res.text()

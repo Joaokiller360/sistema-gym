@@ -1,9 +1,14 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { unlink } from 'fs/promises';
 import { join } from 'path';
+import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { isGymOpen, GymSchedule } from '../common/utils/timezone.util';
+
+function generateSecurePassword(length = 14): string {
+  return randomBytes(length).toString('base64url').slice(0, length);
+}
 
 @Injectable()
 export class GymsService {
@@ -45,10 +50,19 @@ export class GymsService {
     return { timezone: tz, localTime, isOpen };
   }
 
-  async update(id: string, data: any) {
+  async update(id: string, data: any, role?: string) {
     const gym = await this.prisma.gym.findUnique({ where: { id } });
     if (!gym) throw new NotFoundException('Gym not found');
-    return this.prisma.gym.update({ where: { id }, data });
+
+    const OWNER_ALLOWED = ['name', 'address', 'country', 'timezone', 'currency', 'schedule', 'phone', 'email', 'website'];
+    const SUPER_ALLOWED = [...OWNER_ALLOWED, 'slug', 'isActive', 'subscriptionPlan', 'subscriptionStatus', 'subscriptionExpiresAt', 'subscriptionGraceEndsAt', 'ownerId'];
+
+    const allowed = role === 'SUPER_ADMIN' ? SUPER_ALLOWED : OWNER_ALLOWED;
+    const safeData = Object.fromEntries(
+      Object.entries(data).filter(([k]) => allowed.includes(k))
+    );
+
+    return this.prisma.gym.update({ where: { id }, data: safeData });
   }
 
   async remove(id: string) {
@@ -82,7 +96,7 @@ export class GymsService {
     const existing = await this.prisma.user.findUnique({ where: { email } });
     if (existing) throw new ConflictException('Ya existe un usuario con ese email');
 
-    const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-4).toUpperCase();
+    const tempPassword = generateSecurePassword();
     const hashed = await bcrypt.hash(tempPassword, 10);
 
     const user = await this.prisma.user.create({

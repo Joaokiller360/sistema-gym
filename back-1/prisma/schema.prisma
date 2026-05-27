@@ -652,6 +652,17 @@ model PlatformSettings {
   @@map("platform_settings")
 }
 
+model RefreshToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
 model NewsPost {
   id          String   @id @default(uuid())
   title       String

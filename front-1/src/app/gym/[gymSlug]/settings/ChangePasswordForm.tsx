@@ -22,7 +22,7 @@ export function ChangePasswordForm() {
     setError(null)
     setSuccess(false)
     if (!current.trim()) { setError('La contraseña actual es obligatoria'); return }
-    if (next.length < 6) { setError('La nueva contraseña debe tener al menos 6 caracteres'); return }
+    if (next.length < 12) { setError('La nueva contraseña debe tener al menos 12 caracteres'); return }
     if (next !== confirm) { setError('Las contraseñas no coinciden'); return }
     setLoading(true)
     const res = await changePasswordAction(current, next)
@@ -67,7 +67,7 @@ export function ChangePasswordForm() {
             onChange={e => setNext(e.target.value)}
             required
             disabled={loading}
-            placeholder="Mínimo 6 caracteres"
+            placeholder="Mínimo 12 caracteres"
             className={inputClass + ' pr-11'}
             {...createHandlers('password')}
           />

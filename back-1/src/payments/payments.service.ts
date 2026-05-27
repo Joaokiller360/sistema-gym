@@ -42,10 +42,8 @@ export class PaymentsService {
     return payment;
   }
 
-  async remove(id: string, gymId: string | undefined) {
-    const where: any = { id };
-    if (gymId) where.gymId = gymId;
-    const payment = await this.prisma.payment.findFirst({ where });
+  async remove(id: string, gymId: string) {
+    const payment = await this.prisma.payment.findFirst({ where: { id, gymId } });
     if (!payment) throw new NotFoundException('Pago no encontrado');
 
     await this.prisma.payment.delete({ where: { id } });

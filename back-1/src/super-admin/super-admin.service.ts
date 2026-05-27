@@ -1,6 +1,20 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
+function generateSecurePassword(length = 14): string {
+  return randomBytes(length).toString('base64url').slice(0, length);
+}
 import { Resend } from 'resend';
 import { PrismaService } from '../prisma/prisma.service';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
@@ -53,7 +67,7 @@ export class SuperAdminService {
       return this.prisma.gym.create({ data: enrichedGymData });
     }
 
-    const plainPassword = owner.password || (Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-4).toUpperCase());
+    const plainPassword = owner.password || generateSecurePassword();
     const hashedPassword = await bcrypt.hash(plainPassword, 10);
     const existing = await this.prisma.user.findUnique({ where: { email: owner.email } });
 
@@ -357,13 +371,16 @@ export class SuperAdminService {
 
   private async sendWelcomeEmail(email: string, ownerName: string, gymName: string, password: string, logoUrl: string | null) {
     const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
-    const firstName = ownerName.split(' ')[0];
+    const safeFirstName = escapeHtml(ownerName.split(' ')[0]);
+    const safeGymName = escapeHtml(gymName);
+    const safeEmail = escapeHtml(email);
+    const safePassword = escapeHtml(password);
     const backendUrl = process.env.BACKEND_URL ?? 'http://localhost:3001';
     const logoSrc = logoUrl
       ? (logoUrl.startsWith('http') ? logoUrl : `${backendUrl}${logoUrl}`)
       : null;
     const logoHtml = logoSrc
-      ? `<img src="${logoSrc}" alt="${gymName}" style="width:56px;height:56px;border-radius:12px;object-fit:cover;" />`
+      ? `<img src="${escapeHtml(logoSrc)}" alt="${safeGymName}" style="width:56px;height:56px;border-radius:12px;object-fit:cover;" />`
       : `<div style="width:56px;height:56px;background:rgba(255,255,255,0.15);border-radius:14px;display:inline-flex;align-items:center;justify-content:center;"><span style="font-size:28px;">🏋️</span></div>`;
 
     await this.resend.emails.send({
@@ -376,7 +393,7 @@ export class SuperAdminService {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bienvenido a ${gymName}</title>
+  <title>Bienvenido a ${safeGymName}</title>
 </head>
 <body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:40px 0;">
@@ -388,7 +405,7 @@ export class SuperAdminService {
           <tr>
             <td align="center" style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);border-radius:12px 12px 0 0;padding:40px 32px 32px;">
               <div style="margin-bottom:16px;">${logoHtml}</div>
-              <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:700;letter-spacing:-0.5px;">${gymName}</h1>
+              <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:700;letter-spacing:-0.5px;">${safeGymName}</h1>
               <p style="margin:8px 0 0;color:rgba(255,255,255,0.6);font-size:14px;">Panel de Administración</p>
             </td>
           </tr>
@@ -396,7 +413,7 @@ export class SuperAdminService {
           <!-- Body -->
           <tr>
             <td style="background:#ffffff;padding:40px 32px;">
-              <h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:600;">¡Hola, ${firstName}! 👋</h2>
+              <h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:600;">¡Hola, ${safeFirstName}! 👋</h2>
               <p style="margin:0 0 24px;color:#6b7280;font-size:15px;line-height:1.6;">
                 Tu gimnasio ha sido creado exitosamente. Aquí están tus credenciales para acceder al panel de administración.
               </p>
@@ -406,10 +423,10 @@ export class SuperAdminService {
                 <tr>
                   <td style="padding:20px 24px;">
                     <p style="margin:0 0 4px;color:#9ca3af;font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;">Correo electrónico</p>
-                    <p style="margin:0 0 18px;color:#111827;font-size:15px;font-weight:500;">${email}</p>
+                    <p style="margin:0 0 18px;color:#111827;font-size:15px;font-weight:500;">${safeEmail}</p>
                     <hr style="border:none;border-top:1px solid #e5e7eb;margin:0 0 18px;" />
                     <p style="margin:0 0 4px;color:#9ca3af;font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;">Contraseña temporal</p>
-                    <p style="margin:0;color:#111827;font-size:15px;font-weight:500;font-family:'Courier New',monospace;background:#f3f4f6;display:inline-block;padding:6px 12px;border-radius:6px;letter-spacing:1px;">${password}</p>
+                    <p style="margin:0;color:#111827;font-size:15px;font-weight:500;font-family:'Courier New',monospace;background:#f3f4f6;display:inline-block;padding:6px 12px;border-radius:6px;letter-spacing:1px;">${safePassword}</p>
                   </td>
                 </tr>
               </table>
@@ -418,7 +435,7 @@ export class SuperAdminService {
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center">
-                    <a href="${frontendUrl}/login"
+                    <a href="${escapeHtml(frontendUrl)}/login"
                        style="display:inline-block;background:linear-gradient(135deg,#0f3460,#1a1a2e);color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:14px 36px;border-radius:8px;letter-spacing:0.3px;">
                       Iniciar sesión →
                     </a>
@@ -441,7 +458,7 @@ export class SuperAdminService {
           <tr>
             <td style="background:#f9fafb;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
               <p style="margin:0;color:#9ca3af;font-size:12px;">
-                Este correo fue enviado automáticamente por el sistema de gestión de ${gymName}.<br/>
+                Este correo fue enviado automáticamente por el sistema de gestión de ${safeGymName}.<br/>
                 Si no esperabas este correo, puedes ignorarlo.
               </p>
             </td>
@@ -484,7 +501,7 @@ export class SuperAdminService {
     if (!gym) throw new NotFoundException('Gym not found');
     if (!gym.owner) throw new NotFoundException('Este gimnasio no tiene dueño asignado');
 
-    const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-4).toUpperCase();
+    const tempPassword = generateSecurePassword();
     const hashed = await bcrypt.hash(tempPassword, 10);
     await this.prisma.user.update({ where: { id: gym.owner.id }, data: { password: hashed } });
 

@@ -72,14 +72,21 @@ export async function updateGymSettingsAction(
   return {}
 }
 
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(200),
+  newPassword: z.string().min(12).max(200),
+})
+
 export async function changePasswordAction(
   currentPassword: string,
   newPassword: string,
 ): Promise<{ error?: string }> {
+  const parsed = changePasswordSchema.safeParse({ currentPassword, newPassword })
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
   const token = await getToken()
   const result = await apiFetchWithError('/auth/change-password', token, {
     method: 'PATCH',
-    body: JSON.stringify({ currentPassword, newPassword }),
+    body: JSON.stringify({ currentPassword: parsed.data.currentPassword, newPassword: parsed.data.newPassword }),
   })
   if ('error' in result) return { error: result.error }
   return {}
@@ -99,14 +106,21 @@ export async function getGymAdminsAction(): Promise<GymAdmin[]> {
   return result ?? []
 }
 
+const gymAdminSchema = z.object({
+  name: z.string().min(1).max(100),
+  email: z.string().email(),
+})
+
 export async function createGymAdminAction(
   name: string,
   email: string,
 ): Promise<{ error?: string; tempPassword?: string }> {
+  const parsed = gymAdminSchema.safeParse({ name, email })
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
   const token = await getToken()
   const result = await apiFetchWithError<{ id: string; tempPassword: string }>('/gyms/staff', token, {
     method: 'POST',
-    body: JSON.stringify({ name, email }),
+    body: JSON.stringify({ name: parsed.data.name, email: parsed.data.email }),
   })
   if ('error' in result) return { error: result.error }
 

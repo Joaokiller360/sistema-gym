@@ -4,6 +4,15 @@ import { Resend } from 'resend';
 import { CreateNewsDto } from './dto/create-news.dto';
 import { CreateTutorialDto } from './dto/create-tutorial.dto';
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
 @Injectable()
 export class ContentService {
   private readonly resend = new Resend(process.env.RESEND_API_KEY);
@@ -60,12 +69,16 @@ export class ContentService {
     const isNews = type === 'news';
     const icon = isNews ? '📰' : '🎬';
     const badgeLabel = isNews ? 'Nueva Novedad' : 'Nuevo Tutorial';
-    const accentColor = isNews ? '#0f3460' : '#4f46e5';
     const accentLight = isNews ? '#e8f0fe' : '#ede9fe';
     const accentText = isNews ? '#1e40af' : '#4338ca';
 
+    const safeTitle = escapeHtml(title);
+    const safeBody = escapeHtml(body);
+    const safeOwner = escapeHtml(ownerFirstName);
+    const safeFrontendUrl = escapeHtml(frontendUrl);
+
     const imageBlock = imageUrl
-      ? `<img src="${imageUrl}" alt="${title}"
+      ? `<img src="${escapeHtml(imageUrl)}" alt="${safeTitle}"
            style="width:100%;max-height:280px;object-fit:cover;border-radius:10px;display:block;margin-bottom:24px;" />`
       : '';
 
@@ -75,7 +88,7 @@ export class ContentService {
              <td style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:20px 24px;">
                <p style="margin:0 0 4px;color:#9ca3af;font-size:11px;font-weight:600;letter-spacing:0.8px;text-transform:uppercase;">Video del tutorial</p>
                <p style="margin:0 0 14px;color:#374151;font-size:14px;line-height:1.5;">Hacé clic para ver el tutorial completo en video.</p>
-               <a href="${videoUrl}"
+               <a href="${escapeHtml(videoUrl)}"
                   style="display:inline-block;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;text-decoration:none;font-size:14px;font-weight:600;padding:12px 28px;border-radius:8px;letter-spacing:0.3px;">
                  ▶&nbsp;&nbsp;Ver video
                </a>
@@ -89,7 +102,7 @@ export class ContentService {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${title}</title>
+  <title>${safeTitle}</title>
 </head>
 <body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:40px 0;">
@@ -106,14 +119,14 @@ export class ContentService {
               <div style="display:inline-block;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);border-radius:20px;padding:4px 14px;margin-bottom:12px;">
                 <span style="color:rgba(255,255,255,0.85);font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;">${badgeLabel}</span>
               </div>
-              <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.3px;line-height:1.3;">${title}</h1>
+              <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.3px;line-height:1.3;">${safeTitle}</h1>
             </td>
           </tr>
 
           <!-- Body -->
           <tr>
             <td style="background:#ffffff;padding:36px 32px 32px;">
-              <h2 style="margin:0 0 6px;color:#111827;font-size:18px;font-weight:600;text-align:center;">¡Hola, ${ownerFirstName}! 👋</h2>
+              <h2 style="margin:0 0 6px;color:#111827;font-size:18px;font-weight:600;text-align:center;">¡Hola, ${safeOwner}! 👋</h2>
               <p style="margin:0 0 24px;color:#6b7280;font-size:14px;line-height:1.5;">
                 Tenemos ${isNews ? 'una nueva novedad' : 'un nuevo tutorial'} disponible en el sistema.
               </p>
@@ -126,7 +139,7 @@ export class ContentService {
               <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;text-align:center;">
                 <tr>
                   <td align="center">
-                    <a href="${frontendUrl}"
+                    <a href="${safeFrontendUrl}"
                       style="display:inline-block;background:linear-gradient(135deg,#0f3460,#1a1a2e);color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:14px 32px;border-radius:8px;letter-spacing:0.3px;">
                         Ir al panel →
                     </a>

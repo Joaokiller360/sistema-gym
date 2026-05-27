@@ -40,7 +40,8 @@ export default async function GymLayout({ children, params }: Props) {
   const isSuperAdmin = session.role === 'SUPER_ADMIN'
   const gymRoles = ['GYM_OWNER', 'GYM_ADMIN', 'TRAINER', 'RECEPTIONIST']
   if (!isSuperAdmin && !gymRoles.includes(session.role)) notFound()
-  if (session.role === 'GYM_OWNER' && session.gymSlug !== gymSlug) notFound()
+  // All non-superadmin roles are restricted to their assigned gym
+  if (!isSuperAdmin && session.gymSlug !== gymSlug) notFound()
 
   const gym = await apiFetch<Gym>(`/gyms/${gymSlug}`, token, {
     next: { tags: [`gym-${gymSlug}`] },

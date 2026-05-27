@@ -5,6 +5,7 @@ import { TenantGuard } from '../common/guards/tenant.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
+import { CreateTemplateDto, UpdateTemplateDto, CreateCampaignDto, ScheduleCampaignDto } from './dto/marketing.dto';
 
 @Controller('marketing')
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
@@ -18,12 +19,12 @@ export class MarketingController {
   }
 
   @Post('templates')
-  createTemplate(@Req() req: any, @Body() body: any) {
+  createTemplate(@Req() req: any, @Body() body: CreateTemplateDto) {
     return this.marketingService.createTemplate(req.gymId, body);
   }
 
   @Patch('templates/:id')
-  updateTemplate(@Param('id') id: string, @Req() req: any, @Body() body: any) {
+  updateTemplate(@Param('id') id: string, @Req() req: any, @Body() body: UpdateTemplateDto) {
     return this.marketingService.updateTemplate(id, req.gymId, body);
   }
 
@@ -38,12 +39,12 @@ export class MarketingController {
   }
 
   @Post('campaigns')
-  createCampaign(@Req() req: any, @Body() body: any) {
+  createCampaign(@Req() req: any, @Body() body: CreateCampaignDto) {
     return this.marketingService.createCampaign(req.gymId, body);
   }
 
   @Post('campaigns/schedule')
-  scheduleCampaign(@Req() req: any, @Body() body: any) {
+  scheduleCampaign(@Req() req: any, @Body() body: ScheduleCampaignDto) {
     return this.marketingService.scheduleCampaign(req.gymId, body);
   }
 

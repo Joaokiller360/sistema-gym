@@ -1,9 +1,12 @@
-import { IsString, IsOptional, IsUrl, MaxLength, MinLength } from 'class-validator';
+import { IsString, IsOptional, MaxLength, MinLength } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { IsSafeUrl } from '../../common/validators/safe-url.validator';
 
 function sanitize(val: unknown): string {
   if (typeof val !== 'string') return val as string;
-  return val.trim().replace(/[<>]/g, '');
+  return val.trim()
+    .replace(/<[^>]*>/g, '')
+    .replace(/on\w+\s*=\s*["']?[^"'\s;>]*/gi, '');
 }
 
 export class CreateNewsDto {
@@ -20,7 +23,7 @@ export class CreateNewsDto {
   body: string;
 
   @IsOptional()
-  @IsUrl({}, { message: 'imageUrl debe ser URL válida' })
+  @IsSafeUrl({ message: 'imageUrl debe ser una URL https válida y no puede apuntar a direcciones internas' })
   @MaxLength(500)
   imageUrl?: string;
 }

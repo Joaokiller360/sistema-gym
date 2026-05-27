@@ -5,6 +5,7 @@ import { TenantGuard } from '../common/guards/tenant.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
+import { CreatePaymentDto } from './dto/create-payment.dto';
 
 @Controller('payments')
 @UseGuards(JwtAuthGuard, TenantGuard)
@@ -19,9 +20,8 @@ export class PaymentsController {
   @Post()
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN, Role.RECEPTIONIST)
-  create(@Req() req: any, @Body() body: any) {
-    const gymId = req.gymId ?? body.gymId;
-    return this.paymentsService.create(gymId, body);
+  create(@Req() req: any, @Body() body: CreatePaymentDto) {
+    return this.paymentsService.create(req.gymId, body);
   }
 
   @Get(':id/receipt')
@@ -33,6 +33,7 @@ export class PaymentsController {
   @UseGuards(RolesGuard)
   @Roles(Role.GYM_OWNER, Role.GYM_ADMIN, Role.SUPER_ADMIN)
   remove(@Param('id') id: string, @Req() req: any) {
+    if (!req.gymId) throw new Error('gymId is required');
     return this.paymentsService.remove(id, req.gymId);
   }
 }

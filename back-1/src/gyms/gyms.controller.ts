@@ -40,8 +40,8 @@ export class GymsController {
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.GYM_OWNER, Role.GYM_ADMIN, Role.SUPER_ADMIN)
-  update(@Param('id') id: string, @Body() body: any) {
-    return this.gymsService.update(id, body);
+  update(@Param('id') id: string, @Req() req: any, @Body() body: any) {
+    return this.gymsService.update(id, body, req.user?.role);
   }
 
   @Delete(':id')
@@ -58,18 +58,20 @@ export class GymsController {
     FileInterceptor('logo', {
       storage: diskStorage({
         destination: './uploads/logos',
-        filename: (_req, file, cb) => {
-          const ext = extname(file.originalname);
-          cb(null, `${Date.now()}${ext}`);
+        filename: (_req, _file, cb) => {
+          cb(null, `${Date.now()}.jpg`);
         },
       }),
       fileFilter: (_req, file, cb) => {
-        if (!file.mimetype.match(/^image\/(jpeg|png|webp|gif)$/)) {
-          return cb(new BadRequestException('Only image files allowed'), false);
+        const ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+        const ALLOWED_EXTS = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+        const ext = extname(file.originalname).toLowerCase();
+        if (!ALLOWED_MIMES.includes(file.mimetype) || !ALLOWED_EXTS.includes(ext)) {
+          return cb(new BadRequestException('Only image files allowed (jpg/png/webp/gif)'), false);
         }
         cb(null, true);
       },
-      limits: { fileSize: 2 * 1024 * 1024 },
+      limits: { fileSize: 2 * 1024 * 1024, files: 1 },
     }),
   )
   uploadLogo(

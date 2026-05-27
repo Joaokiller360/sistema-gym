@@ -45,10 +45,22 @@ const ownerSchema = z.object({
   email: z.string().email('Email inválido'),
 })
 
+function safePublicUrl() {
+  return z.string().url().refine(
+    (u) => {
+      try {
+        const parsed = new URL(u)
+        return parsed.protocol === 'https:' && !['localhost', '127.0.0.1', '0.0.0.0'].includes(parsed.hostname) && !parsed.hostname.startsWith('169.254.') && !parsed.hostname.startsWith('10.') && !parsed.hostname.startsWith('192.168.')
+      } catch { return false }
+    },
+    'URL debe ser HTTPS pública'
+  )
+}
+
 const createGymSchema = z.object({
   name: z.string().min(1).max(100),
   slug: z.string().min(1).max(60).regex(/^[a-z0-9-]+$/, 'Solo letras minúsculas, números y guiones'),
-  logoUrl: z.string().url().optional().or(z.literal('')),
+  logoUrl: safePublicUrl().optional().or(z.literal('')),
   subscriptionPlan: z.string().optional(),
   owner: ownerSchema.optional(),
 })
@@ -79,11 +91,15 @@ export async function createGymAction(data: CreateGymInput): Promise<{ error: st
   return { gymId: result.data.id }
 }
 
+const updateGymSchema = createGymSchema.partial()
+
 export async function updateGymAction(gymId: string, data: Partial<CreateGymInput>): Promise<{ error: string } | void> {
+  const parsed = updateGymSchema.safeParse(data)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
   const token = await getToken()
   const result = await apiFetch(`/admin/gyms/${gymId}`, token, {
     method: 'PATCH',
-    body: JSON.stringify(data),
+    body: JSON.stringify(parsed.data),
   })
   if (!result) return { error: 'Error al actualizar el gimnasio' }
   updateTag('admin-gyms')
