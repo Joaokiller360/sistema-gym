@@ -88,6 +88,19 @@ export class SuperAdminController {
     return this.superAdminService.deleteSubscriptionPlan(id);
   }
 
+  @Patch('subscription-plans/:id/discount')
+  setSubscriptionDiscount(
+    @Param('id') id: string,
+    @Body() body: { discountPercent: number; yearlyPrice?: number },
+  ) {
+    return this.superAdminService.setSubscriptionDiscount(id, body.discountPercent, body.yearlyPrice);
+  }
+
+  @Patch('subscription-plans/:id/discount/toggle')
+  toggleSubscriptionDiscount(@Param('id') id: string) {
+    return this.superAdminService.toggleSubscriptionDiscount(id);
+  }
+
   @Post('gyms/:id/change-plan')
   changeGymPlan(
     @Param('id') id: string,

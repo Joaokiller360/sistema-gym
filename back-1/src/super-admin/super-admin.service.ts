@@ -3,6 +3,30 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
 
+function applySubscriptionDiscount(plan: any) {
+  const active = plan.discountActive && plan.discountPercent > 0;
+  const finalPrice = active
+    ? Math.round(plan.price * (1 - plan.discountPercent / 100))
+    : plan.price;
+  const discountSaving = plan.price - finalPrice;
+
+  const yearly: Record<string, number | null> = {
+    yearlyFinalPrice: null,
+    yearlySaving: null,
+    yearlyMonthlyEquivalent: null,
+  };
+  if (plan.yearlyPrice != null) {
+    const yFinal = active
+      ? Math.round(plan.yearlyPrice * (1 - plan.discountPercent / 100))
+      : plan.yearlyPrice;
+    yearly.yearlyFinalPrice = yFinal;
+    yearly.yearlySaving = plan.yearlyPrice - yFinal;
+    yearly.yearlyMonthlyEquivalent = Math.round(yFinal / 12);
+  }
+
+  return { ...plan, finalPrice, discountSaving, ...yearly };
+}
+
 function escapeHtml(str: string): string {
   return str
     .replace(/&/g, '&amp;')
@@ -527,23 +551,59 @@ export class SuperAdminService {
   }
 
   async getSubscriptionPlans() {
-    return this.prisma.subscriptionPlan.findMany({ orderBy: { sortOrder: 'asc' } });
+    const plans = await this.prisma.subscriptionPlan.findMany({ orderBy: { sortOrder: 'asc' } });
+    return plans.map(applySubscriptionDiscount);
   }
 
   async createSubscriptionPlan(data: any) {
     const payload = { ...data };
     if (data.price !== undefined) payload.price = Math.round(Number(data.price) * 100);
-    return this.prisma.subscriptionPlan.create({ data: payload });
+    if (data.yearlyPrice !== undefined) payload.yearlyPrice = Math.round(Number(data.yearlyPrice) * 100);
+    const plan = await this.prisma.subscriptionPlan.create({ data: payload });
+    return applySubscriptionDiscount(plan);
   }
 
   async updateSubscriptionPlan(id: string, data: any) {
+    await this.assertSubscriptionPlanExists(id);
     const payload = { ...data };
     if (data.price !== undefined) payload.price = Math.round(Number(data.price) * 100);
-    return this.prisma.subscriptionPlan.update({ where: { id }, data: payload });
+    if (data.yearlyPrice !== undefined) payload.yearlyPrice = Math.round(Number(data.yearlyPrice) * 100);
+    const plan = await this.prisma.subscriptionPlan.update({ where: { id }, data: payload });
+    return applySubscriptionDiscount(plan);
   }
 
   async deleteSubscriptionPlan(id: string) {
     return this.prisma.subscriptionPlan.delete({ where: { id } });
+  }
+
+  async setSubscriptionDiscount(id: string, discountPercent: number, yearlyPrice?: number) {
+    await this.assertSubscriptionPlanExists(id);
+    const plan = await this.prisma.subscriptionPlan.update({
+      where: { id },
+      data: {
+        discountPercent,
+        ...(yearlyPrice !== undefined ? { yearlyPrice: Math.round(Number(yearlyPrice)) } : {}),
+      },
+    });
+    return applySubscriptionDiscount(plan);
+  }
+
+  async toggleSubscriptionDiscount(id: string) {
+    const plan = await this.assertSubscriptionPlanExists(id);
+    if (!plan.discountPercent || plan.discountPercent === 0) {
+      throw new BadRequestException('Configura un descuento (discountPercent) antes de activarlo');
+    }
+    const updated = await this.prisma.subscriptionPlan.update({
+      where: { id },
+      data: { discountActive: !plan.discountActive },
+    });
+    return applySubscriptionDiscount(updated);
+  }
+
+  private async assertSubscriptionPlanExists(id: string) {
+    const plan = await this.prisma.subscriptionPlan.findUnique({ where: { id } });
+    if (!plan) throw new NotFoundException('SubscriptionPlan no encontrado');
+    return plan;
   }
 
   async getPlatformSettings() {

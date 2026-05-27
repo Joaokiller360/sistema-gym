@@ -176,9 +176,6 @@ model Plan {
   isActive      Boolean  @default(true)
   isFeatured    Boolean  @default(false)
   storeEnabled  Boolean  @default(false)
-  discountPercent Int?
-  discountActive  Boolean  @default(false)
-  yearlyPrice     Int?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -442,13 +439,16 @@ model SubscriptionPlan {
   currency     String   @default("USD")
   durationDays Int      @default(30)
   graceDays    Int      @default(5)
-  maxMembers   Int?
-  storeEnabled Boolean  @default(false)
-  features     Json     @default("[]")
-  isActive     Boolean  @default(true)
-  sortOrder    Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  maxMembers      Int?
+  storeEnabled    Boolean  @default(false)
+  features        Json     @default("[]")
+  isActive        Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  discountPercent Int?
+  discountActive  Boolean  @default(false)
+  yearlyPrice     Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@map("subscription_plans")
 }
