@@ -44,6 +44,21 @@ export class CreatePlanDto {
   @IsBoolean()
   @IsOptional()
   storeEnabled?: boolean;
+
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  @IsOptional()
+  discountPercent?: number;
+
+  @IsBoolean()
+  @IsOptional()
+  discountActive?: boolean;
+
+  @IsInt()
+  @IsPositive()
+  @IsOptional()
+  yearlyPrice?: number;
 }
 
 export class UpdatePlanDto {
@@ -89,4 +104,31 @@ export class UpdatePlanDto {
   @IsBoolean()
   @IsOptional()
   storeEnabled?: boolean;
+
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  @IsOptional()
+  discountPercent?: number;
+
+  @IsBoolean()
+  @IsOptional()
+  discountActive?: boolean;
+
+  @IsInt()
+  @IsPositive()
+  @IsOptional()
+  yearlyPrice?: number;
+}
+
+export class SetDiscountDto {
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  discountPercent: number;
+
+  @IsInt()
+  @IsPositive()
+  @IsOptional()
+  yearlyPrice?: number;
 }

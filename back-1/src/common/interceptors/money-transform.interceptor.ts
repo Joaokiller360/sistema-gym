@@ -2,7 +2,11 @@ import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nes
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
-const MONEY_FIELDS = new Set(['price', 'amount', 'cost', 'total', 'unitPrice']);
+const MONEY_FIELDS = new Set([
+  'price', 'amount', 'cost', 'total', 'unitPrice',
+  'finalPrice', 'discountSaving',
+  'yearlyPrice', 'yearlyFinalPrice', 'yearlySaving', 'yearlyMonthlyEquivalent',
+]);
 
 function transformValue(data: any): any {
   if (data === null || data === undefined) return data;

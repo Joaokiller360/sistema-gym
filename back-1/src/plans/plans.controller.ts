@@ -5,7 +5,7 @@ import { TenantGuard } from '../common/guards/tenant.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
-import { CreatePlanDto, UpdatePlanDto } from './dto/plan.dto';
+import { CreatePlanDto, UpdatePlanDto, SetDiscountDto } from './dto/plan.dto';
 
 @Controller('plans')
 @UseGuards(JwtAuthGuard, TenantGuard)
@@ -41,6 +41,37 @@ export class PlansController {
   @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN)
   toggle(@Param('id') id: string, @Req() req: any) {
     return this.plansService.toggle(id, req.gymId);
+  }
+
+  // ── Discount endpoints ──────────────────────────────────────
+
+  /**
+   * Configure discount percentage and optional yearly price.
+   * Does NOT activate it — call /discount/toggle to enable.
+   * PATCH /plans/:id/discount
+   * Body: { discountPercent: 20, yearlyPrice?: 28800 }
+   */
+  @Patch(':id/discount')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN)
+  setDiscount(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Body() body: SetDiscountDto,
+  ) {
+    return this.plansService.setDiscount(id, req.gymId, body.discountPercent, body.yearlyPrice);
+  }
+
+  /**
+   * Toggle discount on / off for a plan.
+   * Requires discountPercent > 0 to activate.
+   * PATCH /plans/:id/discount/toggle
+   */
+  @Patch(':id/discount/toggle')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN)
+  toggleDiscount(@Param('id') id: string, @Req() req: any) {
+    return this.plansService.toggleDiscount(id, req.gymId);
   }
 
   @Delete(':id')
