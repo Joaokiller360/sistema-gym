@@ -651,3 +651,26 @@ model PlatformSettings {
 
   @@map("platform_settings")
 }
+
+model NewsPost {
+  id          String   @id @default(uuid())
+  title       String
+  body        String
+  imageUrl    String?
+  publishedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("news_posts")
+}
+
+model Tutorial {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  videoUrl    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("tutorials")
+}

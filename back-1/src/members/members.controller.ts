@@ -5,6 +5,8 @@ import { TenantGuard } from '../common/guards/tenant.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
+import { CreateMemberDto } from './dto/create-member.dto';
+import { UpdateMemberDto } from './dto/update-member.dto';
 
 @Controller('members')
 @UseGuards(JwtAuthGuard, TenantGuard)
@@ -19,7 +21,7 @@ export class MembersController {
   @Post()
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN, Role.RECEPTIONIST)
-  create(@Req() req: any, @Body() body: any) {
+  create(@Req() req: any, @Body() body: CreateMemberDto) {
     return this.membersService.create(req.gymId, body);
   }
 
@@ -31,7 +33,7 @@ export class MembersController {
   @Patch(':id')
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN)
-  update(@Param('id') id: string, @Req() req: any, @Body() body: any) {
+  update(@Param('id') id: string, @Req() req: any, @Body() body: UpdateMemberDto) {
     return this.membersService.update(id, req.gymId, body);
   }
 
