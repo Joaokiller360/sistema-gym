@@ -6,6 +6,9 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
+import { readFileSync, unlinkSync } from 'fs';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const fileType = require('file-type') as { fromBuffer: (buf: Buffer) => Promise<{ mime: string } | undefined> };
 import { GymsService } from './gyms.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -41,7 +44,7 @@ export class GymsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.GYM_OWNER, Role.GYM_ADMIN, Role.SUPER_ADMIN)
   update(@Param('id') id: string, @Req() req: any, @Body() body: any) {
-    return this.gymsService.update(id, body, req.user?.role);
+    return this.gymsService.update(id, body, req.user?.userId, req.user?.role);
   }
 
   @Delete(':id')
@@ -74,12 +77,22 @@ export class GymsController {
       limits: { fileSize: 2 * 1024 * 1024, files: 1 },
     }),
   )
-  uploadLogo(
+  async uploadLogo(
     @Param('id') id: string,
+    @Req() req: any,
     @UploadedFile() file: Express.Multer.File,
   ) {
     if (!file) throw new BadRequestException('Logo es requerido');
-    return this.gymsService.updateLogo(id, `/uploads/logos/${file.filename}`);
+
+    const ALLOWED_MAGIC_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    const buf = readFileSync(file.path).slice(0, 20);
+    const detected = await fileType.fromBuffer(buf);
+    if (!detected || !ALLOWED_MAGIC_MIMES.includes(detected.mime)) {
+      unlinkSync(file.path);
+      throw new BadRequestException('Archivo de imagen inválido');
+    }
+
+    return this.gymsService.updateLogo(id, `/uploads/logos/${file.filename}`, req.user?.userId, req.user?.role);
   }
 
   @Get('staff/list')

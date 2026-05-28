@@ -10,8 +10,9 @@ export class StoreService {
   async findAllProducts(gymId: string, query: any) {
     const { search, categoryId, isActive } = query;
     const where: any = { gymId };
-    if (search) where.name = { contains: search, mode: 'insensitive' };
-    if (categoryId) where.categoryId = categoryId;
+    const searchStr = typeof search === 'string' ? search : undefined;
+    if (searchStr) where.name = { contains: searchStr, mode: 'insensitive' };
+    if (typeof categoryId === 'string') where.categoryId = categoryId;
     if (isActive !== undefined) where.isActive = isActive === 'true';
 
     return this.prisma.product.findMany({

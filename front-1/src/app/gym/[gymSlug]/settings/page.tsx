@@ -9,6 +9,10 @@ import { Building2, Lock, Users } from 'lucide-react'
 
 interface CountryOption { code: string; label: string; timezone: string; utcOffset: string }
 
+const BACKEND_BASE = (process.env.API_URL ?? 'http://localhost:3001/api/v1').replace(/\/api\/v\d+$/, '')
+const resolveLogoUrl = (url: string | null | undefined): string | null =>
+  url?.startsWith('/') ? `${BACKEND_BASE}${url}` : url ?? null
+
 interface Props {
   params: Promise<{ gymSlug: string }>
 }
@@ -47,7 +51,7 @@ export default async function SettingsPage({ params }: Props) {
             gymSlug={gymSlug}
             gymId={gym?.id ?? ''}
             defaultName={gym?.name ?? ''}
-            defaultLogoUrl={gym?.logoUrl ?? null}
+            defaultLogoUrl={resolveLogoUrl(gym?.logoUrl)}
             defaultCurrency={gym?.currency ?? 'USD'}
             defaultAddress={gym?.address ?? null}
             defaultCountry={gym?.country ?? null}

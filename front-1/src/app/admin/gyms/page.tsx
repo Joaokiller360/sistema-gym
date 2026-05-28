@@ -8,6 +8,9 @@ import { Pagination } from './Pagination'
 import type { SubscriptionPlan } from './new/page'
 
 const LIMIT = 20
+const BACKEND_BASE = (process.env.API_URL ?? 'http://localhost:3001/api/v1').replace(/\/api\/v\d+$/, '')
+const resolveLogoUrl = (url: string | null | undefined): string | null =>
+  url?.startsWith('/') ? `${BACKEND_BASE}${url}` : url ?? null
 
 interface GymsResponse {
   data: Gym[]
@@ -43,11 +46,12 @@ export default async function GymsPage({ searchParams }: Props) {
     }),
   ])
 
-  const gyms: Gym[] = raw
+  const gyms: Gym[] = (raw
     ? Array.isArray(raw)
       ? raw
       : raw.data
     : []
+  ).map(g => ({ ...g, logoUrl: resolveLogoUrl(g.logoUrl) }))
 
   const total: number = raw
     ? Array.isArray(raw)

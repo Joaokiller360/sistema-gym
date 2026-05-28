@@ -8,11 +8,12 @@ export class TrainersService {
   async findAll(gymId: string, query: any) {
     const { branchId, search } = query;
     const where: any = { gymId };
-    if (branchId) where.branchId = branchId;
-    if (search) {
+    const searchStr = typeof search === 'string' ? search : undefined;
+    if (typeof branchId === 'string') where.branchId = branchId;
+    if (searchStr) {
       where.OR = [
-        { firstName: { contains: search, mode: 'insensitive' } },
-        { lastName: { contains: search, mode: 'insensitive' } },
+        { firstName: { contains: searchStr, mode: 'insensitive' } },
+        { lastName: { contains: searchStr, mode: 'insensitive' } },
       ];
     }
 

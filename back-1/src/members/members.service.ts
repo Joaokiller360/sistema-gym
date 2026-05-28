@@ -9,17 +9,18 @@ export class MembersService {
   async findAll(gymId: string, query: any) {
     const { search, status, branchId } = query;
     const where: any = { gymId };
+    const searchStr = typeof search === 'string' ? search : undefined;
 
-    if (search) {
+    if (searchStr) {
       where.OR = [
-        { firstName: { contains: search, mode: 'insensitive' } },
-        { lastName: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
+        { firstName: { contains: searchStr, mode: 'insensitive' } },
+        { lastName: { contains: searchStr, mode: 'insensitive' } },
+        { email: { contains: searchStr, mode: 'insensitive' } },
       ];
     }
     if (status === 'active') where.isActive = true;
     if (status === 'inactive') where.isActive = false;
-    if (branchId) where.branchId = branchId;
+    if (typeof branchId === 'string') where.branchId = branchId;
 
     return this.prisma.member.findMany({
       where,

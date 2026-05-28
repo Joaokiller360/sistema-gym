@@ -29,6 +29,7 @@ export async function uploadGymLogoAction(
   gymSlug: string,
   formData: FormData,
 ): Promise<{ error?: string; logoUrl?: string }> {
+  if (!gymId) return { error: 'ID de gimnasio no disponible. Recargá la página.' }
   const store = await cookies()
   const token = store.get('session')?.value ?? ''
 

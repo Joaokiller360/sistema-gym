@@ -8,9 +8,10 @@ export class InventoryService {
   async findAll(gymId: string, query: any) {
     const { status, branchId, search } = query;
     const where: any = { gymId };
-    if (status) where.status = status;
-    if (branchId) where.branchId = branchId;
-    if (search) where.name = { contains: search, mode: 'insensitive' };
+    const searchStr = typeof search === 'string' ? search : undefined;
+    if (typeof status === 'string') where.status = status;
+    if (typeof branchId === 'string') where.branchId = branchId;
+    if (searchStr) where.name = { contains: searchStr, mode: 'insensitive' };
 
     return this.prisma.inventoryItem.findMany({
       where,

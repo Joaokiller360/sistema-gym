@@ -18,6 +18,10 @@ function initials(name: string) {
   return name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase()
 }
 
+const BACKEND_BASE = (process.env.API_URL ?? 'http://localhost:3001/api/v1').replace(/\/api\/v\d+$/, '')
+const resolveLogoUrl = (url: string | null | undefined): string | null =>
+  url?.startsWith('/') ? `${BACKEND_BASE}${url}` : url ?? null
+
 export default async function GymDetailPage({ params }: Props) {
   const { id } = await params
   const cookieStore = await cookies()
@@ -50,6 +54,7 @@ export default async function GymDetailPage({ params }: Props) {
     : []
 
   if (!gym) notFound()
+  const gymLogoUrl = resolveLogoUrl(gym.logoUrl)
 
   const members: Member[] = membersRaw
     ? (Array.isArray(membersRaw) ? membersRaw : membersRaw.data).slice(0, 5)
@@ -72,8 +77,8 @@ export default async function GymDetailPage({ params }: Props) {
       <div className="space-y-6 max-w-2xl mx-auto">
         <div className="flex items-center gap-4">
           <div className="h-16 w-16 rounded-2xl bg-[#fffb00] flex items-center justify-center shrink-0 overflow-hidden">
-            {gym.logoUrl
-              ? <img src={gym.logoUrl} alt={gym.name} className="h-full w-full object-cover" />
+            {gymLogoUrl
+              ? <img src={gymLogoUrl} alt={gym.name} className="h-full w-full object-cover" />
               : <span className="text-xl font-black text-black">{initials(gym.name)}</span>
             }
           </div>
@@ -118,7 +123,7 @@ export default async function GymDetailPage({ params }: Props) {
           defaultName={gym.name}
           defaultSlug={gym.slug}
           defaultPlan={gym.subscriptionPlan}
-          defaultLogoUrl={gym.logoUrl ?? null}
+          defaultLogoUrl={gymLogoUrl}
           ownerName={gym.owner?.name}
           ownerEmail={gym.owner?.email}
           hasOwner={!!gym.owner}

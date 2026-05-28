@@ -1,10 +1,17 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { unlink } from 'fs/promises';
 import { join } from 'path';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const sanitizeHtml = require('sanitize-html') as (input: string, opts: object) => string;
 import { PrismaService } from '../prisma/prisma.service';
 import { isGymOpen, GymSchedule } from '../common/utils/timezone.util';
+
+function sanitizeText(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  return sanitizeHtml(value, { allowedTags: [], allowedAttributes: {} }).trim();
+}
 
 function generateSecurePassword(length = 14): string {
   return randomBytes(length).toString('base64url').slice(0, length);
@@ -50,17 +57,24 @@ export class GymsService {
     return { timezone: tz, localTime, isOpen };
   }
 
-  async update(id: string, data: any, role?: string) {
+  async update(id: string, data: any, callerId: string, role?: string) {
     const gym = await this.prisma.gym.findUnique({ where: { id } });
     if (!gym) throw new NotFoundException('Gym not found');
 
-    const OWNER_ALLOWED = ['name', 'address', 'country', 'timezone', 'currency', 'schedule', 'phone', 'email', 'website'];
+    if (role !== 'SUPER_ADMIN' && gym.ownerId !== callerId) {
+      throw new ForbiddenException('No autorizado');
+    }
+
+    const OWNER_ALLOWED = ['name', 'address', 'country', 'timezone', 'currency', 'schedule', 'phone', 'email'];
     const SUPER_ALLOWED = [...OWNER_ALLOWED, 'slug', 'isActive', 'subscriptionPlan', 'subscriptionStatus', 'subscriptionExpiresAt', 'subscriptionGraceEndsAt', 'ownerId'];
 
+    const TEXT_FIELDS = new Set(['name', 'address', 'phone', 'email']);
     const allowed = role === 'SUPER_ADMIN' ? SUPER_ALLOWED : OWNER_ALLOWED;
-    const safeData = Object.fromEntries(
-      Object.entries(data).filter(([k]) => allowed.includes(k))
-    );
+    const safeData: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(data)) {
+      if (!allowed.includes(k)) continue;
+      safeData[k] = TEXT_FIELDS.has(k) ? sanitizeText(v) ?? v : v;
+    }
 
     return this.prisma.gym.update({ where: { id }, data: safeData });
   }
@@ -72,9 +86,13 @@ export class GymsService {
     return { message: 'Gym deleted successfully' };
   }
 
-  async updateLogo(id: string, logoUrl: string) {
+  async updateLogo(id: string, logoUrl: string, callerId: string, role?: string) {
     const gym = await this.prisma.gym.findUnique({ where: { id } });
     if (!gym) throw new NotFoundException('Gym not found');
+
+    if (role !== 'SUPER_ADMIN' && gym.ownerId !== callerId) {
+      throw new ForbiddenException('No autorizado');
+    }
 
     if (gym.logoUrl?.startsWith('/uploads/logos/')) {
       const oldPath = join(process.cwd(), gym.logoUrl);

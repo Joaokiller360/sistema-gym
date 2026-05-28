@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Patch, Body, HttpCode, HttpStatus, UseGuards, Req } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Body, HttpCode, HttpStatus, UseGuards, Req, BadRequestException } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -24,7 +24,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { ttl: 60000, limit: 10 } })
   refresh(@Body() body: { refresh_token: string }) {
-    if (!body.refresh_token) throw new Error('refresh_token requerido');
+    if (!body.refresh_token) throw new BadRequestException('refresh_token requerido');
     return this.authService.refresh(body.refresh_token);
   }
 

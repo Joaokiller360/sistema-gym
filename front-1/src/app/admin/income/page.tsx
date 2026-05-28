@@ -36,6 +36,10 @@ interface GymWithSubscription extends Gym {
   billing: BillingRecord[]
 }
 
+const BACKEND_BASE = (process.env.API_URL ?? 'http://localhost:3001/api/v1').replace(/\/api\/v\d+$/, '')
+const resolveLogoUrl = (url: string | null | undefined): string | null =>
+  url?.startsWith('/') ? `${BACKEND_BASE}${url}` : url ?? null
+
 function startOfDay(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate())
 }
@@ -127,6 +131,7 @@ export default async function AdminIncomePage() {
     const billing = gymData[i]?.billing ?? []
     return {
       ...g,
+      logoUrl: resolveLogoUrl(g.logoUrl),
       subscription: gymData[i]?.subscription ?? null,
       dailyRevenue: billingRevenue(billing, dayStart, dayEnd),
       monthlyRevenue: billingRevenue(billing, monthStart, dayEnd),

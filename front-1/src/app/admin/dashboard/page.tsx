@@ -92,6 +92,10 @@ function initials(name: string) {
   return name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase()
 }
 
+const BACKEND_BASE = (process.env.API_URL ?? 'http://localhost:3001/api/v1').replace(/\/api\/v\d+$/, '')
+const resolveLogoUrl = (url: string | null | undefined): string | null =>
+  url?.startsWith('/') ? `${BACKEND_BASE}${url}` : url ?? null
+
 export default async function AdminDashboardPage() {
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value ?? ''
@@ -120,9 +124,10 @@ export default async function AdminDashboardPage() {
   const dailyRevenue = sumBilling(allBilling, dayStart, dayEnd)
   const monthlyRevenue = sumBilling(allBilling, monthStart, dayEnd)
 
-  const recentGyms: Gym[] = gymsRaw
+  const recentGyms: Gym[] = (gymsRaw
     ? (Array.isArray(gymsRaw) ? gymsRaw : gymsRaw.data).slice(0, 5)
     : []
+  ).map(g => ({ ...g, logoUrl: resolveLogoUrl(g.logoUrl) }))
 
   const counts = await Promise.all(
     recentGyms.map(async (g) => {
