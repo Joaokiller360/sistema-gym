@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Patch, Delete,
-  Body, Param, UseGuards, UseInterceptors,
+  Body, Param, Query, Req, UseGuards, UseInterceptors,
   UploadedFile, BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -133,6 +133,28 @@ export class SuperAdminController {
     @Param('paymentId') paymentId: string,
   ) {
     return this.superAdminService.deleteGymBillingPayment(gymId, paymentId);
+  }
+
+  @Get('demo-requests')
+  getDemoRequests(
+    @Query('limit') limit?: string,
+    @Query('page') page?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.superAdminService.getDemoRequests({
+      limit: limit ? parseInt(limit) : undefined,
+      page: page ? parseInt(page) : undefined,
+      status,
+    });
+  }
+
+  @Patch('demo-requests/:id/status')
+  updateDemoRequestStatus(
+    @Param('id') id: string,
+    @Body() body: { status: 'PENDING' | 'CONTACTED' | 'DISMISSED' },
+    @Req() req: any,
+  ) {
+    return this.superAdminService.updateDemoRequestStatus(id, body.status, req.user.userId);
   }
 
   @Get('dashboard')

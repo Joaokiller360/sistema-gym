@@ -374,22 +374,18 @@ export class SuperAdminService {
     const now = new Date();
 
     await this.prisma.gym.updateMany({
-      where: {
-        subscriptionStatus: 'ACTIVE',
-        subscriptionExpiresAt: { lt: now },
-      },
+      where: { subscriptionStatus: 'ACTIVE', subscriptionExpiresAt: { lt: now } },
       data: { subscriptionStatus: 'GRACE' },
     });
 
     await this.prisma.gym.updateMany({
-      where: {
-        subscriptionStatus: 'GRACE',
-        subscriptionGraceEndsAt: { lt: now },
-      },
-      data: {
-        subscriptionStatus: 'SUSPENDED',
-        isActive: false,
-      },
+      where: { subscriptionStatus: 'GRACE', subscriptionGraceEndsAt: { lt: now } },
+      data: { subscriptionStatus: 'SUSPENDED', isActive: false },
+    });
+
+    await this.prisma.gym.updateMany({
+      where: { subscriptionStatus: 'TRIAL', trialEndsAt: { lt: now } },
+      data: { subscriptionStatus: 'SUSPENDED', isActive: false },
     });
   }
 
@@ -660,6 +656,50 @@ export class SuperAdminService {
       totalUsers,
       totalMembers,
     };
+  }
+
+  async getDemoRequests(filters: { limit?: number; page?: number; status?: string }) {
+    const limit = Math.min(filters.limit ?? 50, 200);
+    const page = Math.max(filters.page ?? 1, 1);
+    const skip = (page - 1) * limit;
+
+    const where = filters.status ? { status: filters.status as any } : {};
+
+    const [data, total] = await Promise.all([
+      this.prisma.demoRequest.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        select: {
+          id: true, name: true, email: true, phone: true,
+          gymName: true, planLabel: true, status: true,
+          createdAt: true, statusChangedById: true, statusChangedAt: true,
+        },
+      }),
+      this.prisma.demoRequest.count({ where }),
+    ]);
+
+    return { data, total };
+  }
+
+  async updateDemoRequestStatus(id: string, status: string, changedById: string) {
+    const record = await this.prisma.demoRequest.findUnique({ where: { id } });
+    if (!record) throw new NotFoundException('Demo request no encontrada');
+
+    return this.prisma.demoRequest.update({
+      where: { id },
+      data: {
+        status: status as any,
+        statusChangedById: changedById,
+        statusChangedAt: new Date(),
+      },
+      select: {
+        id: true, name: true, email: true, phone: true,
+        gymName: true, planLabel: true, status: true,
+        createdAt: true, statusChangedById: true, statusChangedAt: true,
+      },
+    });
   }
 
   private async assertGymExists(id: string) {

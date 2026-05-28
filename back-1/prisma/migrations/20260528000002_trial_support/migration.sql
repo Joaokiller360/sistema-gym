@@ -1,0 +1,5 @@
+ALTER TYPE "GymSubscriptionStatus" ADD VALUE IF NOT EXISTS 'TRIAL';
+
+ALTER TABLE "gyms" ADD COLUMN IF NOT EXISTS "trialEndsAt" TIMESTAMP(3);
+
+ALTER TABLE "subscription_plans" ADD COLUMN IF NOT EXISTS "trialEnabled" BOOLEAN NOT NULL DEFAULT false;

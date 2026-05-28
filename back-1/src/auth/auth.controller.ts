@@ -7,6 +7,12 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Post('register')
+  @Throttle({ default: { ttl: 60000, limit: 3 } })
+  register(@Body() body: { ownerName: string; email: string; phone?: string; gymName: string; planId?: string; isTrial?: boolean }) {
+    return this.authService.register(body);
+  }
+
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { ttl: 60000, limit: 5 } })

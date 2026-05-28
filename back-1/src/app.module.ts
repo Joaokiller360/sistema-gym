@@ -24,6 +24,7 @@ import { BranchesModule } from './branches/branches.module';
 import { StoreModule } from './store/store.module';
 import { SupportModule } from './support/support.module';
 import { ContentModule } from './content/content.module';
+import { DemoRequestsModule } from './demo-requests/demo-requests.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { ContentModule } from './content/content.module';
     StoreModule,
     SupportModule,
     ContentModule,
+    DemoRequestsModule,
   ],
   controllers: [AppController],
   providers: [
