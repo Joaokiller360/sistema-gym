@@ -118,7 +118,9 @@ export class ReportsService {
     const startDate = query.startDate ? new Date(query.startDate) : new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const endDate = query.endDate ? new Date(query.endDate) : now;
 
-    const [payments, activeMemberships, newMembers, churned, expiringNext7Days, attendancesAll, attendancesWeek] =
+    const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+
+    const [payments, activeMemberships, newMembers, churned, expiringNext7Days, attendancesSample, attendancesWeek] =
       await Promise.all([
         this.prisma.payment.findMany({
           where: { gymId, createdAt: { gte: startDate, lte: endDate } },
@@ -135,22 +137,15 @@ export class ReportsService {
         this.prisma.membership.count({
           where: { gymId, status: 'ACTIVE', endDate: { gte: now, lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000) } },
         }),
-        this.prisma.$queryRaw<{ dow: number; cnt: bigint }[]>`
-          SELECT EXTRACT(DOW FROM check_in)::int AS dow, COUNT(*)::bigint AS cnt
-          FROM attendances WHERE gym_id = ${gymId}
-          GROUP BY dow ORDER BY cnt DESC LIMIT 1
-        `,
+        this.prisma.attendance.findMany({
+          where: { gymId, checkIn: { gte: ninetyDaysAgo } },
+          select: { checkIn: true },
+        }),
         this.prisma.attendance.findMany({
           where: { gymId, checkIn: { gte: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) } },
           select: { checkIn: true },
         }),
       ]);
-
-    const peakHourResult = await this.prisma.$queryRaw<{ hr: number; cnt: bigint }[]>`
-      SELECT EXTRACT(HOUR FROM check_in)::int AS hr, COUNT(*)::bigint AS cnt
-      FROM attendances WHERE gym_id = ${gymId}
-      GROUP BY hr ORDER BY cnt DESC LIMIT 1
-    `;
 
     // revenueTrend — weekly buckets
     const rangeDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000));
@@ -169,9 +164,18 @@ export class ReportsService {
     // attendanceTrend — last 7 days
     const attendanceTrend = buildAttendanceTrend(attendancesWeek, now);
 
+    // peakDay / peakHour — computed in JS from 90-day sample
+    const dowCount = new Array(7).fill(0) as number[];
+    const hourCount = new Array(24).fill(0) as number[];
+    for (const a of attendancesSample) {
+      dowCount[a.checkIn.getUTCDay()]++;
+      hourCount[a.checkIn.getUTCHours()]++;
+    }
     const DAYS_ES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-    const peakDay = attendancesAll[0] ? (DAYS_ES[Number(attendancesAll[0].dow)] ?? null) : null;
-    const peakHour = peakHourResult[0] ? `${String(Number(peakHourResult[0].hr)).padStart(2, '0')}:00` : null;
+    const peakDay = attendancesSample.length > 0 ? DAYS_ES[dowCount.indexOf(Math.max(...dowCount))] : null;
+    const peakHour = attendancesSample.length > 0
+      ? `${String(hourCount.indexOf(Math.max(...hourCount))).padStart(2, '0')}:00`
+      : null;
 
     return {
       revenueTrend,
