@@ -44,7 +44,7 @@ export async function POST(request: Request) {
   const res = await fetch(`${BACKEND}/content/news`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${auth.token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, body }),
+    body: JSON.stringify({ title, content: body }),
   })
   const data = await res.text()
   return new Response(data, { status: res.status, headers: { 'Content-Type': 'application/json' } })

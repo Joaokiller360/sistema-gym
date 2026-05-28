@@ -15,8 +15,8 @@ import {
 interface NewsItem {
   id: string
   title: string
-  body: string
-  date: string
+  content: string
+  publishedAt: string
 }
 
 interface Props {
@@ -111,14 +111,14 @@ export function NewsSection({ canManage }: Props) {
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-muted-foreground mb-1">
-                      {new Date(item.date).toLocaleDateString('es-AR', {
+                      {new Date(item.publishedAt).toLocaleDateString('es-AR', {
                         day: '2-digit',
                         month: 'long',
                         year: 'numeric',
                       })}
                     </p>
                     <p className="font-medium text-sm">{item.title}</p>
-                    <p className="text-sm text-muted-foreground mt-0.5">{item.body}</p>
+                    <p className="text-sm text-muted-foreground mt-0.5">{item.content}</p>
                   </div>
                   {canManage && (
                     <button

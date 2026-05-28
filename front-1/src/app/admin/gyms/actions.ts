@@ -252,6 +252,23 @@ export async function fetchGymModalDataAction(gymId: string): Promise<GymModalDa
   }
 }
 
+export async function bulkDeleteGymsAction(gymIds: string[]): Promise<{ deleted: number; errors: number }> {
+  if (!gymIds.length) return { deleted: 0, errors: 0 }
+  const token = await getToken()
+  const results = await Promise.allSettled(
+    gymIds.map(id =>
+      fetch(`${API_URL}/admin/gyms/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      })
+    )
+  )
+  const deleted = results.filter(r => r.status === 'fulfilled' && r.value.ok).length
+  const errors = gymIds.length - deleted
+  if (deleted > 0) updateTag('admin-gyms')
+  return { deleted, errors }
+}
+
 export async function deleteSubscriptionPaymentAction(
   gymId: string,
   paymentId: string,

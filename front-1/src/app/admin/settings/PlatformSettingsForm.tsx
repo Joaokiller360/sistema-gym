@@ -102,8 +102,10 @@ export function PlatformSettingsForm({ settings }: Props) {
     const fd = new FormData()
     fd.append('logo', file)
     startUploadTransition(async () => {
-      const res = await uploadPlatformLogoAction(fd)
-      if (res.error) { toast.error(res.error) } else if (res.logoUrl) { setLogoUrl(res.logoUrl) }
+      const res = await fetch('/api/v1/admin/platform-settings/logo', { method: 'POST', body: fd })
+      const data = await res.json().catch(() => ({})) as { error?: string; logoUrl?: string }
+      if (!res.ok || data.error) { toast.error(data.error ?? 'Error al subir la imagen') }
+      else if (data.logoUrl) { setLogoUrl(data.logoUrl) }
     })
     e.target.value = ''
   }

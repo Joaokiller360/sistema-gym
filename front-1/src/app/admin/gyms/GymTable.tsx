@@ -3,12 +3,13 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Building2, ExternalLink, MapPin, Globe, Clock, CreditCard, ShoppingBag, Calendar, Users, Star, ArrowRightLeft, CheckCircle2, AlertTriangle, Ban, Loader2, Plus } from 'lucide-react'
+import { Building2, ExternalLink, MapPin, Globe, Clock, CreditCard, ShoppingBag, Calendar, Users, Star, ArrowRightLeft, CheckCircle2, AlertTriangle, Ban, Loader2, Plus, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Switch } from '@/components/ui/switch'
 import { StatusBadge } from '@/components/shared/StatusBadge'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Gym } from '@/types'
-import { toggleGymActiveAction, fetchGymModalDataAction, changeGymPlanAction, type GymModalData, type ProratedResult } from './actions'
+import { toggleGymActiveAction, fetchGymModalDataAction, changeGymPlanAction, bulkDeleteGymsAction, type GymModalData, type ProratedResult } from './actions'
 import { CreateGymForm } from './new/CreateGymForm'
 import type { SubscriptionPlan } from './new/page'
 
@@ -73,6 +74,37 @@ export function GymTable({ gyms, plans }: { gyms: Gym[]; plans: SubscriptionPlan
   const [newGymOpen, setNewGymOpen] = useState(false)
   const [modalData, setModalData] = useState<GymModalData | null>(null)
   const [loadingModal, setLoadingModal] = useState(false)
+
+  // Bulk delete state
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false)
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false)
+
+  function toggleCheck(id: string) {
+    setCheckedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleAll() {
+    setCheckedIds(prev => prev.size === gyms.length ? new Set() : new Set(gyms.map(g => g.id)))
+  }
+
+  async function handleBulkDelete() {
+    setIsBulkDeleting(true)
+    const { deleted, errors } = await bulkDeleteGymsAction(Array.from(checkedIds))
+    setIsBulkDeleting(false)
+    setBulkConfirmOpen(false)
+    setCheckedIds(new Set())
+    if (deleted > 0) {
+      toast.success(`${deleted} gimnasio${deleted !== 1 ? 's' : ''} eliminado${deleted !== 1 ? 's' : ''}`)
+      startTransition(() => router.refresh())
+    }
+    if (errors > 0) toast.error(`Error al eliminar ${errors} gimnasio${errors !== 1 ? 's' : ''}`)
+  }
 
   // Change plan state
   const [showChangePlan, setShowChangePlan] = useState(false)
@@ -195,6 +227,32 @@ export function GymTable({ gyms, plans }: { gyms: Gym[]; plans: SubscriptionPlan
 
       {newGymModal}
 
+      {/* Bulk action bar */}
+      {checkedIds.size > 0 && (
+        <div className="flex items-center justify-between rounded-xl bg-zinc-900 px-4 py-2.5">
+          <span className="text-xs font-bold text-white">
+            {checkedIds.size} gimnasio{checkedIds.size !== 1 ? 's' : ''} seleccionado{checkedIds.size !== 1 ? 's' : ''}
+          </span>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setCheckedIds(new Set())}
+              className="text-xs text-zinc-400 hover:text-white transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => setBulkConfirmOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-red-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-600 transition-colors"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Eliminar {checkedIds.size}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Mobile cards */}
       <div className="space-y-2 sm:hidden">
         {gyms.map(gym => (
@@ -204,6 +262,13 @@ export function GymTable({ gyms, plans }: { gyms: Gym[]; plans: SubscriptionPlan
             className="bg-white rounded-2xl border border-zinc-200 px-4 py-3.5 cursor-pointer hover:border-[#1fad9d]/40 hover:shadow-sm transition-all"
           >
             <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={checkedIds.has(gym.id)}
+                onChange={() => toggleCheck(gym.id)}
+                onClick={e => e.stopPropagation()}
+                className="h-4 w-4 rounded cursor-pointer shrink-0 accent-[#1fad9d]"
+              />
               <div className="h-10 w-10 rounded-xl bg-[#fffb00] flex items-center justify-center shrink-0 overflow-hidden">
                 {gym.logoUrl
                   ? <img src={gym.logoUrl} alt={gym.name} className="h-full w-full object-cover" />
@@ -237,6 +302,15 @@ export function GymTable({ gyms, plans }: { gyms: Gym[]; plans: SubscriptionPlan
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-zinc-50 border-b border-zinc-200">
+              <th className="px-5 py-3.5 w-10">
+                <input
+                  type="checkbox"
+                  checked={gyms.length > 0 && checkedIds.size === gyms.length}
+                  ref={el => { if (el) el.indeterminate = checkedIds.size > 0 && checkedIds.size < gyms.length }}
+                  onChange={toggleAll}
+                  className="h-4 w-4 rounded cursor-pointer accent-[#1fad9d]"
+                />
+              </th>
               <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wider text-zinc-500">Gimnasio</th>
               <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wider text-zinc-500 hidden md:table-cell">Dueño</th>
               <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wider text-zinc-500">Estado</th>
@@ -252,6 +326,14 @@ export function GymTable({ gyms, plans }: { gyms: Gym[]; plans: SubscriptionPlan
                 onClick={() => openModal(gym)}
                 className="hover:bg-zinc-50 transition-colors cursor-pointer"
               >
+                <td className="px-5 py-4" onClick={e => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={checkedIds.has(gym.id)}
+                    onChange={() => toggleCheck(gym.id)}
+                    className="h-4 w-4 rounded cursor-pointer accent-[#1fad9d]"
+                  />
+                </td>
                 <td className="px-5 py-4">
                   <div className="flex items-center gap-3">
                     <div className="h-9 w-9 rounded-xl bg-[#fffb00] flex items-center justify-center shrink-0 overflow-hidden">
@@ -300,6 +382,48 @@ export function GymTable({ gyms, plans }: { gyms: Gym[]; plans: SubscriptionPlan
           </tbody>
         </table>
       </div>
+
+      {/* Bulk delete confirm */}
+      <Dialog open={bulkConfirmOpen} onOpenChange={v => { if (!v) setBulkConfirmOpen(false) }}>
+        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Eliminar {checkedIds.size} gimnasio{checkedIds.size !== 1 ? 's' : ''}</DialogTitle>
+            <DialogDescription>
+              Esta acción eliminará permanentemente los siguientes gimnasios y <strong>todos sus datos</strong> (miembros, planes, pagos, asistencias, etc.). No se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="mt-1 max-h-52 overflow-y-auto space-y-1">
+            {gyms.filter(g => checkedIds.has(g.id)).map(g => (
+              <li key={g.id} className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2">
+                <div className="h-6 w-6 rounded-lg bg-[#fffb00] flex items-center justify-center shrink-0 overflow-hidden">
+                  {g.logoUrl
+                    ? <img src={g.logoUrl} alt={g.name} className="h-full w-full object-cover" />
+                    : <span className="text-[9px] font-black text-black">{initials(g.name)}</span>
+                  }
+                </div>
+                <span className="font-medium text-sm truncate flex-1">{g.name}</span>
+                <span className="text-xs text-zinc-400 font-mono shrink-0">{g.slug}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={handleBulkDelete}
+              disabled={isBulkDeleting}
+              className="flex-1 rounded-lg bg-red-500 text-white text-sm font-bold py-2 hover:bg-red-600 transition-colors disabled:opacity-50"
+            >
+              {isBulkDeleting ? 'Eliminando...' : `Eliminar ${checkedIds.size} gimnasio${checkedIds.size !== 1 ? 's' : ''}`}
+            </button>
+            <button
+              onClick={() => setBulkConfirmOpen(false)}
+              disabled={isBulkDeleting}
+              className="flex-1 rounded-lg border text-sm font-medium py-2 hover:bg-muted transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Gym detail modal */}
       <Dialog open={!!selected} onOpenChange={open => { if (!open) closeModal() }}>

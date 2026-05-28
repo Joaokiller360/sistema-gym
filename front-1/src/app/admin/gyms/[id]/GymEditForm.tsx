@@ -63,9 +63,10 @@ export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, defa
     const fd = new FormData()
     fd.append('logo', file)
     startUploadTransition(async () => {
-      const res = await uploadGymLogoAction(gymId, fd)
-      if (res.error) { setUploadError(res.error) }
-      else if (res.logoUrl) { setLogoUrl(res.logoUrl) }
+      const res = await fetch(`/api/v1/gyms/${gymId}/logo`, { method: 'POST', body: fd })
+      const data = await res.json().catch(() => ({})) as { error?: string; logoUrl?: string }
+      if (!res.ok || data.error) { setUploadError(data.error ?? 'Error al subir el logo') }
+      else if (data.logoUrl) { setLogoUrl(data.logoUrl) }
     })
     e.target.value = ''
   }

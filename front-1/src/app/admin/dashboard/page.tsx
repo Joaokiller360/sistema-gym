@@ -105,29 +105,24 @@ export default async function AdminDashboardPage() {
   const dayEnd = endOfDay(now)
   const monthStart = startOfMonth(now)
 
-  const [stats, gymsRaw, allGymsRaw, ticketsRaw, demoRequestsRaw] = await Promise.all([
+  const [stats, gymsRaw, ticketsRaw, demoRequestsRaw] = await Promise.all([
     apiFetch<DashboardStats>(`/admin/dashboard`, token),
     apiFetch<GymListResponse | Gym[]>(`/admin/gyms?limit=5`, token),
-    apiFetch<GymListResponse | Gym[]>(`/admin/gyms?limit=200`, token),
     apiFetch<SupportTicket[] | { data: SupportTicket[] }>(`/support/tickets?all=true`, token, { silent: true }),
     apiFetch<DemoRequest[] | { data: DemoRequest[] }>(`/admin/demo-requests?limit=100`, token, { silent: true }),
   ])
-
-  const allGyms: Gym[] = allGymsRaw
-    ? (Array.isArray(allGymsRaw) ? allGymsRaw : allGymsRaw.data)
-    : []
-
-  const allBilling = await Promise.all(
-    allGyms.map(g => apiFetch<BillingRecord[]>(`/admin/gyms/${g.id}/billing-history`, token).then(r => r ?? []))
-  )
-
-  const dailyRevenue = sumBilling(allBilling, dayStart, dayEnd)
-  const monthlyRevenue = sumBilling(allBilling, monthStart, dayEnd)
 
   const recentGyms: Gym[] = (gymsRaw
     ? (Array.isArray(gymsRaw) ? gymsRaw : gymsRaw.data).slice(0, 5)
     : []
   ).map(g => ({ ...g, logoUrl: resolveLogoUrl(g.logoUrl) }))
+
+  const recentBilling = await Promise.all(
+    recentGyms.map(g => apiFetch<BillingRecord[]>(`/admin/gyms/${g.id}/billing-history`, token).then(r => r ?? []))
+  )
+
+  const dailyRevenue = sumBilling(recentBilling, dayStart, dayEnd)
+  const monthlyRevenue = sumBilling(recentBilling, monthStart, dayEnd)
 
   const counts = await Promise.all(
     recentGyms.map(async (g) => {

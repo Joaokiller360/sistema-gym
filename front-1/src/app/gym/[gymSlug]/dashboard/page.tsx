@@ -144,8 +144,8 @@ export default async function GymDashboardPage({ params, searchParams }: Props) 
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <NewsSection canManage={false} />
-        <TutorialsSection canManage={false} />
+        <NewsSection canManage={isSuperAdmin} />
+        <TutorialsSection canManage={isSuperAdmin} />
       </div>
 
       {newParam === 'member' && (
