@@ -7,6 +7,7 @@ import { apiFetch } from '@/lib/api'
 import { Gym } from '@/types'
 import { NewsSection } from '@/app/gym/[gymSlug]/dashboard/NewsSection'
 import { TutorialsSection } from '@/app/gym/[gymSlug]/dashboard/TutorialsSection'
+import { DemoRequestsSection, type DemoRequest } from './DemoRequestsSection'
 
 interface DashboardStats {
   totalGyms: number
@@ -100,11 +101,12 @@ export default async function AdminDashboardPage() {
   const dayEnd = endOfDay(now)
   const monthStart = startOfMonth(now)
 
-  const [stats, gymsRaw, allGymsRaw, ticketsRaw] = await Promise.all([
+  const [stats, gymsRaw, allGymsRaw, ticketsRaw, demoRequestsRaw] = await Promise.all([
     apiFetch<DashboardStats>(`/admin/dashboard`, token),
     apiFetch<GymListResponse | Gym[]>(`/admin/gyms?limit=5`, token),
     apiFetch<GymListResponse | Gym[]>(`/admin/gyms?limit=200`, token),
     apiFetch<SupportTicket[] | { data: SupportTicket[] }>(`/support/tickets?all=true`, token, { silent: true }),
+    apiFetch<DemoRequest[] | { data: DemoRequest[] }>(`/admin/demo-requests?limit=100`, token, { silent: true }),
   ])
 
   const allGyms: Gym[] = allGymsRaw
@@ -134,6 +136,10 @@ export default async function AdminDashboardPage() {
 
   const tickets: SupportTicket[] = ticketsRaw
     ? (Array.isArray(ticketsRaw) ? ticketsRaw : ticketsRaw.data)
+    : []
+
+  const demoRequests: DemoRequest[] = demoRequestsRaw
+    ? (Array.isArray(demoRequestsRaw) ? demoRequestsRaw : demoRequestsRaw.data)
     : []
   const latestTickets = tickets
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -265,6 +271,9 @@ export default async function AdminDashboardPage() {
           </ul>
         </div>
       )}
+
+      {/* Demo requests */}
+      <DemoRequestsSection requests={demoRequests} />
 
       {/* News & Tutorials — managed here, visible in gym dashboards */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

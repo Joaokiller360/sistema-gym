@@ -10,6 +10,8 @@ interface SubscriptionPlan {
   currency: string
   maxMembers: number | null
   storeEnabled: boolean
+  demoEnabled: boolean
+  trialEnabled: boolean
   features: string[]
   isActive: boolean
   sortOrder: number

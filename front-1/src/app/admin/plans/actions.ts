@@ -12,7 +12,7 @@ async function getToken() {
 
 export async function updateSubscriptionPlanAction(
   id: string,
-  data: { label?: string; price?: string | number; currency?: string; maxMembers?: number | null; storeEnabled?: boolean; features?: string[]; isActive?: boolean },
+  data: { label?: string; price?: string | number; currency?: string; maxMembers?: number | null; storeEnabled?: boolean; demoEnabled?: boolean; trialEnabled?: boolean; features?: string[]; isActive?: boolean },
   planKey?: string,
 ): Promise<{ error?: string }> {
   const token = await getToken()
@@ -40,7 +40,7 @@ export async function updateSubscriptionPlanAction(
 }
 
 export async function createSubscriptionPlanAction(
-  data: { key: string; label: string; price: string | number; currency: string; maxMembers?: number | null; storeEnabled?: boolean; features?: string[] },
+  data: { key: string; label: string; price: string | number; currency: string; maxMembers?: number | null; storeEnabled?: boolean; demoEnabled?: boolean; trialEnabled?: boolean; features?: string[] },
 ): Promise<{ error?: string }> {
   const token = await getToken()
   const result = await apiFetch('/admin/subscription-plans', token, {

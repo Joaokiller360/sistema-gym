@@ -34,6 +34,8 @@ interface SubscriptionPlan {
   currency: string
   maxMembers: number | null
   storeEnabled: boolean
+  demoEnabled: boolean
+  trialEnabled: boolean
   features: string[]
   isActive: boolean
   sortOrder: number
@@ -68,6 +70,8 @@ interface PlanFormFields {
   currency: string
   maxMembers: string
   storeEnabled: boolean
+  demoEnabled: boolean
+  trialEnabled: boolean
   features: string[]
   isActive: boolean
 }
@@ -214,6 +218,34 @@ function PlanFormBody({
         </button>
       </div>
 
+      <div className="flex items-center justify-between">
+        <div>
+          <label className="text-xs font-bold uppercase tracking-widest text-zinc-400 block">Demo habilitada</label>
+          <p className="text-xs text-zinc-400 mt-0.5">Permite que el cliente solicite una demo desde la landing</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange({ ...fields, demoEnabled: !fields.demoEnabled })}
+          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${fields.demoEnabled ? 'bg-[#fffb00]' : 'bg-zinc-200'}`}
+        >
+          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${fields.demoEnabled ? 'translate-x-4' : 'translate-x-1'}`} />
+        </button>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div>
+          <label className="text-xs font-bold uppercase tracking-widest text-zinc-400 block">Prueba gratuita (1 mes)</label>
+          <p className="text-xs text-zinc-400 mt-0.5">Permite que el cliente pruebe el plan 30 días sin costo</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange({ ...fields, trialEnabled: !fields.trialEnabled })}
+          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${fields.trialEnabled ? 'bg-amber-400' : 'bg-zinc-200'}`}
+        >
+          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${fields.trialEnabled ? 'translate-x-4' : 'translate-x-1'}`} />
+        </button>
+      </div>
+
       <div>
         <div className="flex items-center justify-between mb-2">
           <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Características</label>
@@ -258,6 +290,8 @@ function EditPlanCard({ plan }: { plan: SubscriptionPlan }) {
     currency: plan.currency,
     maxMembers: plan.maxMembers == null ? '' : String(plan.maxMembers),
     storeEnabled: plan.storeEnabled ?? false,
+    demoEnabled: plan.demoEnabled ?? false,
+    trialEnabled: plan.trialEnabled ?? false,
     features: plan.features as string[],
     isActive: plan.isActive,
   })
@@ -269,6 +303,8 @@ function EditPlanCard({ plan }: { plan: SubscriptionPlan }) {
       currency: plan.currency,
       maxMembers: plan.maxMembers == null ? '' : String(plan.maxMembers),
       storeEnabled: plan.storeEnabled ?? false,
+      demoEnabled: plan.demoEnabled ?? false,
+      trialEnabled: plan.trialEnabled ?? false,
       features: plan.features as string[],
       isActive: plan.isActive,
     })
@@ -285,6 +321,8 @@ function EditPlanCard({ plan }: { plan: SubscriptionPlan }) {
         currency: fields.currency,
         maxMembers: fields.maxMembers === '' ? null : parseInt(fields.maxMembers),
         storeEnabled: fields.storeEnabled,
+        demoEnabled: fields.demoEnabled,
+        trialEnabled: fields.trialEnabled,
         features: fields.features.filter(f => f.trim()),
         isActive: fields.isActive,
       }, plan.key)
@@ -518,13 +556,15 @@ function NewPlanCard() {
     currency: 'USD',
     maxMembers: '',
     storeEnabled: false,
+    demoEnabled: false,
+    trialEnabled: false,
     features: [''],
     isActive: true,
   })
 
   function resetForm() {
     setPlanKey('')
-    setFields({ label: '', price: '0', currency: 'USD', maxMembers: '', storeEnabled: false, features: [''], isActive: true })
+    setFields({ label: '', price: '0', currency: 'USD', maxMembers: '', storeEnabled: false, demoEnabled: false, trialEnabled: false, features: [''], isActive: true })
     setError(null)
   }
 
@@ -540,6 +580,8 @@ function NewPlanCard() {
         currency: fields.currency,
         maxMembers: fields.maxMembers === '' ? null : parseInt(fields.maxMembers),
         storeEnabled: fields.storeEnabled,
+        demoEnabled: fields.demoEnabled,
+        trialEnabled: fields.trialEnabled,
         features: fields.features.filter(f => f.trim()),
       })
       if (res.error) { setError(res.error) }

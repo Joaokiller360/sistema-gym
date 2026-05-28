@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { Check, Star } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { DemoRequestModal } from './DemoRequestModal'
 
 export interface SubscriptionPlanPublic {
   id: string
@@ -12,6 +14,8 @@ export interface SubscriptionPlanPublic {
   currency: string
   maxMembers: number | null
   storeEnabled: boolean
+  demoEnabled: boolean
+  trialEnabled: boolean
   features: string[]
   isActive: boolean
   sortOrder: number
@@ -28,15 +32,6 @@ export interface SubscriptionPlanPublic {
 function isBenefit(f: string) { return f.startsWith('★') }
 function featureText(f: string) { return f.replace(/^★\s*/, '') }
 
-function CtaLink({ href, className, style, children }: {
-  href: string; className: string; style?: React.CSSProperties; children: React.ReactNode
-}) {
-  if (href.startsWith('http')) {
-    return <a href={href} target="_blank" rel="noopener noreferrer" className={className} style={style}>{children}</a>
-  }
-  return <Link href={href} className={className} style={style}>{children}</Link>
-}
-
 export function PricingSection({ plans, primaryColor, ctaUrl }: {
   plans: SubscriptionPlanPublic[]
   primaryColor: string
@@ -44,7 +39,19 @@ export function PricingSection({ plans, primaryColor, ctaUrl }: {
 }) {
   if (plans.length === 0) return null
 
+  const router = useRouter()
   const [yearly, setYearly] = useState(false)
+  const [modalPlan, setModalPlan] = useState<SubscriptionPlanPublic | null>(null)
+
+  function handleCtaClick(plan: SubscriptionPlanPublic) {
+    if (plan.trialEnabled) {
+      setModalPlan(plan)
+    } else if (ctaUrl.startsWith('http')) {
+      window.open(ctaUrl, '_blank', 'noopener,noreferrer')
+    } else {
+      router.push(ctaUrl)
+    }
+  }
 
   const hasYearly = plans.some(p => p.yearlyPrice != null && Number(p.yearlyPrice) > 0)
   const midIdx = Math.floor(plans.length / 2)
@@ -241,16 +248,19 @@ export function PricingSection({ plans, primaryColor, ctaUrl }: {
                   ))}
                 </ul>
 
-                <CtaLink
-                  href={ctaUrl}
+                <button
+                  onClick={() => handleCtaClick(plan)}
                   className={featured
                     ? 'block w-full text-center rounded-xl py-3 text-sm font-bold transition-all hover:opacity-90 active:scale-95'
                     : 'block w-full text-center rounded-xl py-3 text-sm font-bold transition-all bg-zinc-200 dark:bg-white/[0.06] text-zinc-700 dark:text-white hover:bg-zinc-300 dark:hover:bg-white/[0.1] border border-zinc-300 dark:border-white/10'
                   }
                   style={featured ? { background: primaryColor, color: '#000' } : undefined}
                 >
-                  {Number(plan.price) === 0 ? 'Comenzar gratis' : 'Comenzar ahora'}
-                </CtaLink>
+                  {plan.trialEnabled
+                    ? 'Probar 1 mes gratis'
+                    : Number(plan.price) === 0 ? 'Comenzar gratis' : 'Comenzar ahora'
+                  }
+                </button>
               </div>
             )
           })}
@@ -258,6 +268,15 @@ export function PricingSection({ plans, primaryColor, ctaUrl }: {
 
         <p className="text-center text-xs text-zinc-400 dark:text-white/20">Sin tarjeta de crédito requerida · Cancela cuando quieras</p>
       </div>
+
+      {modalPlan && (
+        <DemoRequestModal
+          open={!!modalPlan}
+          onClose={() => setModalPlan(null)}
+          plan={modalPlan}
+          primaryColor={primaryColor}
+        />
+      )}
     </section>
   )
 }
