@@ -292,6 +292,7 @@ export class SuperAdminService {
           subscriptionExpiresAt: newExpiry,
           subscriptionGraceEndsAt: newGraceEnd,
           isActive: true,
+          advancedReportsEnabled: newPlan.advancedReportsEnabled,
         },
         select: {
           id: true,
@@ -299,6 +300,7 @@ export class SuperAdminService {
           subscriptionStatus: true,
           subscriptionExpiresAt: true,
           subscriptionGraceEndsAt: true,
+          advancedReportsEnabled: true,
         },
       }),
     ]);

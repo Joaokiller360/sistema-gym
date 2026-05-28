@@ -98,11 +98,12 @@ model Gym {
   timezone         String   @default("UTC")
   currency         String   @default("USD")
   schedule         Json?
-  subscriptionPlan String   @default("BASIC")
+  subscriptionPlan        String   @default("BASIC")
   subscriptionStatus      GymSubscriptionStatus @default(ACTIVE)
   subscriptionExpiresAt   DateTime?
   subscriptionGraceEndsAt DateTime?
   trialEndsAt             DateTime?
+  advancedReportsEnabled  Boolean  @default(false)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -455,8 +456,9 @@ model SubscriptionPlan {
   discountPercent Int?
   discountActive  Boolean  @default(false)
   yearlyPrice     Int?
-  demoEnabled     Boolean  @default(false)
-  trialEnabled    Boolean  @default(false)
+  demoEnabled             Boolean  @default(false)
+  trialEnabled            Boolean  @default(false)
+  advancedReportsEnabled  Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

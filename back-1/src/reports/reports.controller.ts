@@ -37,4 +37,9 @@ export class ReportsController {
   classes(@Req() req: any, @Query() query: any) {
     return this.reportsService.classes(this.resolveGymId(req, query), query);
   }
+
+  @Get('advanced')
+  advanced(@Req() req: any, @Query() query: any) {
+    return this.reportsService.advanced(this.resolveGymId(req, query), query, req.user.role);
+  }
 }

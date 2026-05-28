@@ -36,6 +36,7 @@ interface SubscriptionPlan {
   storeEnabled: boolean
   demoEnabled: boolean
   trialEnabled: boolean
+  advancedReportsEnabled: boolean
   features: string[]
   isActive: boolean
   sortOrder: number
@@ -72,6 +73,7 @@ interface PlanFormFields {
   storeEnabled: boolean
   demoEnabled: boolean
   trialEnabled: boolean
+  advancedReportsEnabled: boolean
   features: string[]
   isActive: boolean
 }
@@ -246,6 +248,20 @@ function PlanFormBody({
         </button>
       </div>
 
+      <div className="flex items-center justify-between">
+        <div>
+          <label className="text-xs font-bold uppercase tracking-widest text-zinc-400 block">Reportes avanzados</label>
+          <p className="text-xs text-zinc-400 mt-0.5">Activa el panel de reportes avanzados en el dashboard del gym</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange({ ...fields, advancedReportsEnabled: !fields.advancedReportsEnabled })}
+          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${fields.advancedReportsEnabled ? 'bg-violet-500' : 'bg-zinc-200'}`}
+        >
+          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${fields.advancedReportsEnabled ? 'translate-x-4' : 'translate-x-1'}`} />
+        </button>
+      </div>
+
       <div>
         <div className="flex items-center justify-between mb-2">
           <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Características</label>
@@ -292,6 +308,7 @@ function EditPlanCard({ plan }: { plan: SubscriptionPlan }) {
     storeEnabled: plan.storeEnabled ?? false,
     demoEnabled: plan.demoEnabled ?? false,
     trialEnabled: plan.trialEnabled ?? false,
+    advancedReportsEnabled: plan.advancedReportsEnabled ?? false,
     features: plan.features as string[],
     isActive: plan.isActive,
   })
@@ -305,6 +322,7 @@ function EditPlanCard({ plan }: { plan: SubscriptionPlan }) {
       storeEnabled: plan.storeEnabled ?? false,
       demoEnabled: plan.demoEnabled ?? false,
       trialEnabled: plan.trialEnabled ?? false,
+      advancedReportsEnabled: plan.advancedReportsEnabled ?? false,
       features: plan.features as string[],
       isActive: plan.isActive,
     })
@@ -323,6 +341,7 @@ function EditPlanCard({ plan }: { plan: SubscriptionPlan }) {
         storeEnabled: fields.storeEnabled,
         demoEnabled: fields.demoEnabled,
         trialEnabled: fields.trialEnabled,
+        advancedReportsEnabled: fields.advancedReportsEnabled,
         features: fields.features.filter(f => f.trim()),
         isActive: fields.isActive,
       }, plan.key)
@@ -415,6 +434,11 @@ function EditPlanCard({ plan }: { plan: SubscriptionPlan }) {
         {plan.storeEnabled && (
           <p className="text-xs font-bold text-[#1fad9d] bg-[#1fad9d]/10 rounded-full px-2.5 py-1 w-fit">
             🏪 Tienda incluida
+          </p>
+        )}
+        {plan.advancedReportsEnabled && (
+          <p className="text-xs font-bold text-violet-600 bg-violet-50 border border-violet-200 rounded-full px-2.5 py-1 w-fit">
+            📊 Reportes avanzados
           </p>
         )}
         <ul className="space-y-1.5">
@@ -558,13 +582,14 @@ function NewPlanCard() {
     storeEnabled: false,
     demoEnabled: false,
     trialEnabled: false,
+    advancedReportsEnabled: false,
     features: [''],
     isActive: true,
   })
 
   function resetForm() {
     setPlanKey('')
-    setFields({ label: '', price: '0', currency: 'USD', maxMembers: '', storeEnabled: false, demoEnabled: false, trialEnabled: false, features: [''], isActive: true })
+    setFields({ label: '', price: '0', currency: 'USD', maxMembers: '', storeEnabled: false, demoEnabled: false, trialEnabled: false, advancedReportsEnabled: false, features: [''], isActive: true })
     setError(null)
   }
 
@@ -582,6 +607,7 @@ function NewPlanCard() {
         storeEnabled: fields.storeEnabled,
         demoEnabled: fields.demoEnabled,
         trialEnabled: fields.trialEnabled,
+        advancedReportsEnabled: fields.advancedReportsEnabled,
         features: fields.features.filter(f => f.trim()),
       })
       if (res.error) { setError(res.error) }

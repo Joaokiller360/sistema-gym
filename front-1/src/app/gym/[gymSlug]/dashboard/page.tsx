@@ -9,6 +9,7 @@ import { Member, Attendance, Plan, Class, Gym } from '@/types'
 import { NewMemberModal } from '../members/NewMemberModal'
 import { NewsSection } from './NewsSection'
 import { TutorialsSection } from './TutorialsSection'
+import { AdvancedReportsSection, type AdvancedReport } from './AdvancedReportsSection'
 
 interface MembersResponse { data: Member[]; total: number }
 interface FinancialReport { totalRevenue: number; currency: string }
@@ -40,19 +41,25 @@ export default async function GymDashboardPage({ params, searchParams }: Props) 
   const now = new Date()
   const qs = `startDate=${startOfDay(now)}&endDate=${endOfDay(now)}`
 
-  const gym = isSuperAdmin
-    ? await apiFetch<Gym>(`/gyms/${gymSlug}`, token)
-    : null
+  const gym = await apiFetch<Gym>(`/gyms/${gymSlug}`, token)
   const gymIdParam = isSuperAdmin && gym ? `&gymId=${gym.id}` : ''
 
   const gymHeader = { headers: { 'x-gym-slug': gymSlug } }
 
-  const [membersRaw, attendanceRaw, , classes, financial] = await Promise.all([
+  const advancedEnabled = isSuperAdmin || (gym?.advancedReportsEnabled ?? false)
+
+  const monthStart = startOfMonth(now)
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
+
+  const [membersRaw, attendanceRaw, , classes, financial, advancedReport] = await Promise.all([
     apiFetch<MembersResponse | Member[]>(`/members?status=active&limit=5`, token, gymHeader),
     apiFetch<Attendance[]>(`/attendance?${qs}`, token, gymHeader),
     apiFetch<Plan[]>(`/plans`, token, gymHeader),
     apiFetch<Class[]>(`/classes`, token, gymHeader),
-    apiFetch<FinancialReport>(`/reports/financial?startDate=${startOfMonth(now)}${gymIdParam}`, token),
+    apiFetch<FinancialReport>(`/reports/financial?startDate=${monthStart}${gymIdParam}`, token),
+    advancedEnabled
+      ? apiFetch<AdvancedReport>(`/reports/advanced?startDate=${monthStart}&endDate=${monthEnd}`, token, gymHeader)
+      : Promise.resolve(null),
   ])
 
   const activeMembers = membersRaw
@@ -142,6 +149,12 @@ export default async function GymDashboardPage({ params, searchParams }: Props) 
           )}
         </div>
       </div>
+
+      <AdvancedReportsSection
+        gymSlug={gymSlug}
+        enabled={advancedEnabled}
+        data={advancedReport}
+      />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <NewsSection canManage={isSuperAdmin} />

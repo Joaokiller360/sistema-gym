@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { buildDateRangeFilter, getTimezone } from '../common/utils/timezone.util';
+import { Role } from '../common/enums/role.enum';
 
 @Injectable()
 export class ReportsService {
@@ -101,4 +102,131 @@ export class ReportsService {
       orderBy: { createdAt: 'desc' },
     });
   }
+
+  async advanced(gymId: string, query: any, userRole: string) {
+    const gym = await this.prisma.gym.findUnique({
+      where: { id: gymId },
+      select: { currency: true, timezone: true, country: true, advancedReportsEnabled: true },
+    });
+
+    if (!gym?.advancedReportsEnabled && userRole !== Role.SUPER_ADMIN) {
+      throw new ForbiddenException('Plan sin acceso a reportes avanzados');
+    }
+
+    const tz = gym?.timezone ?? getTimezone(gym?.country);
+    const now = new Date();
+    const startDate = query.startDate ? new Date(query.startDate) : new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const endDate = query.endDate ? new Date(query.endDate) : now;
+
+    const [payments, activeMemberships, newMembers, churned, expiringNext7Days, attendancesAll, attendancesWeek] =
+      await Promise.all([
+        this.prisma.payment.findMany({
+          where: { gymId, createdAt: { gte: startDate, lte: endDate } },
+          select: { amount: true, createdAt: true },
+        }),
+        this.prisma.membership.findMany({
+          where: { gymId, status: 'ACTIVE' },
+          include: { plan: { select: { name: true } } },
+        }),
+        this.prisma.member.count({ where: { gymId, createdAt: { gte: startDate, lte: endDate } } }),
+        this.prisma.membership.count({
+          where: { gymId, status: { in: ['EXPIRED', 'CANCELLED'] }, updatedAt: { gte: startDate, lte: endDate } },
+        }),
+        this.prisma.membership.count({
+          where: { gymId, status: 'ACTIVE', endDate: { gte: now, lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000) } },
+        }),
+        this.prisma.$queryRaw<{ dow: number; cnt: bigint }[]>`
+          SELECT EXTRACT(DOW FROM check_in)::int AS dow, COUNT(*)::bigint AS cnt
+          FROM attendances WHERE gym_id = ${gymId}
+          GROUP BY dow ORDER BY cnt DESC LIMIT 1
+        `,
+        this.prisma.attendance.findMany({
+          where: { gymId, checkIn: { gte: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) } },
+          select: { checkIn: true },
+        }),
+      ]);
+
+    const peakHourResult = await this.prisma.$queryRaw<{ hr: number; cnt: bigint }[]>`
+      SELECT EXTRACT(HOUR FROM check_in)::int AS hr, COUNT(*)::bigint AS cnt
+      FROM attendances WHERE gym_id = ${gymId}
+      GROUP BY hr ORDER BY cnt DESC LIMIT 1
+    `;
+
+    // revenueTrend — weekly buckets
+    const rangeDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000));
+    const revenueTrend = buildRevenueTrend(payments, startDate, endDate, rangeDays);
+
+    // membersByPlan
+    const totalActive = activeMemberships.length;
+    const byPlanMap = new Map<string, number>();
+    for (const m of activeMemberships) byPlanMap.set(m.plan.name, (byPlanMap.get(m.plan.name) ?? 0) + 1);
+    const membersByPlan = Array.from(byPlanMap.entries()).map(([planName, count]) => ({
+      planName,
+      count,
+      percent: totalActive > 0 ? Math.round((count / totalActive) * 100) : 0,
+    }));
+
+    // attendanceTrend — last 7 days
+    const attendanceTrend = buildAttendanceTrend(attendancesWeek, now);
+
+    const DAYS_ES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const peakDay = attendancesAll[0] ? (DAYS_ES[Number(attendancesAll[0].dow)] ?? null) : null;
+    const peakHour = peakHourResult[0] ? `${String(Number(peakHourResult[0].hr)).padStart(2, '0')}:00` : null;
+
+    return {
+      revenueTrend,
+      membersByPlan,
+      attendanceTrend,
+      newMembers,
+      churned,
+      expiringNext7Days,
+      peakDay,
+      peakHour,
+      currency: gym?.currency ?? 'USD',
+    };
+  }
+}
+
+function buildRevenueTrend(
+  payments: { amount: number; createdAt: Date }[],
+  startDate: Date,
+  endDate: Date,
+  rangeDays: number,
+): { label: string; amount: number }[] {
+  const byDay = rangeDays <= 14;
+  const buckets = new Map<string, number>();
+
+  for (const p of payments) {
+    let label: string;
+    if (byDay) {
+      const d = p.createdAt;
+      label = `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    } else {
+      const weekNum = Math.floor((p.createdAt.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
+      label = `S${weekNum}`;
+    }
+    buckets.set(label, (buckets.get(label) ?? 0) + Number(p.amount));
+  }
+
+  return Array.from(buckets.entries()).map(([label, amount]) => ({ label, amount }));
+}
+
+function buildAttendanceTrend(
+  attendances: { checkIn: Date }[],
+  now: Date,
+): { label: string; count: number }[] {
+  const DAYS_ES_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const buckets = new Map<string, number>();
+
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+    buckets.set(DAYS_ES_SHORT[d.getUTCDay()], 0);
+  }
+
+  for (const a of attendances) {
+    const label = DAYS_ES_SHORT[a.checkIn.getUTCDay()];
+    if (buckets.has(label)) buckets.set(label, (buckets.get(label) ?? 0) + 1);
+  }
+
+  return Array.from(buckets.entries()).map(([label, count]) => ({ label, count }));
 }
