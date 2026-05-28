@@ -20,7 +20,7 @@ export class CreateNewsDto {
   @IsString()
   @MinLength(10)
   @MaxLength(5000)
-  body: string;
+  content: string;
 
   @IsOptional()
   @IsSafeUrl({ message: 'imageUrl debe ser una URL https válida y no puede apuntar a direcciones internas' })

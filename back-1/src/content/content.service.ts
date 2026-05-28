@@ -22,13 +22,17 @@ export class ContentService {
   // ── News ────────────────────────────────────────────────────
 
   async findAllNews() {
-    return this.prisma.newsPost.findMany({ orderBy: { publishedAt: 'desc' } });
+    const posts = await this.prisma.newsPost.findMany({ orderBy: { publishedAt: 'desc' } });
+    return posts.map(({ body, ...rest }) => ({ ...rest, content: body }));
   }
 
   async createNews(dto: CreateNewsDto) {
-    const post = await this.prisma.newsPost.create({ data: dto });
+    const post = await this.prisma.newsPost.create({
+      data: { title: dto.title, body: dto.content, imageUrl: dto.imageUrl },
+    });
     await this.notifyGymOwners('news', post.title, post.body, post.imageUrl ?? undefined);
-    return post;
+    const { body, ...rest } = post;
+    return { ...rest, content: body };
   }
 
   async removeNews(id: string) {
