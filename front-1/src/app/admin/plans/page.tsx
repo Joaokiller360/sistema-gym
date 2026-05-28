@@ -12,6 +12,7 @@ interface SubscriptionPlan {
   storeEnabled: boolean
   demoEnabled: boolean
   trialEnabled: boolean
+  advancedReportsEnabled: boolean
   features: string[]
   isActive: boolean
   sortOrder: number
