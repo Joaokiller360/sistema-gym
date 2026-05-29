@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { cookies } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
+import { unstable_cache } from 'next/cache'
 import { verifyToken } from '@/lib/auth'
 import { apiFetch } from '@/lib/api'
 import { GymSidebar } from '@/components/gym/GymSidebar'
@@ -14,13 +15,21 @@ interface Props {
   params: Promise<{ gymSlug: string }>
 }
 
+// Cached at server level — platform settings are global, same for all users.
+// token excluded from cache key intentionally so all users share one cached value.
+const getCachedPlatformSettings = unstable_cache(
+  (token: string) => apiFetch<PlatformSettings>('/platform-settings', token, { silent: true }),
+  ['platform-settings'],
+  { revalidate: 300, tags: ['platform-settings'] },
+)
+
 export async function generateMetadata({ params }: { params: Promise<{ gymSlug: string }> }): Promise<Metadata> {
   const { gymSlug } = await params
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value ?? ''
   const [gym, platform] = await Promise.all([
     apiFetch<Gym>(`/gyms/${gymSlug}`, token, { next: { tags: [`gym-${gymSlug}`] } }),
-    apiFetch<PlatformSettings>('/platform-settings', token, { next: { tags: ['platform-settings'], revalidate: 300 } }),
+    getCachedPlatformSettings(token),
   ])
   const saasName = platform?.saasName ?? 'GymOS'
   const name = gym?.name ?? gymSlug
@@ -40,14 +49,14 @@ export default async function GymLayout({ children, params }: Props) {
   const isSuperAdmin = session.role === 'SUPER_ADMIN'
   const gymRoles = ['GYM_OWNER', 'GYM_ADMIN', 'TRAINER', 'RECEPTIONIST']
   if (!isSuperAdmin && !gymRoles.includes(session.role)) notFound()
-  // All non-superadmin roles are restricted to their assigned gym
-  if (!isSuperAdmin && session.gymSlug !== gymSlug) notFound()
 
   const gym = await apiFetch<Gym>(`/gyms/${gymSlug}`, token, {
     next: { tags: [`gym-${gymSlug}`] },
   })
 
   if (!gym) notFound()
+  // Use gymId (not slug) so auth survives slug renames without re-login
+  if (!isSuperAdmin && session.gymId !== gym.id) notFound()
 
   const gymName = gym.name
 

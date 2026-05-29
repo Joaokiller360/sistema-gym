@@ -1,5 +1,5 @@
 import { Controller, Post, Get, Patch, Body, HttpCode, HttpStatus, UseGuards, Req, BadRequestException } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
@@ -36,12 +36,14 @@ export class AuthController {
   }
 
   @Get('me')
+  @SkipThrottle()
   @UseGuards(JwtAuthGuard)
   getMe(@Req() req: any) {
     return this.authService.getMe(req.user.userId);
   }
 
   @Patch('me')
+  @SkipThrottle()
   @UseGuards(JwtAuthGuard)
   updateMe(@Req() req: any, @Body() body: { name?: string; email?: string }) {
     return this.authService.updateMe(req.user.userId, body);

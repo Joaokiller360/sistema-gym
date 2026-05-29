@@ -1,4 +1,6 @@
 import { cookies } from 'next/headers'
+import Link from 'next/link'
+import { BarChart2 } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
 import { verifyToken } from '@/lib/auth'
 import { Gym } from '@/types'
@@ -64,20 +66,17 @@ export default async function ReportsPage({ params, searchParams }: Props) {
   const gym = await apiFetch<Gym>(`/gyms/${gymSlug}`, token)
   const gymIdParam = isSuperAdmin && gym ? `&gymId=${gym.id}` : ''
   const storeEnabled = gym?.storeEnabled ?? false
+  const advancedEnabled = isSuperAdmin || (gym?.advancedReportsEnabled ?? false)
 
   const [financial, retention, attendance, storeSales, pendingCredits] = await Promise.all([
     apiFetch<FinancialReport>(`/reports/financial?startDate=${startDate}&endDate=${endDate}${gymIdParam}`, token),
     apiFetch<RetentionReport>(`/reports/retention${isSuperAdmin && gym ? `?gymId=${gym.id}` : ''}`, token),
     apiFetch<AttendanceReport>(`/reports/attendance?startDate=${startDate}&endDate=${endDate}${gymIdParam}`, token),
     storeEnabled
-      ? apiFetch<StoreCutSummary>(`/store/cuts/monthly?month=${monthParam}`, token, {
-          headers: { 'x-gym-slug': gymSlug },
-        })
+      ? apiFetch<StoreCutSummary>(`/store/cuts/monthly?month=${monthParam}`, token, { headers: { 'x-gym-slug': gymSlug } })
       : Promise.resolve(null),
     storeEnabled
-      ? apiFetch<PendingCredit[]>('/store/credits', token, {
-          headers: { 'x-gym-slug': gymSlug },
-        }).then(r => r ?? [])
+      ? apiFetch<PendingCredit[]>('/store/credits', token, { headers: { 'x-gym-slug': gymSlug } }).then(r => r ?? [])
       : Promise.resolve([]),
   ])
 
@@ -85,9 +84,22 @@ export default async function ReportsPage({ params, searchParams }: Props) {
 
   return (
     <div className="p-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Reportes</h1>
-        <p className="text-muted-foreground text-sm mt-1 capitalize">{monthStr}</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Reportes</h1>
+          <p className="text-muted-foreground text-sm mt-1 capitalize">{monthStr}</p>
+        </div>
+        <Link
+          href={`/gym/${gymSlug}/reports/advanced`}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all ${
+            advancedEnabled
+              ? 'bg-violet-600 text-white hover:bg-violet-700 shadow-sm'
+              : 'bg-zinc-100 text-zinc-400 hover:bg-zinc-200'
+          }`}
+        >
+          <BarChart2 className="h-4 w-4" />
+          Reportes Avanzados
+        </Link>
       </div>
 
       <ReportsTabs

@@ -56,21 +56,23 @@ export async function updateGymSettingsAction(
   gymSlug: string,
   data: SettingsInput,
   gymId?: string,
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; newSlug?: string }> {
   const parsed = settingsSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
 
   const token = await getToken()
   const endpoint = gymId ? `/gyms/${gymId}` : `/gyms`
-  const result = await apiFetch(endpoint, token, {
+  const result = await apiFetchWithError<{ slug?: string }>(endpoint, token, {
     method: 'PATCH',
     body: JSON.stringify(parsed.data),
   })
 
-  if (!result) return { error: 'Error al guardar los cambios' }
+  if ('error' in result) return { error: result.error }
 
   updateTag(`gym-${gymSlug}`)
-  return {}
+  const newSlug = result.data.slug
+  if (newSlug && newSlug !== gymSlug) updateTag(`gym-${newSlug}`)
+  return { newSlug }
 }
 
 const changePasswordSchema = z.object({

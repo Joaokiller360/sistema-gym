@@ -1,11 +1,14 @@
 import { Controller, Get, Query, Req, UseGuards, BadRequestException } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { ReportsService } from './reports.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { TenantGuard } from '../common/guards/tenant.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
+import { AdvancedReportsGuard } from './guards/advanced-reports.guard';
 
+@SkipThrottle()
 @Controller('reports')
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
 @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN)
@@ -39,7 +42,8 @@ export class ReportsController {
   }
 
   @Get('advanced')
+  @UseGuards(AdvancedReportsGuard)
   advanced(@Req() req: any, @Query() query: any) {
-    return this.reportsService.advanced(this.resolveGymId(req, query), query, req.user.role);
+    return this.reportsService.advanced(this.resolveGymId(req, query), query);
   }
 }

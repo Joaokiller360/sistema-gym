@@ -122,6 +122,9 @@ export function GymSettingsForm({
       toast.error(result.error)
     } else {
       toast.success('Cambios guardados correctamente')
+      if (result.newSlug && result.newSlug !== gymSlug) {
+        window.location.href = `/gym/${result.newSlug}/settings`
+      }
     }
   }
 

@@ -63,8 +63,7 @@ type Tab = typeof TABS_BASE[number] | 'Fiados'
 
 export function ReportsTabs({ gymSlug, financial, retention, attendance, storeSales, storeEnabled, defaultMonth, pendingCredits }: Props) {
   const [active, setActive] = useState<Tab>('Financiero')
-
-  const TABS: readonly Tab[] = storeEnabled ? [...TABS_BASE, 'Fiados'] : TABS_BASE
+  const TABS: readonly Tab[] = [...TABS_BASE, ...(storeEnabled ? (['Fiados'] as const) : [])]
   const router = useRouter()
 
   const membershipRevenue = (financial?.totalRevenue ?? 0) / 100
@@ -94,9 +93,7 @@ export function ReportsTabs({ gymSlug, financial, retention, attendance, storeSa
         <input
           type="month"
           defaultValue={defaultMonth}
-          onChange={e => {
-            if (e.target.value) router.push(`?month=${e.target.value}`)
-          }}
+          onChange={e => { if (e.target.value) router.push(`?month=${e.target.value}`) }}
           className="rounded-md border px-3 py-1.5 text-sm bg-background"
         />
       </div>

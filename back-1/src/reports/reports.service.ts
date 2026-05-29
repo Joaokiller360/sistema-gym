@@ -1,7 +1,6 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { buildDateRangeFilter, getTimezone } from '../common/utils/timezone.util';
-import { Role } from '../common/enums/role.enum';
 
 @Injectable()
 export class ReportsService {
@@ -103,15 +102,11 @@ export class ReportsService {
     });
   }
 
-  async advanced(gymId: string, query: any, userRole: string) {
+  async advanced(gymId: string, query: any) {
     const gym = await this.prisma.gym.findUnique({
       where: { id: gymId },
-      select: { currency: true, timezone: true, country: true, advancedReportsEnabled: true },
+      select: { currency: true, timezone: true, country: true },
     });
-
-    if (!gym?.advancedReportsEnabled && userRole !== Role.SUPER_ADMIN) {
-      throw new ForbiddenException('Plan sin acceso a reportes avanzados');
-    }
 
     const tz = gym?.timezone ?? getTimezone(gym?.country);
     const now = new Date();

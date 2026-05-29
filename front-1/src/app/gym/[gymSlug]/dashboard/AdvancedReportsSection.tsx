@@ -1,4 +1,4 @@
-import { BarChart2, Lock, Users, TrendingUp, UserMinus, Clock, AlertTriangle } from 'lucide-react'
+import { BarChart2, Users, TrendingUp, UserMinus, Clock, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
 
 export interface AdvancedReport {
@@ -15,7 +15,6 @@ export interface AdvancedReport {
 
 interface Props {
   gymSlug: string
-  enabled: boolean
   data: AdvancedReport | null
 }
 
@@ -60,31 +59,7 @@ function RevenueBarChart({ data, currency }: { data: { label: string; amount: nu
   )
 }
 
-export function AdvancedReportsSection({ gymSlug, enabled, data }: Props) {
-  if (!enabled) {
-    return (
-      <div className="rounded-2xl border-2 border-dashed border-violet-200 bg-violet-50/50 overflow-hidden">
-        <div className="flex flex-col items-center justify-center py-14 px-6 text-center gap-4">
-          <div className="h-14 w-14 rounded-2xl bg-violet-100 flex items-center justify-center">
-            <Lock className="h-6 w-6 text-violet-400" />
-          </div>
-          <div>
-            <p className="font-black text-base text-zinc-800">Reportes Avanzados</p>
-            <p className="text-sm text-zinc-500 mt-1 max-w-xs">
-              Tendencias de ingresos, distribución por plan, pico de asistencia y más. Disponible en planes superiores.
-            </p>
-          </div>
-          <Link
-            href="/admin/plans"
-            className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-violet-700 transition-colors"
-          >
-            Ver planes disponibles
-          </Link>
-        </div>
-      </div>
-    )
-  }
-
+export function AdvancedReportsSection({ gymSlug, data }: Props) {
   if (!data) {
     return (
       <div className="rounded-2xl border border-zinc-200 bg-white p-6 flex items-center gap-3 text-sm text-zinc-400">
