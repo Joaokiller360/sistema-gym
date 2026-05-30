@@ -64,6 +64,7 @@ const createGymSchema = z.object({
   logoUrl: safePublicUrl().optional().or(z.literal('')),
   subscriptionPlan: z.string().optional(),
   owner: ownerSchema.optional(),
+  advancedReportsEnabled: z.boolean().optional(),
 })
 
 export type CreateGymInput = z.infer<typeof createGymSchema>

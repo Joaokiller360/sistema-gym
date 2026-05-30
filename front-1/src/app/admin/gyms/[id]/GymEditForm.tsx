@@ -2,9 +2,10 @@
 
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Camera, Pencil, X, Trash2 } from 'lucide-react'
+import { Camera, Pencil, X, Trash2, BarChart2 } from 'lucide-react'
 import { updateGymAction, deleteGymAction, updateGymOwnerAction, uploadGymLogoAction } from '../actions'
 import { createHandlers } from '@/lib/input-validation'
+import { Switch } from '@/components/ui/switch'
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -32,12 +33,13 @@ interface Props {
   defaultSlug: string
   defaultPlan: string
   defaultLogoUrl?: string | null
+  defaultAdvancedReports: boolean
   ownerName?: string
   ownerEmail?: string
   hasOwner: boolean
 }
 
-export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, defaultLogoUrl, ownerName, ownerEmail, hasOwner }: Props) {
+export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, defaultLogoUrl, defaultAdvancedReports, ownerName, ownerEmail, hasOwner }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -74,6 +76,7 @@ export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, defa
   const [name, setName] = useState(defaultName)
   const [slug, setSlug] = useState(defaultSlug)
   const [plan, setPlan] = useState(defaultPlan)
+  const [advancedReports, setAdvancedReports] = useState(defaultAdvancedReports)
   const [newOwnerName, setNewOwnerName] = useState(ownerName ?? '')
   const [newOwnerEmail, setNewOwnerEmail] = useState(ownerEmail ?? '')
   const [newOwnerPassword, setNewOwnerPassword] = useState('')
@@ -83,7 +86,7 @@ export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, defa
     if (!name.trim() || !slug.trim()) { setError('Nombre y slug requeridos'); return }
     setError(null)
     startTransition(async () => {
-      const gymRes = await updateGymAction(gymId, { name, slug, subscriptionPlan: plan || undefined })
+      const gymRes = await updateGymAction(gymId, { name, slug, subscriptionPlan: plan || undefined, advancedReportsEnabled: advancedReports })
       if (gymRes?.error) { setError(gymRes.error); return }
 
       if (hasOwner && (newOwnerName !== ownerName || newOwnerEmail !== ownerEmail || newOwnerPassword)) {
@@ -225,6 +228,23 @@ export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, defa
               </button>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* Features */}
+      <div className="space-y-3 pt-2 border-t border-zinc-100">
+        <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">Funcionalidades</p>
+        <div className={`flex items-center justify-between rounded-xl border px-4 py-3 transition-colors ${advancedReports ? 'border-violet-200 bg-violet-50' : 'border-zinc-200 bg-zinc-50'}`}>
+          <div className="flex items-center gap-3">
+            <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${advancedReports ? 'bg-violet-100' : 'bg-zinc-100'}`}>
+              <BarChart2 className={`h-3.5 w-3.5 ${advancedReports ? 'text-violet-600' : 'text-zinc-400'}`} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-zinc-700">Reportes Avanzados</p>
+              <p className="text-xs text-zinc-400">Tendencias, comparativas y análisis de retención</p>
+            </div>
+          </div>
+          <Switch checked={advancedReports} onCheckedChange={setAdvancedReports} disabled={isPending} />
         </div>
       </div>
 

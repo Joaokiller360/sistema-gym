@@ -111,6 +111,15 @@ export default async function GymDetailPage({ params }: Props) {
         {gym.address && <Row label="Dirección" value={gym.address} />}
         {gym.country && <Row label="País" value={`${gym.country}${gym.timezone && gym.timezone !== 'UTC' ? ` · ${gym.timezone}` : ''}`} />}
         <Row label="Creado" value={new Date(gym.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })} />
+        <Row label="Reportes Avanzados" value={
+          gym.advancedReportsEnabled
+            ? <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-violet-700 bg-violet-50 px-2.5 py-1 rounded-full border border-violet-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-violet-500 inline-block" /> Activo
+              </span>
+            : <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-400 bg-zinc-100 px-2.5 py-1 rounded-full">
+                <span className="h-1.5 w-1.5 rounded-full bg-zinc-300 inline-block" /> Inactivo
+              </span>
+        } />
       </div>
 
       <div className='flex gap-3 flex-col lg:flex-row'>
@@ -124,6 +133,7 @@ export default async function GymDetailPage({ params }: Props) {
           defaultSlug={gym.slug}
           defaultPlan={gym.subscriptionPlan}
           defaultLogoUrl={gymLogoUrl}
+          defaultAdvancedReports={gym.advancedReportsEnabled}
           ownerName={gym.owner?.name}
           ownerEmail={gym.owner?.email}
           hasOwner={!!gym.owner}

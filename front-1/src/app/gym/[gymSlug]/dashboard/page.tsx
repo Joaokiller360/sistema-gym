@@ -46,7 +46,7 @@ export default async function GymDashboardPage({ params, searchParams }: Props) 
 
   const gymHeader = { headers: { 'x-gym-slug': gymSlug } }
 
-  const advancedEnabled = isSuperAdmin || (gym?.advancedReportsEnabled ?? false)
+  const advancedEnabled = gym?.advancedReportsEnabled ?? false
 
   const monthStart = startOfMonth(now)
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()

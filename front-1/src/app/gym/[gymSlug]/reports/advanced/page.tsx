@@ -1,9 +1,7 @@
 import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import {
-  ChevronRight, BarChart2, Lock, TrendingUp,
-  Users, UserMinus, AlertTriangle, Clock, Zap,
-} from 'lucide-react'
+import { ChevronRight, BarChart2, Users, UserMinus, AlertTriangle, Clock } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
 import { verifyToken } from '@/lib/auth'
 import { Gym } from '@/types'
@@ -62,62 +60,6 @@ function AttendanceBar({ data }: { data: { label: string; count: number }[] }) {
   )
 }
 
-function LockedPage({ gymSlug }: { gymSlug: string }) {
-  const FEATURES = [
-    { icon: TrendingUp,    label: 'Tendencia de ingresos semana a semana' },
-    { icon: Users,         label: 'Distribución de miembros por plan' },
-    { icon: UserMinus,     label: 'Altas y bajas del período' },
-    { icon: BarChart2,     label: 'Comparativa vs mes anterior' },
-    { icon: Clock,         label: 'Horario y día pico de asistencia' },
-    { icon: AlertTriangle, label: 'Membresías próximas a vencer' },
-  ]
-  return (
-    <div className="p-6 lg:p-8">
-      <div className="flex items-center gap-1.5 text-xs text-zinc-400 mb-10">
-        <Link href={`/gym/${gymSlug}/reports`} className="hover:text-zinc-700 transition-colors font-medium">
-          Reportes
-        </Link>
-        <ChevronRight className="h-3 w-3" />
-        <span className="text-zinc-700 font-medium">Avanzados</span>
-      </div>
-
-      <div className="max-w-lg mx-auto mt-12 flex flex-col items-center gap-8 text-center">
-        <div className="relative">
-          <div className="h-24 w-24 rounded-3xl bg-gradient-to-br from-violet-100 to-violet-50 border border-violet-100 flex items-center justify-center">
-            <BarChart2 className="h-12 w-12 text-violet-400" />
-          </div>
-          <div className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full bg-zinc-900 flex items-center justify-center border-2 border-white">
-            <Lock className="h-3.5 w-3.5 text-white" />
-          </div>
-        </div>
-
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Reportes Avanzados</h1>
-          <p className="text-zinc-400 mt-2 text-sm leading-relaxed max-w-sm">
-            Análisis profundo de tu gimnasio. Ingresos, retención, asistencia y tendencias comparativas mes a mes.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-left w-full">
-          {FEATURES.map(({ icon: Icon, label }) => (
-            <div key={label} className="flex items-start gap-3 rounded-xl border border-zinc-100 bg-white p-3.5">
-              <div className="h-7 w-7 rounded-lg bg-violet-50 flex items-center justify-center shrink-0 mt-0.5">
-                <Icon className="h-3.5 w-3.5 text-violet-500" />
-              </div>
-              <span className="text-xs text-zinc-600 leading-snug">{label}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-500">
-          <Zap className="h-4 w-4 text-zinc-400 shrink-0" />
-          Contactá al administrador para activar esta función en tu plan
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export default async function AdvancedReportsPage({ params, searchParams }: Props) {
   const { gymSlug } = await params
   const { month } = await searchParams
@@ -127,6 +69,10 @@ export default async function AdvancedReportsPage({ params, searchParams }: Prop
   const session = await verifyToken(token)
   const isSuperAdmin = session?.role === 'SUPER_ADMIN'
 
+  const gym = await apiFetch<Gym>(`/gyms/${gymSlug}`, token)
+
+  if (!isSuperAdmin && !gym?.advancedReportsEnabled) redirect(`/gym/${gymSlug}/reports`)
+
   const now = new Date()
   const targetMonth = month ? new Date(month + '-01') : now
   const startDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), 1).toISOString()
@@ -134,11 +80,6 @@ export default async function AdvancedReportsPage({ params, searchParams }: Prop
   const prevMonthDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth() - 1, 1)
   const prevStartDate = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth(), 1).toISOString()
   const prevEndDate = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth() + 1, 0, 23, 59, 59).toISOString()
-
-  const gym = await apiFetch<Gym>(`/gyms/${gymSlug}`, token)
-  const advancedEnabled = isSuperAdmin || (gym?.advancedReportsEnabled ?? false)
-
-  if (!advancedEnabled) return <LockedPage gymSlug={gymSlug} />
 
   const gymHeader = { headers: { 'x-gym-slug': gymSlug } }
   const [current, previous] = await Promise.all([

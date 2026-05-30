@@ -11,11 +11,13 @@ export class AdvancedReportsGuard implements CanActivate {
 
     if (user?.role === 'SUPER_ADMIN') return true;
 
-    const gymId = req.gymId;
-    if (!gymId) throw new ForbiddenException('Gym no identificado');
+    const gymSlug =
+      (req.headers['x-gym-slug'] as string | undefined) ?? user?.gymSlug;
+
+    if (!gymSlug) throw new ForbiddenException('Gym no identificado');
 
     const gym = await this.prisma.gym.findUnique({
-      where: { id: gymId },
+      where: { slug: gymSlug },
       select: { advancedReportsEnabled: true },
     });
 

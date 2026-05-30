@@ -42,7 +42,7 @@ export class ReportsController {
   }
 
   @Get('advanced')
-  @UseGuards(AdvancedReportsGuard)
+  @UseGuards(JwtAuthGuard, AdvancedReportsGuard)
   advanced(@Req() req: any, @Query() query: any) {
     return this.reportsService.advanced(this.resolveGymId(req, query), query);
   }
