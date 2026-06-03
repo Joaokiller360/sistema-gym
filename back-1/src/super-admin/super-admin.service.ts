@@ -53,10 +53,18 @@ export class SuperAdminService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAllGyms() {
-    return this.prisma.gym.findMany({
+    const gyms = await this.prisma.gym.findMany({
       include: { owner: { select: { id: true, email: true, name: true } } },
       orderBy: { createdAt: 'desc' },
     });
+    const plans = await this.prisma.subscriptionPlan.findMany({
+      select: { key: true, advancedReportsEnabled: true },
+    });
+    const planMap = new Map(plans.map(p => [p.key, p]));
+    return gyms.map(g => ({
+      ...g,
+      advancedReportsEnabled: g.advancedReportsEnabled || (planMap.get(g.subscriptionPlan)?.advancedReportsEnabled ?? false),
+    }));
   }
 
   async findGymById(id: string) {
@@ -65,7 +73,14 @@ export class SuperAdminService {
       include: { owner: { select: { id: true, email: true, name: true } } },
     });
     if (!gym) throw new NotFoundException('Gym not found');
-    return gym;
+    const plan = await this.prisma.subscriptionPlan.findFirst({
+      where: { key: gym.subscriptionPlan },
+      select: { advancedReportsEnabled: true },
+    });
+    return {
+      ...gym,
+      advancedReportsEnabled: gym.advancedReportsEnabled || (plan?.advancedReportsEnabled ?? false),
+    };
   }
 
   async createGym(data: any) {
@@ -567,6 +582,14 @@ export class SuperAdminService {
     if (data.price !== undefined) payload.price = Math.round(Number(data.price) * 100);
     if (data.yearlyPrice !== undefined) payload.yearlyPrice = Math.round(Number(data.yearlyPrice) * 100);
     const plan = await this.prisma.subscriptionPlan.update({ where: { id }, data: payload });
+
+    if (data.advancedReportsEnabled !== undefined) {
+      await this.prisma.gym.updateMany({
+        where: { subscriptionPlan: plan.key },
+        data: { advancedReportsEnabled: data.advancedReportsEnabled },
+      });
+    }
+
     return applySubscriptionDiscount(plan);
   }
 

@@ -18,10 +18,18 @@ export class AdvancedReportsGuard implements CanActivate {
 
     const gym = await this.prisma.gym.findUnique({
       where: { slug: gymSlug },
+      select: { advancedReportsEnabled: true, subscriptionPlan: true },
+    });
+
+    if (!gym) throw new ForbiddenException('Gym no identificado');
+
+    const plan = await this.prisma.subscriptionPlan.findFirst({
+      where: { key: gym.subscriptionPlan },
       select: { advancedReportsEnabled: true },
     });
 
-    if (!gym?.advancedReportsEnabled) {
+    const hasAccess = gym.advancedReportsEnabled || (plan?.advancedReportsEnabled ?? false);
+    if (!hasAccess) {
       throw new ForbiddenException('Reportes avanzados no disponibles en tu plan actual');
     }
 
