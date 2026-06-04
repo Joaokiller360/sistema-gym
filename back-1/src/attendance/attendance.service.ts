@@ -19,19 +19,54 @@ export class AttendanceService {
     return this.prisma.attendance.findMany({
       where,
       orderBy: { checkIn: 'desc' },
-      include: { member: { select: { id: true, firstName: true, lastName: true } } },
+      include: {
+        member: { select: { id: true, firstName: true, lastName: true } },
+        group: { select: { id: true, name: true } },
+      },
     });
   }
 
-  async checkIn(gymId: string, memberId: string, branchId?: string) {
+  async deleteAttendance(gymId: string, id: string) {
+    const record = await this.prisma.attendance.findFirst({ where: { id, gymId } });
+    if (!record) throw new NotFoundException('Attendance record not found');
+    return this.prisma.attendance.delete({ where: { id } });
+  }
+
+  async findAllGroups(gymId: string) {
+    return this.prisma.attendanceGroup.findMany({
+      where: { gymId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async createGroup(gymId: string, name: string) {
+    return this.prisma.attendanceGroup.create({ data: { gymId, name } });
+  }
+
+  async deleteGroup(gymId: string, id: string) {
+    const group = await this.prisma.attendanceGroup.findFirst({ where: { id, gymId } });
+    if (!group) throw new NotFoundException('Group not found');
+    return this.prisma.attendanceGroup.delete({ where: { id } });
+  }
+
+  async checkIn(gymId: string, memberId: string, branchId?: string, groupId?: string) {
     const open = await this.prisma.attendance.findFirst({
       where: { gymId, memberId, checkOut: null },
     });
     if (open) throw new ConflictException('Member already checked in');
 
     return this.prisma.attendance.create({
-      data: { gymId, memberId, branchId: branchId ?? null, checkIn: new Date() },
-      include: { member: { select: { id: true, firstName: true, lastName: true } } },
+      data: {
+        gymId,
+        memberId,
+        branchId: branchId ?? null,
+        groupId: groupId ?? null,
+        checkIn: new Date(),
+      },
+      include: {
+        member: { select: { id: true, firstName: true, lastName: true } },
+        group: { select: { id: true, name: true } },
+      },
     });
   }
 
@@ -45,7 +80,10 @@ export class AttendanceService {
     return this.prisma.attendance.update({
       where: { id: open.id },
       data: { checkOut: new Date() },
-      include: { member: { select: { id: true, firstName: true, lastName: true } } },
+      include: {
+        member: { select: { id: true, firstName: true, lastName: true } },
+        group: { select: { id: true, name: true } },
+      },
     });
   }
 }

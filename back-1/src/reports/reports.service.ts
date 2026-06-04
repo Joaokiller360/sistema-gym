@@ -115,11 +115,19 @@ export class ReportsService {
 
     const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
 
-    const [payments, activeMemberships, newMembers, churned, expiringNext7Days, attendancesSample, attendancesWeek] =
+    const [payments, storeSales, storeCredits, activeMemberships, newMembers, churned, expiringNext7Days, attendancesSample, attendancesWeek] =
       await Promise.all([
         this.prisma.payment.findMany({
           where: { gymId, createdAt: { gte: startDate, lte: endDate } },
           select: { amount: true, createdAt: true },
+        }),
+        this.prisma.productSale.findMany({
+          where: { gymId, createdAt: { gte: startDate, lte: endDate } },
+          select: { total: true, createdAt: true, method: true },
+        }),
+        this.prisma.memberProductCredit.findMany({
+          where: { gymId, createdAt: { gte: startDate, lte: endDate } },
+          select: { quantity: true, unitPrice: true, createdAt: true },
         }),
         this.prisma.membership.findMany({
           where: { gymId, status: 'ACTIVE' },
@@ -142,9 +150,17 @@ export class ReportsService {
         }),
       ]);
 
-    // revenueTrend — weekly buckets
+    // revenueTrend — daily when granularity=daily, otherwise weekly
     const rangeDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000));
-    const revenueTrend = buildRevenueTrend(payments, startDate, endDate, rangeDays);
+    const revenueTrend = buildRevenueTrend(payments, startDate, endDate, rangeDays, query.granularity);
+
+    // store trends
+    const storeSalesPayments = storeSales.map(s => ({ amount: s.total, createdAt: s.createdAt }));
+    const storeSalesTrend = buildRevenueTrend(storeSalesPayments, startDate, endDate, rangeDays, query.granularity);
+    const storeCreditPayments = storeCredits.map(c => ({ amount: c.quantity * c.unitPrice, createdAt: c.createdAt }));
+    const storeCreditTrend = buildRevenueTrend(storeCreditPayments, startDate, endDate, rangeDays, query.granularity);
+    const storeRevenue = storeSales.reduce((s, p) => s + p.total, 0);
+    const storeCreditIssued = storeCredits.reduce((s, c) => s + c.quantity * c.unitPrice, 0);
 
     // membersByPlan
     const totalActive = activeMemberships.length;
@@ -174,6 +190,10 @@ export class ReportsService {
 
     return {
       revenueTrend,
+      storeSalesTrend,
+      storeCreditTrend,
+      storeRevenue,
+      storeCreditIssued,
       membersByPlan,
       attendanceTrend,
       newMembers,
@@ -191,9 +211,18 @@ function buildRevenueTrend(
   startDate: Date,
   endDate: Date,
   rangeDays: number,
+  granularity?: string,
 ): { label: string; amount: number }[] {
-  const byDay = rangeDays <= 14;
+  const byDay = granularity === 'daily' || rangeDays <= 14;
   const buckets = new Map<string, number>();
+
+  if (byDay) {
+    for (let i = 0; i < rangeDays; i++) {
+      const d = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
+      const label = `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      buckets.set(label, 0);
+    }
+  }
 
   for (const p of payments) {
     let label: string;
@@ -204,6 +233,7 @@ function buildRevenueTrend(
       const weekNum = Math.floor((p.createdAt.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
       label = `S${weekNum}`;
     }
+    if (byDay && !buckets.has(label)) continue;
     buckets.set(label, (buckets.get(label) ?? 0) + Number(p.amount));
   }
 

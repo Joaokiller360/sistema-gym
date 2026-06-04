@@ -291,12 +291,26 @@ model Attendance {
   member   Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
   branchId String?
   branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  groupId  String?
+  group    AttendanceGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
   @@index([gymId])
   @@index([memberId])
   @@index([branchId])
   @@index([checkIn])
+  @@index([groupId])
   @@map("attendances")
+}
+
+model AttendanceGroup {
+  id          String       @id @default(uuid())
+  name        String
+  gymId       String
+  createdAt   DateTime     @default(now())
+  attendances Attendance[]
+
+  @@index([gymId])
+  @@map("attendance_groups")
 }
 
 model Trainer {

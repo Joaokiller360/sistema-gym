@@ -11,7 +11,7 @@ export class CreatePlanDto {
   name: string;
 
   @IsInt({ message: 'price debe ser entero (centavos)' })
-  @IsPositive()
+  @Min(0)
   price: number;
 
   @IsString()
