@@ -21,7 +21,7 @@ const formSchema = z.object({
   ),
   price: z.number({ message: 'Precio inválido' }).min(0).max(999, 'No se puede poner más de 3 caracteres'),
   currency: z.string().min(1),
-  durationDays: z.number({ message: 'Duración inválida' }).int().min(1).max(100, 'Máximo 100 días'),
+  durationDays: z.number({ message: 'Duración inválida' }).int().min(1).max(365, 'Máximo 365 días'),
   daysPerWeek: z.string().min(1),
   benefits: z.array(z.object({
     value: z.string().refine(
@@ -219,7 +219,7 @@ export function PlanForm({ gymSlug, planId, defaultValues, onSuccess, onClose, s
               <input
                 type="number"
                 min="1"
-                max="100"
+                max="365"
                 disabled={isPending}
                 {...register('durationDays', { valueAsNumber: true })}
                 placeholder="Días"

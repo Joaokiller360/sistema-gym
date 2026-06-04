@@ -131,7 +131,7 @@ export async function assignPlanAction(
     body: JSON.stringify({
       memberId,
       membershipId: membershipResult.data.id,
-      amount: String(Math.round(parsed.data.price * 100)),
+      amount: Math.round(parsed.data.price * 100),
       currency: parsed.data.currency,
       method: parsed.data.method,
     }),
@@ -244,7 +244,7 @@ export async function registerPaymentAction(
     body: JSON.stringify({
       ...parsed.data,
       memberId,
-      amount: String(Math.round(parsed.data.amount * 100)),
+      amount: Math.round(parsed.data.amount * 100),
     }),
   })
 

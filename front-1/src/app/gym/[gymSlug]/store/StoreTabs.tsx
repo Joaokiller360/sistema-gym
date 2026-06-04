@@ -162,7 +162,7 @@ export function StoreTabs({ gymSlug, products, categories, dailyCut, monthlyCut,
 function SellTab({ gymSlug, products, members }: { gymSlug: string; products: Product[]; members: Member[] }) {
   const router = useRouter()
   const [cart, setCart] = useState<CartItem[]>([])
-  const [mode, setMode] = useState<'sell' | 'fiado'>('sell')
+  const [mode, setMode] = useState<'sell' | 'credito'>('sell')
   const [method, setMethod] = useState('CASH')
   const [notes, setNotes] = useState('')
   const [memberId, setMemberId] = useState('')
@@ -331,10 +331,10 @@ function SellTab({ gymSlug, products, members }: { gymSlug: string; products: Pr
           </button>
           <button
             type="button"
-            onClick={() => setMode('fiado')}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${mode === 'fiado' ? 'bg-amber-500 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-800'}`}
+            onClick={() => setMode('credito')}
+            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${mode === 'credito' ? 'bg-amber-500 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-800'}`}
           >
-            Fiado
+            Credito
           </button>
         </div>
 
@@ -450,7 +450,7 @@ function SellTab({ gymSlug, products, members }: { gymSlug: string; products: Pr
               onClick={() => setShowConfirm(true)}
               className="w-full rounded-xl bg-amber-500 py-3 text-sm font-black text-white hover:bg-amber-600 disabled:opacity-40 transition-all active:scale-[0.98]"
             >
-              {isPending ? 'Asignando…' : `Asignar fiado $${total.toLocaleString('es-AR')}`}
+              {isPending ? 'Asignando…' : `Asignar credito $${total.toLocaleString('es-AR')}`}
             </button>
           </>
         )}
@@ -459,7 +459,7 @@ function SellTab({ gymSlug, products, members }: { gymSlug: string; products: Pr
       <AlertDialog open={showConfirm} onOpenChange={open => { if (!open) setShowConfirm(false) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar fiado</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar credito</AlertDialogTitle>
             <AlertDialogDescription>
               {memberSearch} — deuda pendiente, no se cobra ahora.
             </AlertDialogDescription>
@@ -481,7 +481,7 @@ function SellTab({ gymSlug, products, members }: { gymSlug: string; products: Pr
             <button onClick={confirmAssign} disabled={isPending}
               className="inline-flex items-center justify-center rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50 transition-all"
             >
-              {isPending ? 'Asignando…' : 'Confirmar fiado'}
+              {isPending ? 'Asignando…' : 'Confirmar credito'}
             </button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1011,7 +1011,7 @@ function AllCreditsView({ gymSlug, byMember }: {
       <AlertDialog open={!!payTarget} onOpenChange={open => { if (!open) setPayTarget(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cobrar fiado</AlertDialogTitle>
+            <AlertDialogTitle>Cobrar credito</AlertDialogTitle>
             <AlertDialogDescription>
               {payTarget?.memberName} — ${payTarget?.total.toLocaleString('es-AR')}
             </AlertDialogDescription>

@@ -150,6 +150,15 @@ export interface Attendance {
   gymId: string;
   memberId: string;
   branchId: string | null;
+  groupId: string | null;
+  group?: { id: string; name: string } | null;
+  createdAt: string;
+}
+
+export interface AttendanceGroup {
+  id: string;
+  name: string;
+  gymId: string;
   createdAt: string;
 }
 

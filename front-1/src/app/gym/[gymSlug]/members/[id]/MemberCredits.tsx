@@ -106,7 +106,7 @@ export function MemberCredits({ gymSlug, memberId, products, credits }: Props) {
         <div className="flex items-center justify-between">
           <div>
             <p className={`font-black text-sm uppercase tracking-widest ${pendingCredits.length > 0 ? 'text-amber-600' : 'text-zinc-400'}`}>
-              Fiados pendientes
+              Creditos pendientes
             </p>
             {pendingCredits.length > 0 && (
               <p className="text-xs text-amber-500 mt-0.5">{pendingCredits.length} ítem{pendingCredits.length !== 1 ? 's' : ''}</p>
@@ -118,7 +118,7 @@ export function MemberCredits({ gymSlug, memberId, products, credits }: Props) {
         </div>
 
         {pendingCredits.length === 0 ? (
-          <p className="text-sm text-zinc-400">Al día — sin fiados pendientes</p>
+          <p className="text-sm text-zinc-400">Al día — sin creditos pendientes</p>
         ) : (
           <>
             <div className="space-y-2">
@@ -176,7 +176,7 @@ export function MemberCredits({ gymSlug, memberId, products, credits }: Props) {
             onClick={() => setShowAssign(v => !v)}
             className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-zinc-50 transition-colors"
           >
-            <p className="font-black text-sm uppercase tracking-widest text-zinc-400">Asignar nuevo fiado</p>
+            <p className="font-black text-sm uppercase tracking-widest text-zinc-400">Asignar nuevo credito</p>
             {showAssign ? <ChevronUp className="h-4 w-4 text-zinc-400" /> : <ChevronDown className="h-4 w-4 text-zinc-400" />}
           </button>
 
@@ -227,7 +227,7 @@ export function MemberCredits({ gymSlug, memberId, products, credits }: Props) {
                     onClick={handleAssign}
                     className="rounded-xl bg-black px-5 py-2.5 text-sm font-bold text-white hover:bg-zinc-800 disabled:opacity-50 transition-all"
                   >
-                    {isPendingAssign ? 'Asignando…' : 'Asignar como fiado'}
+                    {isPendingAssign ? 'Asignando…' : 'Asignar como credito'}
                   </button>
                 </div>
               )}

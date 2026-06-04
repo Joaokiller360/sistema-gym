@@ -58,7 +58,7 @@ export async function registerMemberPaymentAction(
     body: JSON.stringify({
       memberId,
       membershipId: membershipResult.data.id,
-      amount: String(Math.round(amount * 100)),
+      amount: Math.round(amount * 100),
       currency,
       method,
       notes: notes || undefined,

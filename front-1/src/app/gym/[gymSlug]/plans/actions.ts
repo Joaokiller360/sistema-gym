@@ -11,7 +11,7 @@ const planSchema = z.object({
   name: z.string().min(1).max(100).refine(v => ONLY_LETTERS_NUMBERS.test(v), 'Solo letras y números'),
   price: z.number().min(0).max(999),
   currency: z.string().min(1),
-  durationDays: z.number().int().min(1).max(100),
+  durationDays: z.number().int().min(1).max(365),
   daysPerWeek: z.string().min(1),
   benefits: z.array(z.object({
     value: z.string().refine(v => v === '' || ONLY_LETTERS_NUMBERS.test(v), 'Solo letras y números'),
@@ -31,7 +31,7 @@ async function getToken() {
 function buildPayload(data: PlanActionInput) {
   return {
     name: data.name,
-    price: String(Math.round(data.price * 100)),
+    price: Math.round(data.price * 100),
     currency: data.currency,
     durationDays: data.durationDays,
     daysPerWeek: data.daysPerWeek === 'unlimited' ? null : parseInt(data.daysPerWeek, 10),

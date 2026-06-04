@@ -190,6 +190,7 @@ export async function deleteSaleAction(gymSlug: string, id: string): Promise<{ e
   if (result === null) return { error: 'Error al eliminar la venta' }
   updateTag(`store-products-${gymSlug}`)
   updateTag(`store-sales-${gymSlug}`)
+  updateTag(`store-credits-${gymSlug}`)
   return {}
 }
 

@@ -3,8 +3,13 @@ import Link from 'next/link'
 
 export interface AdvancedReport {
   revenueTrend: { label: string; amount: number }[]
-  membersByPlan: { planName: string; count: number; percent: number }[]
+  storeSalesTrend: { label: string; amount: number }[]
+  storeCreditTrend: { label: string; amount: number }[]
+  storeRevenue: number
+  storeCreditIssued: number
+  membersByPlan: { planName: string; count: number; price: number; percent: number }[]
   attendanceTrend: { label: string; count: number }[]
+  attendanceTrendByGroup: { groupId: string | null; groupName: string | null; trend: { label: string; count: number }[] }[]
   newMembers: number
   churned: number
   expiringNext7Days: number
