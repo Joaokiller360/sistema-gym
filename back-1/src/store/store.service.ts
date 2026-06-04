@@ -118,6 +118,12 @@ export class StoreService {
     if (!sale) throw new NotFoundException('Venta no encontrada');
 
     await this.prisma.$transaction(async tx => {
+      // Revert credits that were paid via this sale back to unpaid
+      await tx.memberProductCredit.updateMany({
+        where: { paidSaleId: id },
+        data: { paidSaleId: null, isPaid: false, paidAt: null },
+      });
+
       for (const item of sale.items) {
         await tx.product.update({
           where: { id: item.productId },
@@ -128,7 +134,7 @@ export class StoreService {
       await tx.productSale.delete({ where: { id } });
     });
 
-    return { message: 'Venta eliminada y stock restaurado' };
+    return { message: 'Venta eliminada, stock restaurado y créditos revertidos' };
   }
 
   async findSales(gymId: string, query: any) {

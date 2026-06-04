@@ -115,23 +115,23 @@ export class ReportsService {
 
     const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
 
-    const [payments, storeSales, storeCredits, activeMemberships, newMembers, churned, expiringNext7Days, attendancesSample, attendancesWeek] =
+    const [membershipsSold, storeSales, storeCredits, activeMemberships, newMembers, churned, expiringNext7Days, attendancesSample, attendancesWeek] =
       await Promise.all([
-        this.prisma.payment.findMany({
+        this.prisma.membership.findMany({
           where: { gymId, createdAt: { gte: startDate, lte: endDate } },
-          select: { amount: true, createdAt: true },
+          select: { createdAt: true, plan: { select: { price: true } } },
         }),
         this.prisma.productSale.findMany({
           where: { gymId, createdAt: { gte: startDate, lte: endDate } },
           select: { total: true, createdAt: true, method: true },
         }),
         this.prisma.memberProductCredit.findMany({
-          where: { gymId, createdAt: { gte: startDate, lte: endDate } },
+          where: { gymId, isPaid: false, createdAt: { gte: startDate, lte: endDate } },
           select: { quantity: true, unitPrice: true, createdAt: true },
         }),
         this.prisma.membership.findMany({
           where: { gymId, status: 'ACTIVE' },
-          include: { plan: { select: { name: true } } },
+          include: { plan: { select: { name: true, price: true } } },
         }),
         this.prisma.member.count({ where: { gymId, createdAt: { gte: startDate, lte: endDate } } }),
         this.prisma.membership.count({
@@ -146,13 +146,14 @@ export class ReportsService {
         }),
         this.prisma.attendance.findMany({
           where: { gymId, checkIn: { gte: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) } },
-          select: { checkIn: true },
+          select: { checkIn: true, groupId: true, group: { select: { name: true } } },
         }),
       ]);
 
-    // revenueTrend — daily when granularity=daily, otherwise weekly
+    // revenueTrend — memberships sold in period, using plan price as revenue amount
     const rangeDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000));
-    const revenueTrend = buildRevenueTrend(payments, startDate, endDate, rangeDays, query.granularity);
+    const membershipPayments = membershipsSold.map(m => ({ amount: Number(m.plan.price), createdAt: m.createdAt }));
+    const revenueTrend = buildRevenueTrend(membershipPayments, startDate, endDate, rangeDays, query.granularity);
 
     // store trends
     const storeSalesPayments = storeSales.map(s => ({ amount: s.total, createdAt: s.createdAt }));
@@ -164,16 +165,21 @@ export class ReportsService {
 
     // membersByPlan
     const totalActive = activeMemberships.length;
-    const byPlanMap = new Map<string, number>();
-    for (const m of activeMemberships) byPlanMap.set(m.plan.name, (byPlanMap.get(m.plan.name) ?? 0) + 1);
-    const membersByPlan = Array.from(byPlanMap.entries()).map(([planName, count]) => ({
+    const byPlanMap = new Map<string, { count: number; price: number }>();
+    for (const m of activeMemberships) {
+      const cur = byPlanMap.get(m.plan.name) ?? { count: 0, price: Number(m.plan.price) };
+      byPlanMap.set(m.plan.name, { count: cur.count + 1, price: cur.price });
+    }
+    const membersByPlan = Array.from(byPlanMap.entries()).map(([planName, { count, price }]) => ({
       planName,
       count,
+      price, // in cents — MoneyTransformInterceptor divides by 100 on response
       percent: totalActive > 0 ? Math.round((count / totalActive) * 100) : 0,
     }));
 
     // attendanceTrend — last 7 days
     const attendanceTrend = buildAttendanceTrend(attendancesWeek, now);
+    const attendanceTrendByGroup = buildAttendanceTrendByGroup(attendancesWeek, now);
 
     // peakDay / peakHour — computed in JS from 90-day sample
     const dowCount = new Array(7).fill(0) as number[];
@@ -196,6 +202,7 @@ export class ReportsService {
       storeCreditIssued,
       membersByPlan,
       attendanceTrend,
+      attendanceTrendByGroup,
       newMembers,
       churned,
       expiringNext7Days,
@@ -238,6 +245,44 @@ function buildRevenueTrend(
   }
 
   return Array.from(buckets.entries()).map(([label, amount]) => ({ label, amount }));
+}
+
+function buildAttendanceTrendByGroup(
+  attendances: { checkIn: Date; groupId: string | null; group: { name: string } | null }[],
+  now: Date,
+): { groupId: string | null; groupName: string | null; trend: { label: string; count: number }[] }[] {
+  const DAYS_ES_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const dayLabels: string[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+    dayLabels.push(DAYS_ES_SHORT[d.getUTCDay()]);
+  }
+
+  const groupMap = new Map<string | null, { name: string | null; items: { checkIn: Date }[] }>();
+  for (const a of attendances) {
+    const key = a.groupId;
+    if (!groupMap.has(key)) groupMap.set(key, { name: a.group?.name ?? null, items: [] });
+    groupMap.get(key)!.items.push({ checkIn: a.checkIn });
+  }
+
+  const result: { groupId: string | null; groupName: string | null; trend: { label: string; count: number }[] }[] = [];
+  for (const [gid, { name, items }] of groupMap) {
+    const buckets = new Map<string, number>(dayLabels.map(l => [l, 0]));
+    for (const a of items) {
+      const label = DAYS_ES_SHORT[a.checkIn.getUTCDay()];
+      if (buckets.has(label)) buckets.set(label, (buckets.get(label) ?? 0) + 1);
+    }
+    result.push({ groupId: gid, groupName: name, trend: dayLabels.map(l => ({ label: l, count: buckets.get(l) ?? 0 })) });
+  }
+
+  // Named groups first, ungrouped last; only keep groups with at least one check-in
+  return result
+    .filter(g => g.trend.some(t => t.count > 0))
+    .sort((a, b) => {
+      if (a.groupId === null) return 1;
+      if (b.groupId === null) return -1;
+      return (a.groupName ?? '').localeCompare(b.groupName ?? '');
+    });
 }
 
 function buildAttendanceTrend(
