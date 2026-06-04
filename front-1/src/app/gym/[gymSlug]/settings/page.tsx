@@ -9,9 +9,8 @@ import { Building2, Lock, Users } from 'lucide-react'
 
 interface CountryOption { code: string; label: string; timezone: string; utcOffset: string }
 
-const BACKEND_BASE = (process.env.API_URL ?? 'http://localhost:3001/api/v1').replace(/\/api\/v\d+$/, '')
 const resolveLogoUrl = (url: string | null | undefined): string | null =>
-  url?.startsWith('/') ? `${BACKEND_BASE}${url}` : url ?? null
+  url ? url.replace(/^https?:\/\/[^/]+/, '') : null
 
 interface Props {
   params: Promise<{ gymSlug: string }>

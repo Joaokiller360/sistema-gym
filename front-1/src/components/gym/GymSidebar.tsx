@@ -75,6 +75,7 @@ interface GymSidebarProps {
   gymSubscriptionStatus?: string
   gymTrialEndsAt?: string
   gymDemoEnabled?: boolean
+  hasBanner?: boolean
   userEmail: string
   userRole?: string
   storeEnabled?: boolean
@@ -116,40 +117,19 @@ function NavContent({
 
   return (
     <div className="flex flex-col h-full bg-[#080808] border-r border-white/[0.06]">
-      {/* Trial banner */}
-      {isTrial && (
-        <div className="h-8 bg-gradient-to-r from-amber-500 to-orange-500 flex items-center justify-center gap-1.5 px-4 shrink-0">
-          <span className="text-xs font-semibold text-white/90 tracking-wide">Prueba gratuita</span>
-          {trialDaysLeft !== null && trialDaysLeft !== undefined && (
-            <>
-              <span className="text-white/50 text-xs">·</span>
-              <span className="text-xs font-bold text-white">
-                {trialDaysLeft === 0 ? 'último día' : `${trialDaysLeft} día${trialDaysLeft !== 1 ? 's' : ''} restante${trialDaysLeft !== 1 ? 's' : ''}`}
-              </span>
-            </>
-          )}
-        </div>
-      )}
-      {/* Demo banner */}
-      {!isTrial && gymDemoEnabled && (
-        <div className="h-8 bg-gradient-to-r from-violet-600 to-indigo-600 flex items-center justify-center gap-1.5 px-4 shrink-0">
-          <span className="text-xs font-semibold text-white/90 tracking-wide">Demo habilitada</span>
-          <span className="text-white/50 text-xs">·</span>
-          <span className="text-xs text-white/75">Datos de ejemplo activos</span>
-        </div>
-      )}
       {/* Header */}
       <div className="px-4 py-4 border-b border-white/[0.06]">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            <div className={cn(
-              'flex items-center justify-center w-9 h-9 rounded-xl shrink-0 overflow-hidden',
-              gymLogo ? 'bg-white/5' : 'bg-[#fffb00] shadow-[0_0_16px_rgba(255,251,0,0.28)]',
-            )}>
-              {gymLogo
-                ? <img src={gymLogo} alt={gymName} className="w-full h-full object-cover" />
-                : <Dumbbell className="h-4 w-4 text-black" />}
-            </div>
+            {gymLogo ? (
+              <div className="w-9 h-9 rounded-xl shrink-0 overflow-hidden ring-1 ring-white/10">
+                <img src={gymLogo} alt={gymName} className="w-full h-full object-cover" />
+              </div>
+            ) : (
+              <div className="flex items-center justify-center w-9 h-9 rounded-xl shrink-0 bg-[#fffb00] shadow-[0_0_16px_rgba(255,251,0,0.28)]">
+                <Dumbbell className="h-4 w-4 text-black" />
+              </div>
+            )}
             <div className="min-w-0">
               <p className="font-semibold text-white text-sm tracking-tight truncate leading-tight">{gymName}</p>
               {gymPlan ? (
@@ -263,7 +243,7 @@ function ThemeToggleButton() {
   )
 }
 
-export function GymSidebar({ gymSlug, gymName, gymLogo, gymPlan, gymSubscriptionStatus, gymTrialEndsAt, gymDemoEnabled, userEmail, userRole, storeEnabled }: GymSidebarProps) {
+export function GymSidebar({ gymSlug, gymName, gymLogo, gymPlan, gymSubscriptionStatus, gymTrialEndsAt, gymDemoEnabled, hasBanner, userEmail, userRole, storeEnabled }: GymSidebarProps) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -300,43 +280,20 @@ export function GymSidebar({ gymSlug, gymName, gymLogo, gymPlan, gymSubscription
         />
       </aside>
 
-      {/* Mobile header (banner + top bar) */}
-      <div className="fixed top-0 left-0 right-0 z-40 lg:hidden">
-        {/* Trial banner */}
-        {isTrial && (
-          <div className="h-8 bg-gradient-to-r from-amber-500 to-orange-500 flex items-center justify-center gap-1.5 px-4">
-            <span className="text-xs font-semibold text-white/90 tracking-wide">
-              Prueba gratuita
-            </span>
-            {trialDaysLeft !== null && (
-              <>
-                <span className="text-white/50 text-xs">·</span>
-                <span className="text-xs font-bold text-white">
-                  {trialDaysLeft === 0 ? 'último día' : `${trialDaysLeft} día${trialDaysLeft !== 1 ? 's' : ''} restante${trialDaysLeft !== 1 ? 's' : ''}`}
-                </span>
-              </>
-            )}
-          </div>
-        )}
-        {/* Demo banner */}
-        {!isTrial && gymDemoEnabled && (
-          <div className="h-8 bg-gradient-to-r from-violet-600 to-indigo-600 flex items-center justify-center gap-1.5 px-4">
-            <span className="text-xs font-semibold text-white/90 tracking-wide">Demo habilitada</span>
-            <span className="text-white/50 text-xs">·</span>
-            <span className="text-xs text-white/75">Datos de ejemplo activos</span>
-          </div>
-        )}
+      {/* Mobile header */}
+      <div className={cn('fixed left-0 right-0 z-40 lg:hidden', hasBanner ? 'top-8' : 'top-0')}>
         {/* Top bar */}
         <div className="h-14 bg-black/85 backdrop-blur-md flex items-center justify-between px-4 border-b border-white/8 shadow-lg shadow-black/20">
           <div className="flex items-center gap-2.5">
-            <div className={cn(
-              'flex items-center justify-center w-8 h-8 rounded-lg overflow-hidden shrink-0',
-              gymLogo ? 'bg-white/5' : 'bg-[#fffb00] shadow-[0_0_12px_rgba(255,251,0,0.35)]',
-            )}>
-              {gymLogo
-                ? <img src={gymLogo} alt={gymName} className="w-full h-full object-cover" />
-                : <Dumbbell className="h-4 w-4 text-black" />}
-            </div>
+            {gymLogo ? (
+              <div className="w-8 h-8 rounded-lg shrink-0 overflow-hidden ring-1 ring-white/10">
+                <img src={gymLogo} alt={gymName} className="w-full h-full object-cover" />
+              </div>
+            ) : (
+              <div className="flex items-center justify-center w-8 h-8 rounded-lg shrink-0 bg-[#fffb00] shadow-[0_0_12px_rgba(255,251,0,0.35)]">
+                <Dumbbell className="h-4 w-4 text-black" />
+              </div>
+            )}
             <span className="font-semibold text-white text-sm tracking-tight truncate max-w-[160px]">
               {gymName}
             </span>

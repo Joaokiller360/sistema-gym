@@ -61,27 +61,58 @@ export default async function GymLayout({ children, params }: Props) {
   const gymName = gym.name
   const isTrial = gym.subscriptionStatus === 'TRIAL'
   const hasBanner = isTrial || (gym.demoEnabled ?? false)
+  const gymLogo = gym.logoUrl
+    ? gym.logoUrl.replace(/^https?:\/\/[^/]+/, '')
+    : undefined
+  const trialDaysLeft = isTrial && gym.trialEndsAt
+    ? Math.max(0, Math.ceil((new Date(gym.trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : null
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      <GymSidebar
-        gymSlug={gymSlug}
-        gymName={gymName}
-        gymLogo={gym?.logoUrl ?? undefined}
-        gymPlan={gym.subscriptionPlan ?? undefined}
-        gymSubscriptionStatus={gym.subscriptionStatus ?? undefined}
-        gymTrialEndsAt={gym.trialEndsAt ?? undefined}
-        gymDemoEnabled={gym.demoEnabled ?? false}
-        userEmail={session.email}
-        userRole={session.role}
-        storeEnabled={gym.storeEnabled}
-      />
-      <main className={`flex-1 overflow-y-auto lg:pt-0 flex flex-col ${hasBanner ? 'pt-[88px]' : 'pt-14'}`}>
-        <div className="flex-1">
-          {children}
+    <>
+      {/* Full-width top banner */}
+      {isTrial && (
+        <div className="fixed top-0 left-0 right-0 z-50 h-8 bg-gradient-to-r from-amber-500 to-orange-500 flex items-center justify-center gap-1.5 px-4">
+          <span className="text-xs font-semibold text-white/90 tracking-wide">Prueba gratuita</span>
+          {trialDaysLeft !== null && (
+            <>
+              <span className="text-white/50 text-xs">·</span>
+              <span className="text-xs font-bold text-white">
+                {trialDaysLeft === 0 ? 'último día' : `${trialDaysLeft} día${trialDaysLeft !== 1 ? 's' : ''} restante${trialDaysLeft !== 1 ? 's' : ''}`}
+              </span>
+            </>
+          )}
         </div>
-        <FooterBar />
-      </main>
-    </div>
+      )}
+      {!isTrial && (gym.demoEnabled ?? false) && (
+        <div className="fixed top-0 left-0 right-0 z-50 h-8 bg-gradient-to-r from-violet-600 to-indigo-600 flex items-center justify-center gap-1.5 px-4">
+          <span className="text-xs font-semibold text-white/90 tracking-wide">Demo habilitada</span>
+          <span className="text-white/50 text-xs">·</span>
+          <span className="text-xs text-white/75">Datos de ejemplo activos</span>
+        </div>
+      )}
+
+      <div className={`flex h-screen overflow-hidden bg-background${hasBanner ? ' pt-8' : ''}`}>
+        <GymSidebar
+          gymSlug={gymSlug}
+          gymName={gymName}
+          gymLogo={gymLogo}
+          gymPlan={gym.subscriptionPlan ?? undefined}
+          gymSubscriptionStatus={gym.subscriptionStatus ?? undefined}
+          gymTrialEndsAt={gym.trialEndsAt ?? undefined}
+          gymDemoEnabled={gym.demoEnabled ?? false}
+          hasBanner={hasBanner}
+          userEmail={session.email}
+          userRole={session.role}
+          storeEnabled={gym.storeEnabled}
+        />
+        <main className={`flex-1 overflow-y-auto lg:pt-0 flex flex-col ${hasBanner ? 'pt-14' : 'pt-14'}`}>
+          <div className="flex-1">
+            {children}
+          </div>
+          <FooterBar />
+        </main>
+      </div>
+    </>
   )
 }

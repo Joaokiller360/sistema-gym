@@ -8,9 +8,8 @@ import { Pagination } from './Pagination'
 import type { SubscriptionPlan } from './new/page'
 
 const LIMIT = 20
-const BACKEND_BASE = (process.env.API_URL ?? 'http://localhost:3001/api/v1').replace(/\/api\/v\d+$/, '')
 const resolveLogoUrl = (url: string | null | undefined): string | null =>
-  url?.startsWith('/') ? `${BACKEND_BASE}${url}` : url ?? null
+  url ? url.replace(/^https?:\/\/[^/]+/, '') : null
 
 interface GymsResponse {
   data: Gym[]

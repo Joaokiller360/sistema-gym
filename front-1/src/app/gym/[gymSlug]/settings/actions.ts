@@ -33,11 +33,17 @@ export async function uploadGymLogoAction(
   const store = await cookies()
   const token = store.get('session')?.value ?? ''
 
-  const res = await fetch(`${API_URL}/gyms/${gymId}/logo`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-    body: formData,
-  })
+  let res: Response
+  try {
+    res = await fetch(`${API_URL}/gyms/${gymId}/logo`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    })
+  } catch (err) {
+    console.error('[uploadGymLogoAction] fetch error:', err)
+    return { error: 'No se pudo conectar con el servidor' }
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => '')
@@ -48,8 +54,7 @@ export async function uploadGymLogoAction(
 
   const data = (await res.json().catch(() => ({}))) as { logoUrl?: string; url?: string }
   updateTag(`gym-${gymSlug}`)
-  const raw = data.logoUrl ?? data.url ?? ''
-  return { logoUrl: raw.startsWith('/') ? `${BACKEND_URL}${raw}` : raw }
+  return { logoUrl: data.logoUrl ?? data.url ?? '' }
 }
 
 export async function updateGymSettingsAction(

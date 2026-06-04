@@ -37,6 +37,7 @@ interface SubscriptionPlan {
   demoEnabled: boolean
   trialEnabled: boolean
   advancedReportsEnabled: boolean
+  visibleOnLanding: boolean
   features: string[]
   isActive: boolean
   sortOrder: number
@@ -74,6 +75,7 @@ interface PlanFormFields {
   demoEnabled: boolean
   trialEnabled: boolean
   advancedReportsEnabled: boolean
+  visibleOnLanding: boolean
   features: string[]
   isActive: boolean
 }
@@ -262,6 +264,20 @@ function PlanFormBody({
         </button>
       </div>
 
+      <div className="flex items-center justify-between">
+        <div>
+          <label className="text-xs font-bold uppercase tracking-widest text-zinc-400 block">Visible en la landing</label>
+          <p className="text-xs text-zinc-400 mt-0.5">Muestra este plan en la página pública de precios</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange({ ...fields, visibleOnLanding: !fields.visibleOnLanding })}
+          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${fields.visibleOnLanding ? 'bg-blue-500' : 'bg-zinc-200'}`}
+        >
+          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${fields.visibleOnLanding ? 'translate-x-4' : 'translate-x-1'}`} />
+        </button>
+      </div>
+
       <div>
         <div className="flex items-center justify-between mb-2">
           <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Características</label>
@@ -309,6 +325,7 @@ function EditPlanCard({ plan }: { plan: SubscriptionPlan }) {
     demoEnabled: plan.demoEnabled ?? false,
     trialEnabled: plan.trialEnabled ?? false,
     advancedReportsEnabled: plan.advancedReportsEnabled ?? false,
+    visibleOnLanding: plan.visibleOnLanding ?? true,
     features: plan.features as string[],
     isActive: plan.isActive,
   })
@@ -323,6 +340,7 @@ function EditPlanCard({ plan }: { plan: SubscriptionPlan }) {
       demoEnabled: plan.demoEnabled ?? false,
       trialEnabled: plan.trialEnabled ?? false,
       advancedReportsEnabled: plan.advancedReportsEnabled ?? false,
+      visibleOnLanding: plan.visibleOnLanding ?? true,
       features: plan.features as string[],
       isActive: plan.isActive,
     })
@@ -342,6 +360,7 @@ function EditPlanCard({ plan }: { plan: SubscriptionPlan }) {
         demoEnabled: fields.demoEnabled,
         trialEnabled: fields.trialEnabled,
         advancedReportsEnabled: fields.advancedReportsEnabled,
+        visibleOnLanding: fields.visibleOnLanding,
         features: fields.features.filter(f => f.trim()),
         isActive: fields.isActive,
       }, plan.key)
@@ -583,13 +602,14 @@ function NewPlanCard() {
     demoEnabled: false,
     trialEnabled: false,
     advancedReportsEnabled: false,
+    visibleOnLanding: true,
     features: [''],
     isActive: true,
   })
 
   function resetForm() {
     setPlanKey('')
-    setFields({ label: '', price: '0', currency: 'USD', maxMembers: '', storeEnabled: false, demoEnabled: false, trialEnabled: false, advancedReportsEnabled: false, features: [''], isActive: true })
+    setFields({ label: '', price: '0', currency: 'USD', maxMembers: '', storeEnabled: false, demoEnabled: false, trialEnabled: false, advancedReportsEnabled: false, visibleOnLanding: true, features: [''], isActive: true })
     setError(null)
   }
 
@@ -608,6 +628,7 @@ function NewPlanCard() {
         demoEnabled: fields.demoEnabled,
         trialEnabled: fields.trialEnabled,
         advancedReportsEnabled: fields.advancedReportsEnabled,
+        visibleOnLanding: fields.visibleOnLanding,
         features: fields.features.filter(f => f.trim()),
       })
       if (res.error) { setError(res.error) }

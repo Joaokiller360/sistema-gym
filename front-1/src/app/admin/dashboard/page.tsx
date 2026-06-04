@@ -92,9 +92,8 @@ function initials(name: string) {
   return name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase()
 }
 
-const BACKEND_BASE = (process.env.API_URL ?? 'http://localhost:3001/api/v1').replace(/\/api\/v\d+$/, '')
 const resolveLogoUrl = (url: string | null | undefined): string | null =>
-  url?.startsWith('/') ? `${BACKEND_BASE}${url}` : url ?? null
+  url ? url.replace(/^https?:\/\/[^/]+/, '') : null
 
 export default async function AdminDashboardPage() {
   const cookieStore = await cookies()

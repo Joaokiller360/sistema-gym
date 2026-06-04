@@ -13,6 +13,7 @@ interface SubscriptionPlan {
   demoEnabled: boolean
   trialEnabled: boolean
   advancedReportsEnabled: boolean
+  visibleOnLanding: boolean
   features: string[]
   isActive: boolean
   sortOrder: number
