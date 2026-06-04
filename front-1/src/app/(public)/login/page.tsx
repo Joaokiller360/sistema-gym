@@ -4,8 +4,16 @@ import { verifyToken } from '@/lib/auth'
 import { apiFetch } from '@/lib/api'
 import { LoginForm } from './LoginForm'
 import { Dumbbell } from 'lucide-react'
+import Image from 'next/image'
 
-interface PlatformSettings { saasName: string }
+interface PlatformSettings { saasName: string; logoUrl?: string | null }
+
+const BACKEND_URL = (process.env.API_URL ?? 'http://localhost:3001/api/v1').replace(/\/api\/v\d+$/, '')
+const resolveLogoUrl = (url: string | null | undefined): string | null => {
+  if (!url) return null
+  if (url.startsWith('/')) return `${BACKEND_URL}${url}`
+  return url
+}
 
 export default async function LoginPage() {
   const cookieStore = await cookies()
@@ -23,14 +31,18 @@ export default async function LoginPage() {
     next: { tags: ['platform-settings'], revalidate: 300 },
   }).catch(() => null)
   const saasName = platform?.saasName ?? 'GymOS'
+  const logoUrl = resolveLogoUrl(platform?.logoUrl)
 
   return (
     <main className="min-h-screen flex flex-col lg:flex-row">
       {/* Left panel — brand */}
       <div className="flex flex-col items-center justify-center bg-black px-8 py-12 lg:w-1/2 lg:sticky lg:top-0 lg:h-screen">
         <div className="w-full max-w-xs text-center lg:text-left">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#fffb00] mb-6">
-            <Dumbbell className="h-7 w-7 text-black" />
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#fffb00] mb-6 overflow-hidden relative">
+            {logoUrl
+              ? <Image src={logoUrl} alt={saasName} fill className="object-cover" sizes="56px" />
+              : <Dumbbell className="h-7 w-7 text-black" />
+            }
           </div>
           <h1 className="text-5xl font-black text-white tracking-tight">{saasName}</h1>
           <p className="mt-3 text-white/50 text-base leading-relaxed">

@@ -12,6 +12,12 @@ import { PricingSection, type SubscriptionPlanPublic } from './PricingSection'
 
 const FEATURE_ICONS = [Dumbbell, Users, BarChart2, Shield, CreditCard, Zap, Package, Calendar, TrendingUp, Bell]
 
+const BACKEND_URL = (process.env.API_URL ?? 'http://localhost:3001/api/v1').replace(/\/api\/v\d+$/, '')
+const resolveLogoUrl = (url: string | null | undefined): string | null => {
+  if (!url) return null
+  if (url.startsWith('/')) return `${BACKEND_URL}${url}`
+  return url
+}
 
 async function getSettings(): Promise<PlatformSettings> {
   const data = await apiFetch<PlatformSettings>('/platform-settings', '', {
@@ -21,6 +27,7 @@ async function getSettings(): Promise<PlatformSettings> {
   return {
     ...DEFAULT_PLATFORM_SETTINGS,
     ...data,
+    logoUrl: resolveLogoUrl(data.logoUrl),
     footerLinks: data.footerLinks ?? [],
     landingFeatures: data.landingFeatures ?? [],
   }
