@@ -17,7 +17,7 @@ FROM node:20-alpine AS production
 
 WORKDIR /app
 
-RUN apk add --no-cache openssl && \
+RUN apk add --no-cache openssl su-exec && \
     addgroup -S appgroup && adduser -S appuser -G appgroup
 
 COPY package*.json ./
@@ -29,10 +29,7 @@ COPY --from=builder /app/dist ./dist
 
 COPY entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh && \
-    mkdir -p /app/uploads && \
-    chown -R appuser:appgroup /app
-
-USER appuser
+    mkdir -p /app/uploads/logos
 
 EXPOSE 3000
 
