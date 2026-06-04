@@ -59,6 +59,8 @@ export default async function GymLayout({ children, params }: Props) {
   if (!isSuperAdmin && session.gymId !== gym.id) notFound()
 
   const gymName = gym.name
+  const isTrial = gym.subscriptionStatus === 'TRIAL'
+  const hasBanner = isTrial || (gym.demoEnabled ?? false)
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -67,11 +69,14 @@ export default async function GymLayout({ children, params }: Props) {
         gymName={gymName}
         gymLogo={gym?.logoUrl ?? undefined}
         gymPlan={gym.subscriptionPlan ?? undefined}
+        gymSubscriptionStatus={gym.subscriptionStatus ?? undefined}
+        gymTrialEndsAt={gym.trialEndsAt ?? undefined}
+        gymDemoEnabled={gym.demoEnabled ?? false}
         userEmail={session.email}
         userRole={session.role}
         storeEnabled={gym.storeEnabled}
       />
-      <main className="flex-1 overflow-y-auto pt-14 lg:pt-0 flex flex-col">
+      <main className={`flex-1 overflow-y-auto lg:pt-0 flex flex-col ${hasBanner ? 'pt-[88px]' : 'pt-14'}`}>
         <div className="flex-1">
           {children}
         </div>

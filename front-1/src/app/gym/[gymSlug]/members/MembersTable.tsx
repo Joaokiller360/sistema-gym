@@ -105,7 +105,7 @@ export function MembersTable({
                       <span className="text-xs font-bold text-[#1fad9d]">{initials(m.firstName, m.lastName)}</span>
                     </div>
                     <div className="min-w-0">
-                      <p className="font-semibold truncate">{m.firstName} {m.lastName}</p>
+                      <p className="font-semibold truncate transition-colors">{m.firstName} {m.lastName}</p>
                       <p className="text-xs text-muted-foreground truncate">{m.email}</p>
                     </div>
                   </div>

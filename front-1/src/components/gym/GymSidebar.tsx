@@ -72,6 +72,9 @@ interface GymSidebarProps {
   gymName: string
   gymLogo?: string
   gymPlan?: string
+  gymSubscriptionStatus?: string
+  gymTrialEndsAt?: string
+  gymDemoEnabled?: boolean
   userEmail: string
   userRole?: string
   storeEnabled?: boolean
@@ -80,6 +83,7 @@ interface GymSidebarProps {
 function NavContent({
   gymSlug,
   gymName,
+  gymLogo,
   gymPlan,
   userEmail,
   userRole,
@@ -88,9 +92,13 @@ function NavContent({
   isPending,
   onLogout,
   storeEnabled,
+  isTrial,
+  trialDaysLeft,
+  gymDemoEnabled,
 }: {
   gymSlug: string
   gymName: string
+  gymLogo?: string
   gymPlan?: string
   userEmail: string
   userRole?: string
@@ -99,33 +107,69 @@ function NavContent({
   isPending: boolean
   onLogout: () => void
   storeEnabled?: boolean
+  isTrial?: boolean
+  trialDaysLeft?: number | null
+  gymDemoEnabled?: boolean
 }) {
   const base = `/gym/${gymSlug}`
+  const emailInitial = userEmail?.[0]?.toUpperCase() ?? '?'
 
   return (
-    <div className="flex flex-col h-full bg-black">
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 py-5 border-b border-white/10">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#fffb00] shrink-0">
-            <Dumbbell className="h-4 w-4 text-black" />
-          </div>
-          <div className="leading-none min-w-0">
-            <p className="font-bold text-white text-sm truncate">{gymName}</p>
-            {gymPlan ? (
-              <span className="inline-block mt-0.5 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-[#fffb00]/20 text-[#fffb00]">
-                {gymPlan}
+    <div className="flex flex-col h-full bg-[#080808] border-r border-white/[0.06]">
+      {/* Trial banner */}
+      {isTrial && (
+        <div className="h-8 bg-gradient-to-r from-amber-500 to-orange-500 flex items-center justify-center gap-1.5 px-4 shrink-0">
+          <span className="text-xs font-semibold text-white/90 tracking-wide">Prueba gratuita</span>
+          {trialDaysLeft !== null && trialDaysLeft !== undefined && (
+            <>
+              <span className="text-white/50 text-xs">·</span>
+              <span className="text-xs font-bold text-white">
+                {trialDaysLeft === 0 ? 'último día' : `${trialDaysLeft} día${trialDaysLeft !== 1 ? 's' : ''} restante${trialDaysLeft !== 1 ? 's' : ''}`}
               </span>
-            ) : (
-              <p className="text-xs text-white/40 mt-0.5">Panel de gestión</p>
-            )}
-          </div>
+            </>
+          )}
         </div>
-        {onClose && (
-          <button onClick={onClose} className="text-white/60 hover:text-white ml-2 shrink-0">
-            <X className="h-5 w-5" />
-          </button>
-        )}
+      )}
+      {/* Demo banner */}
+      {!isTrial && gymDemoEnabled && (
+        <div className="h-8 bg-gradient-to-r from-violet-600 to-indigo-600 flex items-center justify-center gap-1.5 px-4 shrink-0">
+          <span className="text-xs font-semibold text-white/90 tracking-wide">Demo habilitada</span>
+          <span className="text-white/50 text-xs">·</span>
+          <span className="text-xs text-white/75">Datos de ejemplo activos</span>
+        </div>
+      )}
+      {/* Header */}
+      <div className="px-4 py-4 border-b border-white/[0.06]">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={cn(
+              'flex items-center justify-center w-9 h-9 rounded-xl shrink-0 overflow-hidden',
+              gymLogo ? 'bg-white/5' : 'bg-[#fffb00] shadow-[0_0_16px_rgba(255,251,0,0.28)]',
+            )}>
+              {gymLogo
+                ? <img src={gymLogo} alt={gymName} className="w-full h-full object-cover" />
+                : <Dumbbell className="h-4 w-4 text-black" />}
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-white text-sm tracking-tight truncate leading-tight">{gymName}</p>
+              {gymPlan ? (
+                <span className="inline-flex items-center mt-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#fffb00]/10 text-[#fffb00] ring-1 ring-[#fffb00]/25">
+                  {gymPlan}
+                </span>
+              ) : (
+                <p className="text-[11px] text-white/30 mt-0.5 tracking-wide">Panel de gestión</p>
+              )}
+            </div>
+          </div>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="flex items-center justify-center w-7 h-7 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-all shrink-0 ml-2"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Super admin back button */}
@@ -142,14 +186,14 @@ function NavContent({
       )}
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
+      <nav className="flex-1 overflow-y-auto px-2.5 py-3 space-y-4 scrollbar-thin">
         {BASE_NAV_GROUPS.map((group) => {
           const items = group.storeItem && storeEnabled
             ? [group.items[0], group.storeItem, ...group.items.slice(1)]
             : group.items
           return (
             <div key={group.label}>
-              <p className="px-3 mb-1.5 text-[10px] font-bold uppercase tracking-widest text-white/30">
+              <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/25">
                 {group.label}
               </p>
               <div className="space-y-0.5">
@@ -162,13 +206,16 @@ function NavContent({
                       href={href}
                       onClick={onClose}
                       className={cn(
-                        'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
+                        'group flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150',
                         active
-                          ? 'bg-[#fffb00] text-black'
-                          : 'text-white/60 hover:bg-white/5 hover:text-white',
+                          ? 'bg-[#fffb00] text-black shadow-[0_2px_14px_rgba(255,251,0,0.22)] font-semibold'
+                          : 'text-white/50 hover:bg-white/[0.07] hover:text-white/90',
                       )}
                     >
-                      <Icon className="h-4 w-4 shrink-0" />
+                      <Icon className={cn(
+                        'h-4 w-4 shrink-0 transition-colors duration-150',
+                        active ? 'text-black' : 'text-white/30 group-hover:text-white/70',
+                      )} />
                       {label}
                     </Link>
                   )
@@ -180,17 +227,20 @@ function NavContent({
       </nav>
 
       {/* Footer */}
-      <div className="border-t border-white/10 px-3 py-4 space-y-1">
-        <div className="px-3 py-1.5">
-          <p className="text-xs text-white/40 truncate">{userEmail}</p>
+      <div className="border-t border-white/[0.06] px-2.5 py-3 space-y-0.5">
+        <div className="flex items-center gap-2.5 px-3 py-2 mb-1">
+          <div className="w-6 h-6 rounded-full bg-white/10 ring-1 ring-white/10 flex items-center justify-center shrink-0">
+            <span className="text-[10px] font-bold text-white/50">{emailInitial}</span>
+          </div>
+          <p className="text-[11px] text-white/30 truncate">{userEmail}</p>
         </div>
         <ThemeToggleButton />
         <button
           onClick={onLogout}
           disabled={isPending}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-white/60 hover:bg-white/5 hover:text-white transition-all disabled:opacity-40"
+          className="group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium text-white/40 hover:bg-white/[0.07] hover:text-white/80 transition-all duration-150 disabled:opacity-30"
         >
-          <LogOut className="h-4 w-4 shrink-0" />
+          <LogOut className="h-4 w-4 shrink-0 text-white/25 group-hover:text-white/60 transition-colors duration-150" />
           {isPending ? 'Saliendo…' : 'Cerrar sesión'}
         </button>
       </div>
@@ -203,15 +253,17 @@ function ThemeToggleButton() {
   return (
     <button
       onClick={toggle}
-      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-white/60 hover:bg-white/5 hover:text-white transition-all"
+      className="group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium text-white/40 hover:bg-white/[0.07] hover:text-white/80 transition-all duration-150"
     >
-      {theme === 'dark' ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
+      {theme === 'dark'
+        ? <Sun className="h-4 w-4 shrink-0 text-white/25 group-hover:text-white/60 transition-colors duration-150" />
+        : <Moon className="h-4 w-4 shrink-0 text-white/25 group-hover:text-white/60 transition-colors duration-150" />}
       {theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
     </button>
   )
 }
 
-export function GymSidebar({ gymSlug, gymName, gymPlan, userEmail, userRole, storeEnabled }: GymSidebarProps) {
+export function GymSidebar({ gymSlug, gymName, gymLogo, gymPlan, gymSubscriptionStatus, gymTrialEndsAt, gymDemoEnabled, userEmail, userRole, storeEnabled }: GymSidebarProps) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -222,6 +274,11 @@ export function GymSidebar({ gymSlug, gymName, gymPlan, userEmail, userRole, sto
     })
   }
 
+  const isTrial = gymSubscriptionStatus === 'TRIAL'
+  const trialDaysLeft = isTrial && gymTrialEndsAt
+    ? Math.max(0, Math.ceil((new Date(gymTrialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : null
+
   return (
     <>
       {/* Desktop sidebar */}
@@ -229,6 +286,7 @@ export function GymSidebar({ gymSlug, gymName, gymPlan, userEmail, userRole, sto
         <NavContent
           gymSlug={gymSlug}
           gymName={gymName}
+          gymLogo={gymLogo}
           gymPlan={gymPlan}
           userEmail={userEmail}
           userRole={userRole}
@@ -236,24 +294,61 @@ export function GymSidebar({ gymSlug, gymName, gymPlan, userEmail, userRole, sto
           isPending={isPending}
           onLogout={handleLogout}
           storeEnabled={storeEnabled}
+          isTrial={isTrial}
+          trialDaysLeft={trialDaysLeft}
+          gymDemoEnabled={gymDemoEnabled}
         />
       </aside>
 
-      {/* Mobile top bar */}
-      <div className="fixed top-0 left-0 right-0 z-40 h-14 bg-black flex items-center justify-between px-4 lg:hidden border-b border-white/10">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center justify-center w-7 h-7 rounded-md bg-[#fffb00]">
-            <Dumbbell className="h-3.5 w-3.5 text-black" />
+      {/* Mobile header (banner + top bar) */}
+      <div className="fixed top-0 left-0 right-0 z-40 lg:hidden">
+        {/* Trial banner */}
+        {isTrial && (
+          <div className="h-8 bg-gradient-to-r from-amber-500 to-orange-500 flex items-center justify-center gap-1.5 px-4">
+            <span className="text-xs font-semibold text-white/90 tracking-wide">
+              Prueba gratuita
+            </span>
+            {trialDaysLeft !== null && (
+              <>
+                <span className="text-white/50 text-xs">·</span>
+                <span className="text-xs font-bold text-white">
+                  {trialDaysLeft === 0 ? 'último día' : `${trialDaysLeft} día${trialDaysLeft !== 1 ? 's' : ''} restante${trialDaysLeft !== 1 ? 's' : ''}`}
+                </span>
+              </>
+            )}
           </div>
-          <span className="font-bold text-white text-sm truncate max-w-[160px]">{gymName}</span>
+        )}
+        {/* Demo banner */}
+        {!isTrial && gymDemoEnabled && (
+          <div className="h-8 bg-gradient-to-r from-violet-600 to-indigo-600 flex items-center justify-center gap-1.5 px-4">
+            <span className="text-xs font-semibold text-white/90 tracking-wide">Demo habilitada</span>
+            <span className="text-white/50 text-xs">·</span>
+            <span className="text-xs text-white/75">Datos de ejemplo activos</span>
+          </div>
+        )}
+        {/* Top bar */}
+        <div className="h-14 bg-black/85 backdrop-blur-md flex items-center justify-between px-4 border-b border-white/8 shadow-lg shadow-black/20">
+          <div className="flex items-center gap-2.5">
+            <div className={cn(
+              'flex items-center justify-center w-8 h-8 rounded-lg overflow-hidden shrink-0',
+              gymLogo ? 'bg-white/5' : 'bg-[#fffb00] shadow-[0_0_12px_rgba(255,251,0,0.35)]',
+            )}>
+              {gymLogo
+                ? <img src={gymLogo} alt={gymName} className="w-full h-full object-cover" />
+                : <Dumbbell className="h-4 w-4 text-black" />}
+            </div>
+            <span className="font-semibold text-white text-sm tracking-tight truncate max-w-[160px]">
+              {gymName}
+            </span>
+          </div>
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="flex items-center justify-center w-8 h-8 rounded-lg text-white/60 hover:text-white hover:bg-white/10 active:bg-white/15 transition-all duration-150"
+            aria-label="Abrir menú"
+          >
+            <Menu className="h-4.5 w-4.5" />
+          </button>
         </div>
-        <button
-          onClick={() => setMobileOpen(true)}
-          className="text-white/70 hover:text-white p-1"
-          aria-label="Abrir menú"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
       </div>
 
       {/* Mobile overlay */}
@@ -267,6 +362,7 @@ export function GymSidebar({ gymSlug, gymName, gymPlan, userEmail, userRole, sto
             <NavContent
               gymSlug={gymSlug}
               gymName={gymName}
+              gymLogo={gymLogo}
               gymPlan={gymPlan}
               userEmail={userEmail}
               userRole={userRole}

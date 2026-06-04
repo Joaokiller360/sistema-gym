@@ -43,6 +43,9 @@ export interface Gym {
   country: string | null;
   timezone: string;
   subscriptionPlan: string;
+  subscriptionStatus: string;
+  trialEndsAt: string | null;
+  demoEnabled: boolean;
   storeEnabled: boolean;
   advancedReportsEnabled: boolean;
   ownerId: string | null;
