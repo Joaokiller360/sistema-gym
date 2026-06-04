@@ -472,6 +472,7 @@ model SubscriptionPlan {
   yearlyPrice     Int?
   demoEnabled             Boolean  @default(false)
   trialEnabled            Boolean  @default(false)
+  visibleOnLanding        Boolean  @default(true)
   advancedReportsEnabled  Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
