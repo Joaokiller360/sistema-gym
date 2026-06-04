@@ -19,7 +19,7 @@ export class AppService {
 
   async getPublicSubscriptionPlans() {
     const plans = await this.prisma.subscriptionPlan.findMany({
-      where: { isActive: true },
+      where: { isActive: true, visibleOnLanding: true },
       orderBy: { sortOrder: 'asc' },
     });
     return plans.map((plan) => {
