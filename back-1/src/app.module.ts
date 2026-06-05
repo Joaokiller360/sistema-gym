@@ -26,6 +26,7 @@ import { StoreModule } from './store/store.module';
 import { SupportModule } from './support/support.module';
 import { ContentModule } from './content/content.module';
 import { DemoRequestsModule } from './demo-requests/demo-requests.module';
+import { AccessRequestsModule } from './access-requests/access-requests.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { DemoRequestsModule } from './demo-requests/demo-requests.module';
     SupportModule,
     ContentModule,
     DemoRequestsModule,
+    AccessRequestsModule,
   ],
   controllers: [AppController],
   providers: [

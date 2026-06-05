@@ -87,6 +87,12 @@ enum DemoRequestStatus {
   DISMISSED
 }
 
+enum AccessRequestStatus {
+  PENDING
+  CONTACTED
+  DISMISSED
+}
+
 model Gym {
   id               String   @id @default(uuid())
   name             String
@@ -733,4 +739,17 @@ model DemoRequest {
 
   @@index([status])
   @@map("demo_requests")
+}
+
+model AccessRequest {
+  id            String              @id @default(uuid())
+  name          String
+  email         String
+  phone         String?
+  preferredDate DateTime
+  status        AccessRequestStatus @default(PENDING)
+  createdAt     DateTime            @default(now())
+
+  @@index([status])
+  @@map("access_requests")
 }
