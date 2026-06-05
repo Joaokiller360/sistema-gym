@@ -151,7 +151,8 @@ model User {
   gymId String?
   gym   Gym?    @relation("GymUsers", fields: [gymId], references: [id], onDelete: SetNull)
 
-  ownedGym Gym? @relation("GymOwner")
+  ownedGym              Gym?                 @relation("GymOwner")
+  adminCommunications   AdminCommunication[]
 
   @@index([gymId])
   @@map("users")
@@ -769,6 +770,7 @@ model AdminCommunication {
   filter       String   @db.VarChar(10)
   recipientIds String[]
   sentById     String?
+  sentBy       User?    @relation(fields: [sentById], references: [id], onDelete: SetNull)
   sent         Int      @default(0)
   failed       Int      @default(0)
   sentAt       DateTime @default(now())
