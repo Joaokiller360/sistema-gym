@@ -140,6 +140,7 @@ export default async function AdminDashboardPage() {
   const demoRequests: DemoRequest[] = demoRequestsRaw
     ? (Array.isArray(demoRequestsRaw) ? demoRequestsRaw : demoRequestsRaw.data)
     : []
+
   const latestTickets = tickets
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 5)

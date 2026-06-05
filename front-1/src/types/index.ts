@@ -238,6 +238,7 @@ export interface Communication {
   gymId: string;
   sentAt: string;
   createdAt: string;
+  sentBy?: { name: string; email: string };
 }
 
 export interface EmailTemplate {

@@ -9,6 +9,7 @@ import {
 import { ThemeToggle } from './ThemeToggle'
 import { DEFAULT_PLATFORM_SETTINGS, type PlatformSettings, type LandingFeature } from './admin/settings/types'
 import { PricingSection, type SubscriptionPlanPublic } from './PricingSection'
+import { AccessRequestBanner } from './AccessRequestBanner'
 
 const FEATURE_ICONS = [Dumbbell, Users, BarChart2, Shield, CreditCard, Zap, Package, Calendar, TrendingUp, Bell]
 
@@ -30,6 +31,7 @@ async function getSettings(): Promise<PlatformSettings> {
     logoUrl: resolveLogoUrl(data.logoUrl),
     footerLinks: data.footerLinks ?? [],
     landingFeatures: data.landingFeatures ?? [],
+    availableSlots: data.availableSlots ?? [],
   }
 }
 
@@ -367,6 +369,7 @@ export default async function LandingPage() {
         {settings.landingShowPlans && plans.length > 0 && (
           <PricingSection plans={plans} primaryColor={primaryColor} ctaUrl={heroCtaUrl} />
         )}
+        <AccessRequestBanner primaryColor={primaryColor} availableSlots={settings.availableSlots ?? []} />
         <CtaBanner ctaText={heroCtaText} ctaUrl={heroCtaUrl} primaryColor={primaryColor} saasName={settings.saasName} />
       </main>
       <LandingFooter settings={settings} />

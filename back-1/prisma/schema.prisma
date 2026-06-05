@@ -769,6 +769,7 @@ model AdminCommunication {
   body         String
   filter       String   @db.VarChar(10)
   recipientIds String[]
+  senderName   String?  @db.VarChar(60)
   sentById     String?
   sentBy       User?    @relation(fields: [sentById], references: [id], onDelete: SetNull)
   sent         Int      @default(0)

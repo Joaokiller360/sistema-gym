@@ -31,6 +31,11 @@ class SendComunicacionesDto {
   @IsNotEmpty()
   @MaxLength(5000)
   body: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(60)
+  senderName: string;
 }
 
 @Controller('admin')
@@ -218,7 +223,7 @@ export class SuperAdminController {
   @Post('comunicaciones/send')
   @HttpCode(202)
   sendComunicaciones(@Body() dto: SendComunicacionesDto, @Req() req: any) {
-    return this.superAdminService.sendComunicaciones(dto.filter, dto.gymIds, dto.subject, dto.body, req.user?.userId);
+    return this.superAdminService.sendComunicaciones(dto.filter, dto.gymIds, dto.subject, dto.body, dto.senderName, req.user?.userId);
   }
 
   @Get('comunicaciones/history')

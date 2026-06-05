@@ -10,6 +10,7 @@ import { NewMemberModal } from '../members/NewMemberModal'
 import { NewsSection } from './NewsSection'
 import { TutorialsSection } from './TutorialsSection'
 import { AdvancedReportsSection, type AdvancedReport } from './AdvancedReportsSection'
+import { CommunicationsPanel } from './CommunicationsPanel'
 
 interface MembersResponse { data: Member[]; total: number }
 interface FinancialReport { totalRevenue: number; currency: string }
@@ -161,6 +162,8 @@ export default async function GymDashboardPage({ params, searchParams }: Props) 
         <NewsSection canManage={isSuperAdmin} />
         <TutorialsSection canManage={isSuperAdmin} />
       </div>
+
+      <CommunicationsPanel gymSlug={gymSlug} />
 
       {newParam === 'member' && (
         <Suspense>

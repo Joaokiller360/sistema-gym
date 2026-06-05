@@ -18,6 +18,8 @@ import {
   Sun,
   UserCircle,
   LifeBuoy,
+  CalendarClock,
+  Mail,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logoutAction } from '@/lib/logout'
@@ -28,6 +30,8 @@ const NAV = [
   { label: 'Gimnasios', href: '/admin/gyms', icon: Building2 },
   { label: 'Ingresos', href: '/admin/income', icon: TrendingUp },
   { label: 'Planes', href: '/admin/plans', icon: CreditCard },
+  { label: 'Solicitudes', href: '/admin/acceso', icon: CalendarClock },
+  { label: 'Comunicaciones', href: '/admin/comunicaciones', icon: Mail },
   { label: 'Configuración', href: '/admin/settings', icon: Settings },
   { label: 'Mi perfil', href: '/admin/profile', icon: UserCircle },
   { label: 'Soporte', href: '/admin/support', icon: LifeBuoy },

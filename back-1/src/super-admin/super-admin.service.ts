@@ -743,6 +743,7 @@ export class SuperAdminService {
     gymIds: string[] | undefined,
     subject: string,
     body: string,
+    senderName: string,
     sentById?: string,
   ): Promise<{ sent: number; failed: number }> {
     const platform = await this.prisma.platformSettings.findFirst();
@@ -772,12 +773,13 @@ export class SuperAdminService {
 
     // Create record immediately, return 202, send emails async
     const record = await this.prisma.adminCommunication.create({
-      data: { subject, body, filter, recipientIds, sentById: sentById ?? null, sent: 0, failed: 0 },
+      data: { subject, body, filter, recipientIds, senderName, sentById: sentById ?? null, sent: 0, failed: 0 },
     });
 
     // Fire-and-forget: send emails, update record with actual counts
     setImmediate(async () => {
       const saasNameEscaped = escapeHtml(saasName);
+      const safeSenderName = escapeHtml(senderName);
       const safeSubject = escapeHtml(subject);
       let sent = 0;
       let failed = 0;
@@ -801,6 +803,7 @@ export class SuperAdminService {
           <td align="center" style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);border-radius:12px 12px 0 0;padding:36px 32px 28px;">
             <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700;">${saasNameEscaped}</h1>
             <p style="margin:6px 0 0;color:rgba(255,255,255,0.6);font-size:13px;">${safeSubject}</p>
+            <p style="margin:8px 0 0;color:rgba(255,255,255,0.45);font-size:12px;">De parte de: ${safeSenderName}</p>
           </td>
         </tr>
         <tr>

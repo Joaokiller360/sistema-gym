@@ -24,6 +24,7 @@ export interface PlatformSettings {
   landingFeatures: LandingFeature[]
   landingShowPlans: boolean
   termsContent: string | null
+  availableSlots: string[]
 }
 
 export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
@@ -42,4 +43,5 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   landingFeatures: [],
   landingShowPlans: true,
   termsContent: null,
+  availableSlots: [],
 }
