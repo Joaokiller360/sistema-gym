@@ -743,6 +743,7 @@ export class SuperAdminService {
     gymIds: string[] | undefined,
     subject: string,
     body: string,
+    sentById?: string,
   ): Promise<{ sent: number; failed: number }> {
     const platform = await this.prisma.platformSettings.findFirst();
     const saasName = platform?.saasName ?? 'GymOS';
@@ -766,24 +767,32 @@ export class SuperAdminService {
     });
     const ownerMap = new Map(owners.map(o => [o.id, o]));
 
-    const safeSubject = escapeHtml(subject);
-    const saasNameEscaped = escapeHtml(saasName);
+    const recipientIds = gyms.map(g => g.id);
+    const total = gyms.filter(g => ownerMap.get(g.ownerId!)?.email).length;
 
-    let sent = 0;
-    let failed = 0;
+    // Create record immediately, return 202, send emails async
+    const record = await this.prisma.adminCommunication.create({
+      data: { subject, body, filter, recipientIds, sentById: sentById ?? null, sent: 0, failed: 0 },
+    });
 
-    for (const gym of gyms) {
-      const owner = ownerMap.get(gym.ownerId!);
-      if (!owner?.email) { failed++; continue; }
+    // Fire-and-forget: send emails, update record with actual counts
+    setImmediate(async () => {
+      const saasNameEscaped = escapeHtml(saasName);
+      const safeSubject = escapeHtml(subject);
+      let sent = 0;
+      let failed = 0;
 
-      const safeGymName = escapeHtml(gym.name);
-      const safeOwnerName = escapeHtml(owner.name?.split(' ')[0] ?? owner.email);
-      const safeBody = escapeHtml(body).replace(/\n/g, '<br>');
+      for (const gym of gyms) {
+        const owner = ownerMap.get(gym.ownerId!);
+        if (!owner?.email) { failed++; continue; }
 
-      const html = `
-<!DOCTYPE html>
+        const safeGymName = escapeHtml(gym.name);
+        const safeOwnerName = escapeHtml(owner.name?.split(' ')[0] ?? owner.email);
+        const safeBody = escapeHtml(body).replace(/\n/g, '<br>');
+
+        const html = `<!DOCTYPE html>
 <html lang="es">
-<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1.0" /></head>
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/></head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;">
     <tr><td align="center">
@@ -809,7 +818,7 @@ export class SuperAdminService {
         </tr>
         <tr>
           <td style="background:#f9fafb;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
-            <p style="margin:0;color:#9ca3af;font-size:12px;">Este mensaje fue enviado por ${saasNameEscaped}. Por favor no respondas a este correo.</p>
+            <p style="margin:0;color:#9ca3af;font-size:12px;">© ${new Date().getFullYear()} ${saasNameEscaped} · Este correo fue enviado a los dueños registrados.</p>
           </td>
         </tr>
       </table>
@@ -818,17 +827,35 @@ export class SuperAdminService {
 </body>
 </html>`;
 
-      const { error } = await this.resend.emails.send({
-        from: fromEmail,
-        to: owner.email,
-        subject: `${subject} — ${saasName}`,
-        html,
-      });
+        const { error } = await this.resend.emails.send({
+          from: fromEmail,
+          to: owner.email,
+          subject: `${subject} — ${saasName}`,
+          html,
+        });
 
-      if (error) { failed++; } else { sent++; }
-    }
+        if (error) { failed++; } else { sent++; }
+      }
 
-    return { sent, failed };
+      await this.prisma.adminCommunication.update({
+        where: { id: record.id },
+        data: { sent, failed },
+      }).catch(() => null);
+    });
+
+    return { sent: total, failed: 0 };
+  }
+
+  async getCommunicationsHistory() {
+    return this.prisma.adminCommunication.findMany({
+      orderBy: { sentAt: 'desc' },
+      take: 50,
+      select: {
+        id: true, subject: true, body: true, filter: true,
+        recipientIds: true, sent: true, failed: true,
+        sentAt: true, createdAt: true,
+      },
+    });
   }
 
   private async assertGymExists(id: string) {

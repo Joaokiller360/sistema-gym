@@ -217,7 +217,12 @@ export class SuperAdminController {
 
   @Post('comunicaciones/send')
   @HttpCode(202)
-  sendComunicaciones(@Body() dto: SendComunicacionesDto) {
-    return this.superAdminService.sendComunicaciones(dto.filter, dto.gymIds, dto.subject, dto.body);
+  sendComunicaciones(@Body() dto: SendComunicacionesDto, @Req() req: any) {
+    return this.superAdminService.sendComunicaciones(dto.filter, dto.gymIds, dto.subject, dto.body, req.user?.userId);
+  }
+
+  @Get('comunicaciones/history')
+  getCommunicationsHistory() {
+    return this.superAdminService.getCommunicationsHistory();
   }
 }

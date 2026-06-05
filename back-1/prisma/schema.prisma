@@ -761,3 +761,19 @@ model AccessRequest {
   @@index([status])
   @@map("access_requests")
 }
+
+model AdminCommunication {
+  id           String   @id @default(uuid())
+  subject      String   @db.VarChar(150)
+  body         String
+  filter       String   @db.VarChar(10)
+  recipientIds String[]
+  sentById     String?
+  sent         Int      @default(0)
+  failed       Int      @default(0)
+  sentAt       DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  @@index([sentAt(sort: Desc)])
+  @@map("admin_communications")
+}
