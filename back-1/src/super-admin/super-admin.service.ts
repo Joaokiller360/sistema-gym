@@ -658,8 +658,19 @@ export class SuperAdminService {
     primaryColor?: string | null;
     landingFeatures?: Array<{ title: string; description: string }>;
     landingShowPlans?: boolean;
+    availableSlots?: string[];
     termsContent?: string | null;
   }) {
+    if (data.availableSlots !== undefined) {
+      if (!Array.isArray(data.availableSlots) || data.availableSlots.length > 48) {
+        throw new BadRequestException('availableSlots must be an array of up to 48 items');
+      }
+      const slotRe = /^\d{2}:\d{2}$/;
+      if (data.availableSlots.some((s: unknown) => typeof s !== 'string' || !slotRe.test(s))) {
+        throw new BadRequestException('Each slot must match HH:MM format');
+      }
+    }
+
     return this.prisma.platformSettings.upsert({
       where: { id: '1' },
       create: { id: '1', ...data },
@@ -738,8 +749,8 @@ export class SuperAdminService {
     const fromEmail = process.env.RESEND_FROM_EMAIL ?? 'noreply@example.com';
 
     const where: Record<string, unknown> =
-      filter === 'ACTIVE' ? { isActive: true, ownerId: { not: null } }
-      : filter === 'INACTIVE' ? { isActive: false, ownerId: { not: null } }
+      filter === 'ACTIVE' ? { subscriptionStatus: { in: ['ACTIVE', 'TRIAL'] }, ownerId: { not: null } }
+      : filter === 'INACTIVE' ? { subscriptionStatus: 'INACTIVE', ownerId: { not: null } }
       : filter === 'CUSTOM' ? { id: { in: gymIds ?? [] }, ownerId: { not: null } }
       : { ownerId: { not: null } };
 

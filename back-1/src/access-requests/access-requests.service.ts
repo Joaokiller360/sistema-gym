@@ -54,24 +54,41 @@ export class AccessRequestsService {
       throw new BadRequestException('preferredDate must be within 1 year');
     }
 
-    await this.prisma.accessRequest.create({
+    const record = await this.prisma.accessRequest.create({
       data: {
         name: sanitizeText(dto.name),
         email: dto.email.toLowerCase().trim(),
         phone: dto.phone ? sanitizeText(dto.phone) : null,
+        country: dto.country,
+        callingCode: dto.callingCode ?? null,
+        postalCode: dto.postalCode ? sanitizeText(dto.postalCode) : null,
         preferredDate: preferred,
       },
+      select: { id: true, name: true, email: true, preferredDate: true, status: true },
     });
 
-    return { success: true };
+    return record;
   }
 
-  async findAll(limit: number) {
-    return this.prisma.accessRequest.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: Math.min(limit, 500),
-      select: { id: true, name: true, email: true, phone: true, preferredDate: true, status: true, createdAt: true },
-    });
+  async findAll(limit: number, offset: number, status?: AccessRequestStatus) {
+    const where = status ? { status } : {};
+    const [data, total] = await Promise.all([
+      this.prisma.accessRequest.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: Math.min(limit, 500),
+        skip: offset,
+        select: {
+          id: true, name: true, email: true, phone: true,
+          country: true, callingCode: true, postalCode: true,
+          preferredDate: true, status: true,
+          convertedAt: true, convertedGymId: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.accessRequest.count({ where }),
+    ]);
+    return { data, total };
   }
 
   async updateStatus(id: string, status: AccessRequestStatus) {
@@ -80,7 +97,7 @@ export class AccessRequestsService {
     return this.prisma.accessRequest.update({
       where: { id },
       data: { status },
-      select: { id: true, name: true, email: true, phone: true, preferredDate: true, status: true, createdAt: true },
+      select: { id: true, status: true },
     });
   }
 
@@ -206,7 +223,14 @@ export class AccessRequestsService {
       throw new InternalServerErrorException('Failed to send email');
     }
 
-    return { success: true };
+    if (record.status === 'PENDING') {
+      await this.prisma.accessRequest.update({
+        where: { id },
+        data: { status: 'CONTACTED' },
+      });
+    }
+
+    return {};
   }
 
   async convert(id: string, gymName: string, adminId: string): Promise<{ gymSlug: string }> {

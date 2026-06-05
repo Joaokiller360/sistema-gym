@@ -1,5 +1,5 @@
 import {
-  Controller, Post, Get, Patch, Body, Param, Query, Req,
+  Controller, Post, Get, Patch, Body, Param, Query, Req, HttpCode,
   ParseIntPipe, DefaultValuePipe, UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
@@ -15,7 +15,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
 
 class UpdateStatusDto {
-  @IsEnum(AccessRequestStatus)
+  @IsEnum(['PENDING', 'CONTACTED', 'DISMISSED'])
   status: AccessRequestStatus;
 }
 
@@ -24,6 +24,7 @@ export class AccessRequestsController {
   constructor(private readonly accessRequestsService: AccessRequestsService) {}
 
   @Post()
+  @HttpCode(201)
   @Throttle({ default: { ttl: 60000, limit: 3 } })
   create(@Body() dto: CreateAccessRequestDto) {
     return this.accessRequestsService.create(dto);
@@ -32,8 +33,12 @@ export class AccessRequestsController {
   @Get('admin')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.SUPER_ADMIN)
-  findAll(@Query('limit', new DefaultValuePipe(100), ParseIntPipe) limit: number) {
-    return this.accessRequestsService.findAll(limit);
+  findAll(
+    @Query('limit', new DefaultValuePipe(100), ParseIntPipe) limit: number,
+    @Query('offset', new DefaultValuePipe(0), ParseIntPipe) offset: number,
+    @Query('status') status?: AccessRequestStatus,
+  ) {
+    return this.accessRequestsService.findAll(limit, offset, status);
   }
 
   @Patch('admin/:id/status')
@@ -51,6 +56,7 @@ export class AccessRequestsController {
   }
 
   @Post('admin/:id/convert')
+  @HttpCode(201)
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.SUPER_ADMIN)
   @Throttle({ default: { ttl: 60000, limit: 10 } })

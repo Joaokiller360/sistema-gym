@@ -683,6 +683,7 @@ model PlatformSettings {
   primaryColor        String?
   landingFeatures     Json     @default("[]")
   landingShowPlans    Boolean  @default(true)
+  availableSlots      Json     @default("[]")
   termsContent        String?
   updatedAt           DateTime @updatedAt
 
@@ -747,6 +748,9 @@ model AccessRequest {
   name            String
   email           String
   phone           String?
+  country         String?             @db.VarChar(10)
+  callingCode     String?             @db.VarChar(8)
+  postalCode      String?             @db.VarChar(20)
   preferredDate   DateTime
   status          AccessRequestStatus @default(PENDING)
   convertedAt     DateTime?

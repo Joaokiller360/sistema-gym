@@ -1,7 +1,7 @@
 import {
   Controller, Get, Post, Patch, Delete,
   Body, Param, Query, Req, UseGuards, UseInterceptors,
-  UploadedFile, BadRequestException,
+  UploadedFile, BadRequestException, HttpCode,
 } from '@nestjs/common';
 import { IsEnum, IsString, IsNotEmpty, IsOptional, IsArray, IsUUID, MaxLength } from 'class-validator';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -216,6 +216,7 @@ export class SuperAdminController {
   }
 
   @Post('comunicaciones/send')
+  @HttpCode(202)
   sendComunicaciones(@Body() dto: SendComunicacionesDto) {
     return this.superAdminService.sendComunicaciones(dto.filter, dto.gymIds, dto.subject, dto.body);
   }
