@@ -2,7 +2,7 @@
 
 import { cookies } from 'next/headers'
 import { updateTag } from 'next/cache'
-import { apiFetch } from '@/lib/api'
+import { apiFetch, apiFetchWithError } from '@/lib/api'
 
 async function getToken() {
   const store = await cookies()
@@ -16,12 +16,17 @@ export async function checkInAction(
 ): Promise<{ error?: string }> {
   if (!memberId.trim()) return { error: 'ID de miembro requerido' }
   const token = await getToken()
-  const result = await apiFetch('/attendance/checkin', token, {
+  const result = await apiFetchWithError('/attendance/checkin', token, {
     method: 'POST',
     body: JSON.stringify({ memberId, ...(groupId ? { groupId } : {}) }),
     headers: { 'x-gym-slug': gymSlug },
   })
-  if (!result) return { error: 'Error al registrar entrada' }
+  if ('error' in result) {
+    const msg = result.error.toLowerCase().includes('already checked in')
+      ? 'El miembro ya tiene una entrada registrada hoy'
+      : result.error
+    return { error: msg }
+  }
   updateTag(`attendance-${gymSlug}`)
   return {}
 }

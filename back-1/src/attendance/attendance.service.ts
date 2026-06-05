@@ -50,10 +50,20 @@ export class AttendanceService {
   }
 
   async checkIn(gymId: string, memberId: string, branchId?: string, groupId?: string) {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
     const open = await this.prisma.attendance.findFirst({
-      where: { gymId, memberId, checkOut: null },
+      where: {
+        gymId,
+        memberId,
+        checkOut: null,
+        checkIn: { gte: todayStart, lte: todayEnd },
+      },
     });
-    if (open) throw new ConflictException('Member already checked in');
+    if (open) throw new ConflictException('Member already checked in today');
 
     return this.prisma.attendance.create({
       data: {
