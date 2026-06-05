@@ -1,17 +1,21 @@
-import { IsString, IsNotEmpty, IsEmail, IsOptional, IsDateString, MaxLength } from 'class-validator';
+import { IsString, IsNotEmpty, IsEmail, IsOptional, IsDateString, MinLength, MaxLength, Matches } from 'class-validator';
 
 export class CreateAccessRequestDto {
   @IsString()
   @IsNotEmpty()
-  @MaxLength(100)
+  @MinLength(2)
+  @MaxLength(80)
   name: string;
 
   @IsEmail()
+  @MaxLength(254)
   email: string;
 
   @IsString()
   @IsOptional()
-  @MaxLength(30)
+  @MinLength(6)
+  @MaxLength(20)
+  @Matches(/^[0-9+\-\s()]+$/, { message: 'phone must contain only digits, +, -, spaces, or parentheses' })
   phone?: string;
 
   @IsDateString()

@@ -3,6 +3,7 @@ import {
   Body, Param, Query, Req, UseGuards, UseInterceptors,
   UploadedFile, BadRequestException,
 } from '@nestjs/common';
+import { IsEnum, IsString, IsNotEmpty, IsOptional, IsArray, IsUUID, MaxLength } from 'class-validator';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
@@ -11,6 +12,26 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
+
+class SendComunicacionesDto {
+  @IsEnum(['ALL', 'ACTIVE', 'INACTIVE', 'CUSTOM'])
+  filter: 'ALL' | 'ACTIVE' | 'INACTIVE' | 'CUSTOM';
+
+  @IsArray()
+  @IsUUID('all', { each: true })
+  @IsOptional()
+  gymIds?: string[];
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  subject: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(5000)
+  body: string;
+}
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -192,5 +213,10 @@ export class SuperAdminController {
   @Patch('platform-settings')
   updatePlatformSettings(@Body() body: any) {
     return this.superAdminService.updatePlatformSettings(body);
+  }
+
+  @Post('comunicaciones/send')
+  sendComunicaciones(@Body() dto: SendComunicacionesDto) {
+    return this.superAdminService.sendComunicaciones(dto.filter, dto.gymIds, dto.subject, dto.body);
   }
 }

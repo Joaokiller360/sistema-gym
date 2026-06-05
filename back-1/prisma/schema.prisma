@@ -91,6 +91,7 @@ enum AccessRequestStatus {
   PENDING
   CONTACTED
   DISMISSED
+  CONVERTED
 }
 
 model Gym {
@@ -742,13 +743,16 @@ model DemoRequest {
 }
 
 model AccessRequest {
-  id            String              @id @default(uuid())
-  name          String
-  email         String
-  phone         String?
-  preferredDate DateTime
-  status        AccessRequestStatus @default(PENDING)
-  createdAt     DateTime            @default(now())
+  id              String              @id @default(uuid())
+  name            String
+  email           String
+  phone           String?
+  preferredDate   DateTime
+  status          AccessRequestStatus @default(PENDING)
+  convertedAt     DateTime?
+  convertedById   String?
+  convertedGymId  String?
+  createdAt       DateTime            @default(now())
 
   @@index([status])
   @@map("access_requests")

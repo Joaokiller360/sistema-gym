@@ -1,4 +1,5 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer, RequestMethod } from '@nestjs/common';
+import * as express from 'express';
 import { AccessRequestsController } from './access-requests.controller';
 import { AccessRequestsService } from './access-requests.service';
 
@@ -6,4 +7,10 @@ import { AccessRequestsService } from './access-requests.service';
   controllers: [AccessRequestsController],
   providers: [AccessRequestsService],
 })
-export class AccessRequestsModule {}
+export class AccessRequestsModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(express.json({ limit: '2kb' }))
+      .forRoutes({ path: 'access-requests', method: RequestMethod.POST });
+  }
+}

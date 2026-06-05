@@ -727,6 +727,99 @@ export class SuperAdminService {
     });
   }
 
+  async sendComunicaciones(
+    filter: 'ALL' | 'ACTIVE' | 'INACTIVE' | 'CUSTOM',
+    gymIds: string[] | undefined,
+    subject: string,
+    body: string,
+  ): Promise<{ sent: number; failed: number }> {
+    const platform = await this.prisma.platformSettings.findFirst();
+    const saasName = platform?.saasName ?? 'GymOS';
+    const fromEmail = process.env.RESEND_FROM_EMAIL ?? 'noreply@example.com';
+
+    const where: Record<string, unknown> =
+      filter === 'ACTIVE' ? { isActive: true, ownerId: { not: null } }
+      : filter === 'INACTIVE' ? { isActive: false, ownerId: { not: null } }
+      : filter === 'CUSTOM' ? { id: { in: gymIds ?? [] }, ownerId: { not: null } }
+      : { ownerId: { not: null } };
+
+    const gyms = await this.prisma.gym.findMany({
+      where: where as any,
+      select: { id: true, name: true, ownerId: true },
+    });
+
+    const ownerIds = [...new Set(gyms.map(g => g.ownerId).filter(Boolean))] as string[];
+    const owners = await this.prisma.user.findMany({
+      where: { id: { in: ownerIds } },
+      select: { id: true, email: true, name: true },
+    });
+    const ownerMap = new Map(owners.map(o => [o.id, o]));
+
+    const safeSubject = escapeHtml(subject);
+    const saasNameEscaped = escapeHtml(saasName);
+
+    let sent = 0;
+    let failed = 0;
+
+    for (const gym of gyms) {
+      const owner = ownerMap.get(gym.ownerId!);
+      if (!owner?.email) { failed++; continue; }
+
+      const safeGymName = escapeHtml(gym.name);
+      const safeOwnerName = escapeHtml(owner.name?.split(' ')[0] ?? owner.email);
+      const safeBody = escapeHtml(body).replace(/\n/g, '<br>');
+
+      const html = `
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1.0" /></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
+        <tr>
+          <td align="center" style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);border-radius:12px 12px 0 0;padding:36px 32px 28px;">
+            <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700;">${saasNameEscaped}</h1>
+            <p style="margin:6px 0 0;color:rgba(255,255,255,0.6);font-size:13px;">${safeSubject}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#fff;padding:36px 32px;">
+            <h2 style="margin:0 0 6px;color:#111827;font-size:17px;font-weight:600;">Hola, ${safeOwnerName}</h2>
+            <p style="margin:0 0 20px;color:#6b7280;font-size:13px;">Este mensaje es para el gimnasio <strong>${safeGymName}</strong>.</p>
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+              <tr>
+                <td style="background:#f9fafb;border-left:4px solid #111827;border-radius:0 8px 8px 0;padding:16px 20px;">
+                  <p style="margin:0;color:#111827;font-size:14px;line-height:1.7;">${safeBody}</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#f9fafb;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
+            <p style="margin:0;color:#9ca3af;font-size:12px;">Este mensaje fue enviado por ${saasNameEscaped}. Por favor no respondas a este correo.</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+      const { error } = await this.resend.emails.send({
+        from: fromEmail,
+        to: owner.email,
+        subject: `${subject} — ${saasName}`,
+        html,
+      });
+
+      if (error) { failed++; } else { sent++; }
+    }
+
+    return { sent, failed };
+  }
+
   private async assertGymExists(id: string) {
     const gym = await this.prisma.gym.findUnique({ where: { id } });
     if (!gym) throw new NotFoundException('Gym not found');
