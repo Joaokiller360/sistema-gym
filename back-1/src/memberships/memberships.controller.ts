@@ -52,6 +52,18 @@ export class MembershipsController {
     return this.membershipsService.cancel(id, req.gymId);
   }
 
+  @Get(':id/missed-days')
+  getMissedDays(@Param('id') id: string, @Req() req: any) {
+    return this.membershipsService.computeMissedDays(id, req.gymId);
+  }
+
+  @Patch(':id/apply-missed-days')
+  @UseGuards(RolesGuard)
+  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN, Role.SUPER_ADMIN)
+  applyMissedDays(@Param('id') id: string, @Req() req: any) {
+    return this.membershipsService.applyMissedDays(id, req.gymId);
+  }
+
   @Post(':id/change-plan')
   @UseGuards(RolesGuard)
   @Roles(Role.GYM_OWNER, Role.GYM_ADMIN, Role.SUPER_ADMIN)

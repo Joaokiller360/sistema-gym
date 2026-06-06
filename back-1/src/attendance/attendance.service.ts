@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { startOfDayUTC, endOfDayUTC, buildDateRangeFilter, getTimezone } from '../common/utils/timezone.util';
 
 @Injectable()
 export class AttendanceService {
@@ -7,14 +8,13 @@ export class AttendanceService {
 
   async findAll(gymId: string, query: any) {
     const { memberId, branchId, startDate, endDate } = query;
+    const gym = await this.prisma.gym.findUnique({ where: { id: gymId }, select: { timezone: true, country: true } });
+    const tz = gym?.timezone ?? getTimezone(gym?.country);
     const where: any = { gymId };
     if (memberId) where.memberId = memberId;
     if (branchId) where.branchId = branchId;
-    if (startDate || endDate) {
-      where.checkIn = {};
-      if (startDate) where.checkIn.gte = new Date(startDate);
-      if (endDate) where.checkIn.lte = new Date(endDate);
-    }
+    const checkInFilter = buildDateRangeFilter(startDate, endDate, tz);
+    if (checkInFilter) where.checkIn = checkInFilter;
 
     return this.prisma.attendance.findMany({
       where,
@@ -50,10 +50,24 @@ export class AttendanceService {
   }
 
   async checkIn(gymId: string, memberId: string, branchId?: string, groupId?: string) {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
+    const now = new Date();
+
+    const gym = await this.prisma.gym.findUnique({ where: { id: gymId }, select: { timezone: true } });
+    const tz = gym?.timezone ?? 'UTC';
+
+    const activeMembership = await this.prisma.membership.findFirst({
+      where: {
+        gymId,
+        memberId,
+        status: 'ACTIVE',
+        endDate: { gte: now },
+      },
+    });
+    if (!activeMembership) throw new ForbiddenException('Member has no active membership');
+
+    const todayStr = now.toLocaleDateString('en-CA', { timeZone: tz });
+    const todayStart = startOfDayUTC(todayStr, tz);
+    const todayEnd = endOfDayUTC(todayStr, tz);
 
     const open = await this.prisma.attendance.findFirst({
       where: {

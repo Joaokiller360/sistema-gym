@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { Resend } from 'resend';
 import { PrismaService } from '../prisma/prisma.service';
 import { calculateProration } from '../common/utils/proration.util';
+import { startOfDayUTC, endOfDayUTC } from '../common/utils/timezone.util';
 
 @Injectable()
 export class MembershipsService {
@@ -12,12 +13,49 @@ export class MembershipsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(gymId: string, query: any) {
-    const { status, memberId, planId, branchId } = query;
+    const { status, memberId, planId, branchId, endsAfter, endsBefore } = query;
     const where: any = { gymId };
     if (status) where.status = status;
     if (memberId) where.memberId = memberId;
     if (planId) where.planId = planId;
     if (branchId) where.branchId = branchId;
+    if (endsAfter || endsBefore) {
+      let tz = 'UTC';
+      if (gymId) {
+        const gym = await this.prisma.gym.findUnique({ where: { id: gymId }, select: { timezone: true } });
+        tz = gym?.timezone ?? 'UTC';
+      }
+
+      const gteDate = endsAfter ? startOfDayUTC(endsAfter, tz) : undefined;
+      const lteDate = endsBefore ? endOfDayUTC(endsBefore, tz) : undefined;
+
+      where.endDate = {};
+      if (gteDate) where.endDate.gte = gteDate;
+      if (lteDate) where.endDate.lte = lteDate;
+
+      // --- TEMP DEBUG LOGS (remove after fixing expiry alert) ---
+      const now = new Date();
+      const nowInGymTimezone = now.toLocaleString('es', { timeZone: tz });
+      this.logger.debug(`[ExpiryAlert] gymTz=${tz} endsAfter=${endsAfter}→${gteDate?.toISOString()} endsBefore=${endsBefore}→${lteDate?.toISOString()}`);
+      const allActiveForLog = await this.prisma.membership.findMany({
+        where: { gymId, status: 'ACTIVE' },
+        include: { member: { select: { firstName: true, lastName: true } } },
+      });
+      for (const m of allActiveForLog) {
+        const daysRemaining = Math.ceil((m.endDate.getTime() - now.getTime()) / 86400000);
+        const passesGte = gteDate ? m.endDate >= gteDate : true;
+        const passesLte = lteDate ? m.endDate <= lteDate : true;
+        const includedInExpiringAlert = passesGte && passesLte;
+        this.logger.debug(
+          `[ExpiryAlert] memberName="${m.member.firstName} ${m.member.lastName}" ` +
+          `endsAt=${m.endDate.toISOString()} ` +
+          `nowInGymTimezone="${nowInGymTimezone}" ` +
+          `daysRemaining=${daysRemaining} ` +
+          `includedInExpiringAlert=${includedInExpiringAlert}`,
+        );
+      }
+      // --- END TEMP DEBUG LOGS ---
+    }
 
     return this.prisma.membership.findMany({
       where,
@@ -156,6 +194,115 @@ export class MembershipsService {
     return this.prisma.membership.update({ where: { id }, data: { status: 'CANCELLED' } });
   }
 
+  // ── Missed-days helpers ───────────────────────────────────
+
+  private mondayOf(d: Date): Date {
+    const day = d.getUTCDay(); // 0=Sun
+    const diff = day === 0 ? -6 : 1 - day;
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + diff));
+  }
+
+  async computeMissedDays(membershipId: string, gymId: string) {
+    const membership = await this.prisma.membership.findFirst({
+      where: { id: membershipId, gymId },
+      include: { plan: { select: { daysPerWeek: true } } },
+    });
+    if (!membership) throw new NotFoundException('Membresía no encontrada');
+
+    const daysPerWeek = membership.plan.daysPerWeek ?? 0;
+    const empty = { missedDays: 0, expectedDays: 0, attendedDays: 0, weeks: [] };
+    if (daysPerWeek <= 0) return empty;
+
+    const gym = await this.prisma.gym.findUnique({
+      where: { id: gymId },
+      select: { schedule: true, timezone: true },
+    });
+    const schedule = (gym?.schedule ?? {}) as Record<string, { open: string; close: string } | null>;
+    const tz = gym?.timezone ?? 'UTC';
+
+    // sun=0, mon=1, ..., sat=6 → key mapping
+    const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+    // Today in gym timezone, as UTC midnight equivalent
+    const now = new Date();
+    const todayStr = now.toLocaleDateString('en-CA', { timeZone: tz });
+    const [ty, tm, td] = todayStr.split('-').map(Number);
+    const today = new Date(Date.UTC(ty, tm - 1, td));
+    const thisWeekMonday = this.mondayOf(today);
+
+    const start = new Date(Date.UTC(
+      membership.startDate.getUTCFullYear(),
+      membership.startDate.getUTCMonth(),
+      membership.startDate.getUTCDate(),
+    ));
+
+    // Only count weeks before current week
+    if (thisWeekMonday <= start) return empty;
+
+    const attendances = await this.prisma.attendance.findMany({
+      where: { memberId: membership.memberId, gymId, checkIn: { gte: start, lt: thisWeekMonday } },
+      select: { checkIn: true },
+    });
+
+    // Group attendance count by week-Monday key
+    const attByWeek = new Map<string, number>();
+    for (const att of attendances) {
+      const key = this.mondayOf(att.checkIn).toISOString().slice(0, 10);
+      attByWeek.set(key, (attByWeek.get(key) ?? 0) + 1);
+    }
+
+    const weeks: { weekStart: string; expected: number; attended: number; missed: number }[] = [];
+    let totalExpected = 0, totalAttended = 0, totalMissed = 0;
+
+    let weekStart = this.mondayOf(start);
+    while (weekStart < thisWeekMonday) {
+      let gymOpenThisWeek = 0;
+      for (let i = 0; i < 7; i++) {
+        const day = new Date(Date.UTC(weekStart.getUTCFullYear(), weekStart.getUTCMonth(), weekStart.getUTCDate() + i));
+        if (day < start) continue;                   // before membership start
+        if (day >= thisWeekMonday) break;            // current/future week
+        if (schedule[DAY_KEYS[day.getUTCDay()]] != null) gymOpenThisWeek++;
+      }
+
+      const expected = Math.min(daysPerWeek, gymOpenThisWeek);
+      const weekKey = weekStart.toISOString().slice(0, 10);
+      const attended = Math.min(attByWeek.get(weekKey) ?? 0, expected);
+      const missed = Math.max(0, expected - attended);
+
+      if (expected > 0) {
+        weeks.push({ weekStart: weekKey, expected, attended, missed });
+        totalExpected += expected;
+        totalAttended += attended;
+        totalMissed += missed;
+      }
+
+      weekStart = new Date(Date.UTC(weekStart.getUTCFullYear(), weekStart.getUTCMonth(), weekStart.getUTCDate() + 7));
+    }
+
+    return { missedDays: totalMissed, expectedDays: totalExpected, attendedDays: totalAttended, weeks };
+  }
+
+  async applyMissedDays(membershipId: string, gymId: string) {
+    const { missedDays, expectedDays, attendedDays } = await this.computeMissedDays(membershipId, gymId);
+    const m = await this.prisma.membership.findFirst({ where: { id: membershipId, gymId } });
+    if (!m) throw new NotFoundException('Membresía no encontrada');
+
+    if (missedDays === 0) {
+      return { missedDays: 0, oldEndDate: m.endDate, newEndDate: m.endDate, expectedDays, attendedDays };
+    }
+
+    const oldEndDate = new Date(m.endDate);
+    const newEndDate = new Date(m.endDate);
+    newEndDate.setUTCDate(newEndDate.getUTCDate() - missedDays);
+
+    await this.prisma.membership.update({
+      where: { id: membershipId },
+      data: { endDate: newEndDate },
+    });
+
+    return { missedDays, oldEndDate, newEndDate, expectedDays, attendedDays };
+  }
+
   private async assertExists(id: string, gymId: string) {
     const m = await this.prisma.membership.findFirst({ where: { id, gymId } });
     if (!m) throw new NotFoundException('Miembresía no encontrada');
@@ -165,19 +312,20 @@ export class MembershipsService {
   // ── Cron: birthday emails (daily 9 AM UTC) ────────────────
   @Cron('0 9 * * *')
   async sendBirthdayEmails() {
-    const today = new Date();
-    const month = today.getMonth();
-    const day = today.getDate();
+    const now = new Date();
 
     const members = await this.prisma.member.findMany({
       where: { birthDate: { not: null }, isActive: true },
-      include: { gym: { select: { name: true } } },
+      include: { gym: { select: { name: true, timezone: true } } },
     });
 
     const todayBirthdays = members.filter((m) => {
       if (!m.birthDate) return false;
+      const tz = m.gym.timezone ?? 'UTC';
+      const todayStr = now.toLocaleDateString('en-CA', { timeZone: tz }); // "YYYY-MM-DD"
+      const [, todayMonth, todayDay] = todayStr.split('-').map(Number);
       const b = new Date(m.birthDate);
-      return b.getMonth() === month && b.getDate() === day;
+      return b.getUTCMonth() + 1 === todayMonth && b.getUTCDate() === todayDay;
     });
 
     if (!todayBirthdays.length) return;
@@ -204,16 +352,25 @@ export class MembershipsService {
   @Cron('0 9 * * *')
   async sendExpiryReminders() {
     const now = new Date();
-    const in2Days = new Date(now);
-    in2Days.setDate(in2Days.getDate() + 2);
-    in2Days.setHours(0, 0, 0, 0);
-    const in3Days = new Date(in2Days);
-    in3Days.setDate(in3Days.getDate() + 1);
+
+    // Fetch all gyms with timezone to build per-gym date ranges
+    const allGyms = await this.prisma.gym.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, timezone: true },
+    });
+
+    // Build a UTC window covering all possible "in 2 days" across timezones (±14h)
+    const windowStart = new Date(now);
+    windowStart.setDate(windowStart.getDate() + 1);
+    windowStart.setHours(0, 0, 0, 0);
+    const windowEnd = new Date(now);
+    windowEnd.setDate(windowEnd.getDate() + 4);
+    windowEnd.setHours(23, 59, 59, 999);
 
     const memberships = await this.prisma.membership.findMany({
       where: {
         status: 'ACTIVE',
-        endDate: { gte: in2Days, lt: in3Days },
+        endDate: { gte: windowStart, lte: windowEnd },
       },
       include: {
         member: { select: { firstName: true, email: true } },
@@ -223,23 +380,30 @@ export class MembershipsService {
 
     if (!memberships.length) return;
 
-    const gymIds = [...new Set(memberships.map((ms) => ms.gymId))];
-    const gyms = await this.prisma.gym.findMany({
-      where: { id: { in: gymIds } },
-      select: { id: true, name: true },
+    const gymMap = new Map(allGyms.map((g) => [g.id, g]));
+
+    // Filter to only memberships expiring in exactly 2 days in the gym's local timezone
+    const target = memberships.filter((ms) => {
+      const gym = gymMap.get(ms.gymId);
+      const tz = gym?.timezone ?? 'UTC';
+      const in2DaysStr = new Date(now.getTime() + 2 * 86400000).toLocaleDateString('en-CA', { timeZone: tz });
+      const rangeStart = startOfDayUTC(in2DaysStr, tz);
+      const rangeEnd = endOfDayUTC(in2DaysStr, tz);
+      return ms.endDate >= rangeStart && ms.endDate <= rangeEnd;
     });
-    const gymMap = new Map(gyms.map((g) => [g.id, g.name]));
+
+    if (!target.length) return;
 
     const from = process.env.RESEND_FROM_EMAIL ?? 'noreply@tudominio.com';
     const results = await Promise.allSettled(
-      memberships.map((ms) =>
+      target.map((ms) =>
         this.resend.emails.send({
           from,
           to: ms.member.email,
-          subject: `⏰ Tu membresía vence en 2 días — ${gymMap.get(ms.gymId) ?? 'tu gimnasio'}`,
+          subject: `⏰ Tu membresía vence en 2 días — ${gymMap.get(ms.gymId)?.name ?? 'tu gimnasio'}`,
           html: this.buildExpiryReminderHtml(
             ms.member.firstName,
-            gymMap.get(ms.gymId) ?? 'tu gimnasio',
+            gymMap.get(ms.gymId)?.name ?? 'tu gimnasio',
             ms.plan.name,
             ms.endDate,
           ),
@@ -250,7 +414,7 @@ export class MembershipsService {
     for (const r of results) {
       if (r.status === 'rejected') this.logger.error('[ExpiryReminder] Email failed:', r.reason);
     }
-    this.logger.log(`[ExpiryReminder] Sent ${memberships.length} expiry reminder(s)`);
+    this.logger.log(`[ExpiryReminder] Sent ${target.length} expiry reminder(s)`);
   }
 
   // ── Email templates ───────────────────────────────────────
