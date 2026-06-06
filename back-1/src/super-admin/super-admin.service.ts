@@ -294,8 +294,8 @@ export class SuperAdminService {
           notes: data.notes ?? [
             `Cambio de plan: "${gym.subscriptionPlan}" → "${data.planKey}"`,
             `Días restantes anteriores: ${proration.daysRemaining}`,
-            `Crédito aplicado: $${proration.creditApplied}`,
-            `Total cobrado: $${proration.amountDue}`,
+            `Crédito aplicado: $${proration.creditApplied/100}`,
+            `Total cobrado: $${proration.amountDue/100}`,
           ].join(' | '),
         },
       }),

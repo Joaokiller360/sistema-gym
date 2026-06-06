@@ -139,8 +139,8 @@ export class MembershipsService {
             `Cambio de plan: "${current.plan.name}" → "${newPlan.name}"`,
             `Días consumidos: ${proration.daysConsumed} / ${current.plan.durationDays}`,
             `Días restantes: ${proration.daysRemaining}`,
-            `Crédito aplicado: $${proration.creditApplied}`,
-            `Total cobrado: $${proration.amountDue}`,
+            `Crédito aplicado: $${proration.creditApplied/100}`,
+            `Total cobrado: $${proration.amountDue/100}`,
           ].join(' | '),
         },
       });
