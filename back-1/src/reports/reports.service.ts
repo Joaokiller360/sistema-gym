@@ -188,15 +188,20 @@ export class ReportsService {
     }));
 
     // attendanceTrend — last 7 days
-    const attendanceTrend = buildAttendanceTrend(attendancesWeek, now);
-    const attendanceTrendByGroup = buildAttendanceTrendByGroup(attendancesWeek, now);
+    const attendanceTrend = buildAttendanceTrend(attendancesWeek, now, tz);
+    const attendanceTrendByGroup = buildAttendanceTrendByGroup(attendancesWeek, now, tz);
 
-    // peakDay / peakHour — computed in JS from 90-day sample
+    // peakDay / peakHour — computed in JS from 90-day sample (use gym timezone)
     const dowCount = new Array(7).fill(0) as number[];
     const hourCount = new Array(24).fill(0) as number[];
     for (const a of attendancesSample) {
-      dowCount[a.checkIn.getUTCDay()]++;
-      hourCount[a.checkIn.getUTCHours()]++;
+      const localDate = a.checkIn.toLocaleDateString('en-CA', { timeZone: tz });
+      const [ly, lm, ld] = localDate.split('-').map(Number);
+      dowCount[new Date(Date.UTC(ly, lm - 1, ld)).getUTCDay()]++;
+      const localHour = parseInt(
+        new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hour12: false }).format(a.checkIn),
+      );
+      hourCount[isNaN(localHour) ? 0 : localHour % 24]++;
     }
     const DAYS_ES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
     const peakDay = attendancesSample.length > 0 ? DAYS_ES[dowCount.indexOf(Math.max(...dowCount))] : null;
@@ -257,15 +262,22 @@ function buildRevenueTrend(
   return Array.from(buckets.entries()).map(([label, amount]) => ({ label, amount }));
 }
 
+function localWeekday(date: Date, tz: string): string {
+  const DAYS_ES_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const localDateStr = date.toLocaleDateString('en-CA', { timeZone: tz }); // "YYYY-MM-DD"
+  const [y, m, d] = localDateStr.split('-').map(Number);
+  return DAYS_ES_SHORT[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+}
+
 function buildAttendanceTrendByGroup(
   attendances: { checkIn: Date; groupId: string | null; group: { name: string } | null }[],
   now: Date,
+  tz: string,
 ): { groupId: string | null; groupName: string | null; trend: { label: string; count: number }[] }[] {
-  const DAYS_ES_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  // Build ordered day labels using gym local time (oldest → newest)
   const dayLabels: string[] = [];
   for (let i = 6; i >= 0; i--) {
-    const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-    dayLabels.push(DAYS_ES_SHORT[d.getUTCDay()]);
+    dayLabels.push(localWeekday(new Date(now.getTime() - i * 24 * 60 * 60 * 1000), tz));
   }
 
   const groupMap = new Map<string | null, { name: string | null; items: { checkIn: Date }[] }>();
@@ -279,13 +291,12 @@ function buildAttendanceTrendByGroup(
   for (const [gid, { name, items }] of groupMap) {
     const buckets = new Map<string, number>(dayLabels.map(l => [l, 0]));
     for (const a of items) {
-      const label = DAYS_ES_SHORT[a.checkIn.getUTCDay()];
+      const label = localWeekday(a.checkIn, tz);
       if (buckets.has(label)) buckets.set(label, (buckets.get(label) ?? 0) + 1);
     }
     result.push({ groupId: gid, groupName: name, trend: dayLabels.map(l => ({ label: l, count: buckets.get(l) ?? 0 })) });
   }
 
-  // Named groups first, ungrouped last; only keep groups with at least one check-in
   return result
     .filter(g => g.trend.some(t => t.count > 0))
     .sort((a, b) => {
@@ -298,19 +309,16 @@ function buildAttendanceTrendByGroup(
 function buildAttendanceTrend(
   attendances: { checkIn: Date }[],
   now: Date,
+  tz: string,
 ): { label: string; count: number }[] {
-  const DAYS_ES_SHORT = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-  const buckets = new Map<string, number>();
-
+  const dayLabels: string[] = [];
   for (let i = 6; i >= 0; i--) {
-    const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-    buckets.set(DAYS_ES_SHORT[d.getUTCDay()], 0);
+    dayLabels.push(localWeekday(new Date(now.getTime() - i * 24 * 60 * 60 * 1000), tz));
   }
-
+  const buckets = new Map<string, number>(dayLabels.map(l => [l, 0]));
   for (const a of attendances) {
-    const label = DAYS_ES_SHORT[a.checkIn.getUTCDay()];
+    const label = localWeekday(a.checkIn, tz);
     if (buckets.has(label)) buckets.set(label, (buckets.get(label) ?? 0) + 1);
   }
-
-  return Array.from(buckets.entries()).map(([label, count]) => ({ label, count }));
+  return dayLabels.map(l => ({ label: l, count: buckets.get(l) ?? 0 }));
 }
