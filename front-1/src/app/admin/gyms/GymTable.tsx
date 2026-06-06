@@ -46,9 +46,9 @@ function ProratedBreakdown({ p, currency, onDone }: { p: ProratedResult; currenc
       <p className="text-[10px] font-bold uppercase tracking-widest text-[#0e7a70]">Detalle del cambio</p>
       <div className="space-y-1">
         {([
-          ['Crédito a favor', fmt(p.creditAmount)],
-          ['Precio nuevo plan', fmt(p.newPlanPrice)],
-          ['Crédito aplicado', `- ${fmt(p.creditApplied)}`],
+          ['Crédito a favor', fmt(p.creditAmount/100)],
+          ['Precio nuevo plan', fmt(p.newPlanPrice/100)],
+          ['Crédito aplicado', `- ${fmt(p.creditApplied/100)}`],
         ] as const).map(([label, value]) => (
           <div key={label} className="flex justify-between text-xs">
             <span className="text-zinc-500">{label}</span>
@@ -57,7 +57,7 @@ function ProratedBreakdown({ p, currency, onDone }: { p: ProratedResult; currenc
         ))}
         <div className="border-t border-[#1fad9d]/20 pt-1.5 flex justify-between text-sm font-black">
           <span>Total cobrado</span>
-          <span className="text-[#0e7a70]">{fmt(p.amountDue)}</span>
+          <span className="text-[#0e7a70]">{fmt(p.amountDue/100)}</span>
         </div>
       </div>
       <button type="button" onClick={onDone} className="text-xs font-semibold text-[#1fad9d] hover:text-[#0e7a70] transition-colors">

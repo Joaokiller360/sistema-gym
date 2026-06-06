@@ -27,9 +27,9 @@ function ProratedBreakdown({ p, currency }: { p: ProratedResult; currency: strin
           ['Días consumidos', `${p.daysConsumed} días`],
           ['Días restantes', `${p.daysRemaining} días`],
           ['Tarifa diaria', fmtMoney(p.dailyRate, currency)],
-          ['Crédito a favor', fmtMoney(p.creditAmount, currency)],
-          ['Precio nuevo plan', fmtMoney(p.newPlanPrice, currency)],
-          ['Crédito aplicado', `- ${fmtMoney(p.creditApplied, currency)}`],
+          ['Crédito a favor', fmtMoney(p.creditAmount/100, currency)],
+          ['Precio nuevo plan', fmtMoney(p.newPlanPrice/100, currency)],
+          ['Crédito aplicado', `- ${fmtMoney(p.creditApplied/100, currency)}`],
         ].map(([label, value]) => (
           <div key={label} className="flex justify-between text-sm">
             <span className="text-zinc-500">{label}</span>
@@ -39,7 +39,7 @@ function ProratedBreakdown({ p, currency }: { p: ProratedResult; currency: strin
       </div>
       <div className="border-t border-[#1fad9d]/20 pt-2 flex justify-between font-black text-base">
         <span>Total cobrado</span>
-        <span className="text-[#0e7a70]">{fmtMoney(p.amountDue, currency)}</span>
+        <span className="text-[#0e7a70]">{fmtMoney(p.amountDue/100, currency)}</span>
       </div>
     </div>
   )

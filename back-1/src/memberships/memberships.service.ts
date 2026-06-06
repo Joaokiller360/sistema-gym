@@ -122,7 +122,7 @@ export class MembershipsService {
           startDate: now,
           endDate: newEndDate,
           status: 'ACTIVE',
-          notes: data.notes ?? `Cambio desde "${current.plan.name}". Crédito aplicado: $${proration.creditApplied}`,
+          notes: data.notes ?? `Cambio desde "${current.plan.name}". Crédito aplicado: $${proration.creditApplied/100}`,
         },
         include: { plan: true, member: true },
       });
