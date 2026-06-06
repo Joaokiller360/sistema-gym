@@ -16,20 +16,44 @@ interface Props {
   searchParams: Promise<{ date?: string }>
 }
 
+// Compute UTC ISO start/end for a local date in a given timezone (no external libs needed)
+function gymDayBoundsISO(dateStr: string, tz: string): { start: string; end: string } {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  // Use noon UTC to safely determine the UTC offset (avoids DST-midnight edge cases)
+  const noonUTC = new Date(Date.UTC(year, month - 1, day, 12, 0, 0))
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: false,
+  }).formatToParts(noonUTC)
+  const g = (t: string) => parseInt(parts.find(p => p.type === t)?.value ?? '0')
+  const localNoonUTC = Date.UTC(g('year'), g('month') - 1, g('day'), g('hour'), g('minute'), g('second'))
+  const offsetMs = noonUTC.getTime() - localNoonUTC
+  return {
+    start: new Date(Date.UTC(year, month - 1, day, 0, 0, 0) + offsetMs).toISOString(),
+    end:   new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999) + offsetMs).toISOString(),
+  }
+}
+
 export default async function AttendancePage({ params, searchParams }: Props) {
   const { gymSlug } = await params
   const { date } = await searchParams
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value ?? ''
 
-  const target = date ? new Date(date + 'T00:00:00Z') : new Date()
-  const y = target.getUTCFullYear()
-  const mo = target.getUTCMonth()
-  const d = target.getUTCDate()
-  const startDate = new Date(Date.UTC(y, mo, d)).toISOString()
-  const endDate = new Date(Date.UTC(y, mo, d, 23, 59, 59, 999)).toISOString()
-
   const gymHeader = { headers: { 'x-gym-slug': gymSlug } }
+
+  const gymStatus = await apiFetch<{ timezone: string; localTime: string; isOpen: boolean }>(
+    `/gyms/${gymSlug}/status`,
+    token,
+  )
+  const tz = gymStatus?.timezone ?? 'UTC'
+
+  const now = new Date()
+  const todayStr = now.toLocaleDateString('en-CA', { timeZone: tz })
+  const activeDate = date ?? todayStr
+  const isToday = activeDate === todayStr
+
+  const { start: startDate, end: endDate } = gymDayBoundsISO(activeDate, tz)
 
   const [attendance, membersRaw, groups] = await Promise.all([
     apiFetch<AttendanceWithMember[]>(
@@ -51,12 +75,9 @@ export default async function AttendancePage({ params, searchParams }: Props) {
     : []
   const gymGroups = groups ?? []
 
-  const todayStr = new Date().toISOString().split('T')[0]
-  const isToday = !date || date === todayStr
-
-  const displayDate = target.toLocaleDateString('es-AR', {
+  const displayDate = new Date(activeDate + 'T12:00:00Z').toLocaleDateString('es-AR', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-    timeZone: 'UTC',
+    timeZone: tz,
   })
 
   // Stats: count per group

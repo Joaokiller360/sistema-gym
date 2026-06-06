@@ -22,8 +22,11 @@ export async function checkInAction(
     headers: { 'x-gym-slug': gymSlug },
   })
   if ('error' in result) {
-    const msg = result.error.toLowerCase().includes('already checked in')
+    const lower = result.error.toLowerCase()
+    const msg = lower.includes('already checked in')
       ? 'El miembro ya tiene una entrada registrada hoy'
+      : lower.includes('no active membership')
+      ? 'El miembro no tiene una membresía activa'
       : result.error
     return { error: msg }
   }

@@ -19,9 +19,10 @@ interface Props {
   gymSlug: string
   members: Member[]
   groups: AttendanceGroup[]
+  onSuccess?: () => void
 }
 
-export function CheckInPanel({ gymSlug, members, groups }: Props) {
+export function CheckInPanel({ gymSlug, members, groups, onSuccess }: Props) {
   const router = useRouter()
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Member | null>(null)
@@ -52,6 +53,7 @@ export function CheckInPanel({ gymSlug, members, groups }: Props) {
         setSelected(null)
         setSelectedGroup('')
         router.refresh()
+        onSuccess?.()
       }
     })
   }

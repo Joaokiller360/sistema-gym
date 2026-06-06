@@ -13,8 +13,10 @@ import { NewPaymentModal } from './NewPaymentModal'
 
 const LIMIT = 25
 
+type MemberRow = Member & { memberships?: Array<{ plan: { name: string } }> }
+
 interface MembersResponse {
-  data: Member[]
+  data: MemberRow[]
   total: number
 }
 
@@ -50,13 +52,13 @@ export default async function MembersPage({ params, searchParams }: Props) {
   const newMemberHref = `?${new URLSearchParams({ ...Object.fromEntries(currentParams), new: 'member' }).toString()}`
   const newPaymentHref = `?${new URLSearchParams({ ...Object.fromEntries(currentParams), new: 'payment' }).toString()}`
 
-  const raw = await apiFetch<MembersResponse | Member[]>(
+  const raw = await apiFetch<MembersResponse | MemberRow[]>(
     `/members?${qs.toString()}`,
     token,
     { next: { tags: [`members-${gymSlug}`] }, headers: { 'x-gym-slug': gymSlug } },
   )
 
-  const members: Member[] = raw
+  const members: MemberRow[] = raw
     ? Array.isArray(raw) ? raw : raw.data
     : []
 

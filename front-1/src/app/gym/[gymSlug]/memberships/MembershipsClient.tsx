@@ -59,7 +59,7 @@ export function MembershipsClient({ memberships, plans, gymSlug }: Props) {
               const daysLeft = Math.ceil(
                 (new Date(m.endDate).getTime() - now) / 86_400_000,
               )
-              const nearExpiry = m.status === 'ACTIVE' && daysLeft <= 7 && daysLeft > 0
+              const nearExpiry = m.status === 'ACTIVE' && daysLeft <= 3 && daysLeft > 0
               const overdue = m.status === 'ACTIVE' && daysLeft <= 0
 
               return (

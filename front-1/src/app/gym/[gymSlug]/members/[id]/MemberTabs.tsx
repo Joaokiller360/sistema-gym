@@ -311,7 +311,7 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
                     </div>
                     {!a.checkOut && (
                       <span className="text-xs text-[#1fad9d] font-bold bg-[#1fad9d]/10 px-2.5 py-1 rounded-full">
-                        En curso
+                        Asistido
                       </span>
                     )}
                   </div>

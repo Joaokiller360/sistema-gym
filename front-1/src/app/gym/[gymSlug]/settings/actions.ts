@@ -80,6 +80,21 @@ export async function updateGymSettingsAction(
   return { newSlug }
 }
 
+export async function updateGymScheduleAction(
+  gymSlug: string,
+  gymId: string,
+  schedule: Record<string, { open: string; close: string } | null>,
+): Promise<{ error?: string }> {
+  const token = await getToken()
+  const result = await apiFetchWithError(`/gyms/${gymId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify({ schedule }),
+  })
+  if ('error' in result) return { error: result.error }
+  updateTag(`gym-${gymSlug}`)
+  return {}
+}
+
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1).max(200),
   newPassword: z.string().min(12).max(200),

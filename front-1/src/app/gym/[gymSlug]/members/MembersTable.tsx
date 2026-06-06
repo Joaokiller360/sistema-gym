@@ -6,6 +6,10 @@ import { UserCircle2, ChevronRight } from 'lucide-react'
 import { Member } from '@/types'
 import { toggleMemberActiveAction } from './[id]/actions'
 
+type MemberRow = Member & {
+  memberships?: Array<{ plan: { name: string } }>
+}
+
 function initials(firstName: string, lastName: string) {
   return `${firstName[0] ?? ''}${lastName[0] ?? ''}`.toUpperCase()
 }
@@ -19,7 +23,7 @@ export function MembersTable({
   gymSlug,
   paramsString,
 }: {
-  members: Member[]
+  members: MemberRow[]
   gymSlug: string
   paramsString: string
 }) {
@@ -92,6 +96,7 @@ export function MembersTable({
               <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wider text-zinc-500">Miembro</th>
               <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wider text-zinc-500 hidden md:table-cell">Teléfono</th>
               <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wider text-zinc-500">Estado</th>
+              <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wider text-zinc-500 hidden lg:table-cell">Membresía</th>
               <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wider text-zinc-500 hidden lg:table-cell">Desde</th>
               <th className="px-5 py-3.5" />
             </tr>
@@ -124,6 +129,12 @@ export function MembersTable({
                   >
                     {m.isActive ? 'Activo' : 'Inactivo'}
                   </button>
+                </td>
+                <td className="px-5 py-4 hidden lg:table-cell">
+                  {m.memberships?.[0]?.plan?.name
+                    ? <span className="inline-flex items-center rounded-full bg-[#1fad9d]/10 px-2.5 py-1 text-xs font-semibold text-[#0e7a70]">{m.memberships[0].plan.name}</span>
+                    : <span className="text-xs text-zinc-400">Sin plan</span>
+                  }
                 </td>
                 <td className="px-5 py-4 text-muted-foreground hidden lg:table-cell">{formatDate(m.createdAt)}</td>
                 <td className="px-5 py-4 text-right">
