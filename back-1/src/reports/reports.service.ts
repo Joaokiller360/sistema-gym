@@ -18,21 +18,31 @@ export class ReportsService {
     const tz = gym?.timezone ?? getTimezone(gym?.country);
     const createdAt = buildDateRangeFilter(query.startDate, query.endDate, tz);
 
-    const where: any = { gymId };
-    if (createdAt) where.createdAt = createdAt;
-    if (query.branchId) where.branchId = query.branchId;
+    const paymentWhere: any = { gymId };
+    if (createdAt) paymentWhere.createdAt = createdAt;
+    if (query.branchId) paymentWhere.branchId = query.branchId;
 
-    const byMethod = await this.prisma.payment.groupBy({
-      by: ['method'],
-      where,
-      _sum: { amount: true },
-      _count: true,
-    });
+    const storeWhere: any = { gymId };
+    if (createdAt) storeWhere.createdAt = createdAt;
 
-    const totalRevenue = byMethod.reduce((acc, p) => acc + Number(p._sum.amount ?? 0), 0);
+    const [byMethod, storeAgg] = await Promise.all([
+      this.prisma.payment.groupBy({
+        by: ['method'],
+        where: paymentWhere,
+        _sum: { amount: true },
+        _count: true,
+      }),
+      this.prisma.productSale.aggregate({ where: storeWhere, _sum: { total: true } }),
+    ]);
+
+    const memberRevenue = byMethod.reduce((acc, p) => acc + Number(p._sum.amount ?? 0), 0);
+    const storeRevenue = Number(storeAgg._sum.total ?? 0);
+    const totalRevenue = memberRevenue + storeRevenue;
 
     return {
       totalRevenue,
+      memberRevenue,
+      storeRevenue,
       currency: gym?.currency ?? 'USD',
       timezone: tz,
       byMethod: byMethod.map(p => ({
