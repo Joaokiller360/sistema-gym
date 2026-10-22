@@ -21,3 +21,7 @@ prisma/dev.db
 
 # vscode
 .vscode
+
+skills-lock.json
+.claude
+.agents

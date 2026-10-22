@@ -1,3 +1,4 @@
+
 services:
   api:
     build:
@@ -17,7 +18,16 @@ services:
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL}
     volumes:
       - uploads_data:/app/uploads
+    networks:
+      - default
+      - dokploy-network
 
 volumes:
   uploads_data:
     driver: local
+
+networks:
+  default:
+  dokploy-network:
+    external: true
+    name: dokploy-network
