@@ -10,9 +10,10 @@ export class PaymentsService {
   ) {}
 
   async findAll(gymId: string, query: any) {
-    const { memberId, startDate, endDate, branchId } = query;
+    const { memberId, membershipId, startDate, endDate, branchId } = query;
     const where: any = { gymId };
     if (memberId) where.memberId = memberId;
+    if (membershipId) where.membershipId = membershipId;
     if (branchId) where.branchId = branchId;
     if (startDate || endDate) {
       where.createdAt = {};

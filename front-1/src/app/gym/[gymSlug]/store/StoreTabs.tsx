@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { ShoppingCart, Package, BarChart2, Calendar, Plus, Minus, Trash2, Edit2, Tag, CreditCard } from 'lucide-react'
+import { ShoppingCart, Package, BarChart2, Calendar, Plus, Minus, Trash2, Edit2, Tag, CreditCard, Search, ChevronLeft, ChevronRight, Printer, ImagePlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { createSaleAction, createProductAction, updateProductAction, deleteProductAction, deleteSaleAction, createCategoryAction, updateCategoryAction, deleteCategoryAction, assignCreditsAction, payCreditsAction } from './actions'
 import { createHandlers, type FieldType, inferFieldType } from '@/lib/input-validation'
@@ -93,6 +93,7 @@ interface PendingCredit {
 
 interface Props {
   gymSlug: string
+  gymName: string
   products: Product[]
   categories: Category[]
   dailyCut: CutSummary | null
@@ -110,6 +111,11 @@ const METHOD_LABELS: Record<string, string> = {
   CASH: 'Efectivo', CARD: 'Tarjeta', TRANSFER: 'Transferencia', OTHER: 'Otro',
 }
 
+// Fixed per method so a method keeps its color across days and months
+const METHOD_COLORS: Record<string, string> = {
+  CASH: 'var(--accent)', CARD: '#5EEAD4', TRANSFER: '#FFFFFF', OTHER: '#A7C9C4',
+}
+
 const TABS = [
   { id: 'sell', label: 'Vender', icon: ShoppingCart },
   { id: 'credits', label: 'Créditos', icon: CreditCard },
@@ -119,47 +125,304 @@ const TABS = [
   { id: 'monthly', label: 'Corte del mes', icon: BarChart2 },
 ] as const
 
+type TabId = (typeof TABS)[number]['id']
+
 type CartItem = { product: Product; quantity: number }
 
-export function StoreTabs({ gymSlug, products, categories, dailyCut, monthlyCut, activeTab, dateParam, monthParam, members, pendingCredits, canDelete = false, canDeleteSales = false }: Props) {
+const LOW_STOCK = 3
+const OLD_CREDIT_DAYS = 7
+const DAY_MS = 86_400_000
+
+// Placeholder tints for products/categories without an image
+const TINTS = ['#DCEFEA', '#EEF5C8', '#F3E6D8', '#E5E5E1']
+
+function tintFor(id: string | null | undefined) {
+  if (!id) return '#ECECE8'
+  let h = 0
+  for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  return TINTS[h % TINTS.length]
+}
+
+function money(n: number) {
+  return `$${n.toLocaleString('es-AR')}`
+}
+
+function plural(n: number, one: string, many: string) {
+  return `${n} ${n === 1 ? one : many}`
+}
+
+function initials(name: string) {
+  return name.split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase()
+}
+
+function localISODate(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function shiftDate(date: string, delta: number) {
+  const d = new Date(`${date}T12:00:00`)
+  d.setDate(d.getDate() + delta)
+  return localISODate(d)
+}
+
+function shiftMonth(month: string, delta: number) {
+  const [y, m] = month.split('-').map(Number)
+  const d = new Date(y, m - 1 + delta, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function longDate(date: string) {
+  return new Date(`${date}T12:00:00`).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'short' })
+}
+
+function monthName(month: string) {
+  const [y, m] = month.split('-').map(Number)
+  return new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+}
+
+function ageLabel(days: number) {
+  if (days <= 0) return 'Hoy'
+  if (days === 1) return 'Ayer'
+  return `${days} días`
+}
+
+function niceCeil(n: number) {
+  if (n <= 0) return 1
+  const p = 10 ** Math.floor(Math.log10(n))
+  const s = n / p
+  return (s <= 1 ? 1 : s <= 2 ? 2 : s <= 2.5 ? 2.5 : s <= 5 ? 5 : 10) * p
+}
+
+export function StoreTabs({ gymSlug, gymName, products, categories, dailyCut, monthlyCut, activeTab, dateParam, monthParam, members, pendingCredits, canDelete = false, canDeleteSales = false }: Props) {
   const router = useRouter()
   const [tab, setTab] = useState(activeTab)
 
-  function changeTab(t: string) {
+  function changeTab(t: TabId) {
     setTab(t)
     router.push(`?tab=${t}`)
   }
 
-  return (
-    <div className="space-y-6">
-      {/* Tab bar */}
-      <div className="flex gap-1 border rounded-xl p-1 bg-zinc-50 w-fit">
-        {TABS.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => changeTab(id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-              tab === id ? 'bg-black text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-800'
-            }`}
-          >
-            <Icon className="h-4 w-4" />
-            <span className="hidden sm:inline">{label}</span>
-          </button>
-        ))}
-      </div>
+  const current = TABS.find(t => t.id === tab) ?? TABS[0]
+  const creditMembers = new Set(pendingCredits.map(c => c.memberId)).size
 
-      {tab === 'sell' && <SellTab gymSlug={gymSlug} products={products.filter(p => p.isActive && p.stock > 0)} members={members} />}
-      {tab === 'credits' && <CreditsTab gymSlug={gymSlug} pendingCredits={pendingCredits} />}
-      {tab === 'products' && <ProductsTab gymSlug={gymSlug} products={products} categories={categories} canDelete={canDelete} />}
-      {tab === 'categories' && <CategoriesTab gymSlug={gymSlug} categories={categories} canDelete={canDelete} />}
-      {tab === 'daily' && <CutTab cut={dailyCut} type="daily" dateParam={dateParam} gymSlug={gymSlug} canDelete={canDeleteSales} />}
-      {tab === 'monthly' && <CutTab cut={monthlyCut} type="monthly" monthParam={monthParam} gymSlug={gymSlug} canDelete={canDeleteSales} />}
+  return (
+    <div className="font-admin space-y-6">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div className="space-y-1">
+          <p className="font-admin-mono text-xs uppercase tracking-[0.08em] text-zinc-500">{gymName} · Tienda</p>
+          <h1 className="text-4xl font-black leading-none tracking-tight">{current.label}</h1>
+        </div>
+        <nav aria-label="Secciones de la tienda" className="flex flex-wrap gap-1 rounded-2xl border border-zinc-200 bg-white p-1">
+          {TABS.map(({ id, label, icon: Icon }) => {
+            const active = current.id === id
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => changeTab(id)}
+                aria-label={label}
+                aria-current={active ? 'page' : undefined}
+                className={`flex h-10 items-center gap-2 rounded-xl px-3.5 text-sm transition-colors ${
+                  active ? 'bg-black font-bold text-white hover:bg-zinc-800' : 'font-semibold text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                <span className="hidden sm:inline">{label}</span>
+                {id === 'credits' && creditMembers > 0 && (
+                  <span className="rounded-md bg-accent px-1.5 py-0.5 font-admin-mono text-[11px] font-bold text-accent-foreground">{creditMembers}</span>
+                )}
+              </button>
+            )
+          })}
+        </nav>
+      </header>
+
+      {current.id === 'sell' && (
+        <SellTab
+          gymSlug={gymSlug}
+          products={products.filter(p => p.isActive && p.stock > 0)}
+          lowStock={products.filter(p => p.isActive && p.stock <= LOW_STOCK)}
+          members={members}
+          cut={dailyCut}
+          dateParam={dateParam}
+          pendingTotal={pendingCredits.reduce((s, c) => s + c.unitPrice * c.quantity, 0)}
+          onNavigate={changeTab}
+        />
+      )}
+      {current.id === 'credits' && <CreditsTab gymSlug={gymSlug} pendingCredits={pendingCredits} onNavigate={changeTab} />}
+      {current.id === 'products' && <ProductsTab gymSlug={gymSlug} products={products} categories={categories} canDelete={canDelete} />}
+      {current.id === 'categories' && <CategoriesTab gymSlug={gymSlug} categories={categories} products={products} monthlyCut={monthlyCut} monthParam={monthParam} canDelete={canDelete} />}
+      {current.id === 'daily' && <DailyCutTab cut={dailyCut} dateParam={dateParam} gymSlug={gymSlug} canDelete={canDeleteSales} onNavigate={changeTab} />}
+      {current.id === 'monthly' && <MonthlyCutTab cut={monthlyCut} monthParam={monthParam} gymSlug={gymSlug} canDelete={canDeleteSales} onNavigate={changeTab} />}
+    </div>
+  )
+}
+
+// ── Shared pieces ───────────────────────────────────────────
+type Bar = { key: string; label: string; total: number; pct: number; color: string }
+
+function methodBars(cut: CutSummary | null, withCount = false): Bar[] {
+  if (!cut || cut.total <= 0) return []
+  return [...cut.byMethod]
+    .sort((a, b) => b.total - a.total)
+    .map(m => ({
+      key: m.method,
+      label: `${METHOD_LABELS[m.method] ?? m.method}${withCount ? ` · ${plural(m.count, 'venta', 'ventas')}` : ''}`,
+      total: m.total,
+      pct: Math.round((m.total / cut.total) * 100),
+      color: METHOD_COLORS[m.method] ?? '#A7C9C4',
+    }))
+}
+
+function CashBand({ label, eyebrow, total, subtitle, bars, emptyBars, actions, children }: {
+  label: string
+  eyebrow: string
+  total: number
+  subtitle: string
+  bars: Bar[]
+  emptyBars?: string
+  actions?: React.ReactNode
+  children?: React.ReactNode
+}) {
+  return (
+    <section aria-label={label} className="flex flex-wrap items-stretch justify-between gap-6 rounded-[22px] bg-[#0E2A28] p-6 text-white sm:p-7">
+      <div className="flex min-w-0 flex-[1_1_260px] flex-col gap-2.5">
+        <p className="font-admin-mono text-xs uppercase tracking-[0.08em] text-[#A7C9C4]">{eyebrow}</p>
+        <p className="font-admin-mono text-[44px] font-bold leading-none tracking-[-0.04em] sm:text-[56px]">{money(total)}</p>
+        <p className="text-sm text-[#C9DEDA]">{subtitle}</p>
+        {children}
+      </div>
+      <div className="flex min-w-0 flex-[1_1_320px] flex-col justify-between gap-4">
+        {bars.length > 0 ? (
+          <div className="flex flex-col gap-2.5">
+            {bars.map(b => (
+              <div key={b.key} title={`${b.label}: ${money(b.total)} (${b.pct}%)`} className="flex flex-col gap-1.5">
+                <div className="flex justify-between gap-3 text-[13px]">
+                  <span className="text-[#E2EFED]">{b.label}</span>
+                  <span className="font-admin-mono font-bold">{money(b.total)}</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-[#1F4642]">
+                  <div className="h-2 rounded-full" style={{ width: `${b.pct}%`, background: b.color }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-[#A7C9C4]">{emptyBars ?? 'Sin ventas todavía'}</p>
+        )}
+        {actions && <div className="flex flex-wrap justify-end gap-2">{actions}</div>}
+      </div>
+    </section>
+  )
+}
+
+function BandButton({ primary, onClick, children }: { primary?: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={primary
+        ? 'flex h-11 items-center gap-2 rounded-xl bg-accent px-4 text-sm font-extrabold text-accent-foreground transition-opacity hover:opacity-90'
+        : 'flex h-11 items-center gap-2 rounded-xl border border-[#3F6B66] px-4 text-sm font-semibold text-white transition-colors hover:bg-white/10'}
+    >
+      {children}
+    </button>
+  )
+}
+
+function Panel({ title, action, className = '', children }: { title: string; action?: React.ReactNode; className?: string; children: React.ReactNode }) {
+  return (
+    <section className={`min-w-0 overflow-hidden rounded-[18px] border border-zinc-200 bg-white ${className}`}>
+      <div className="flex items-baseline justify-between gap-3 border-b border-zinc-100 px-5 py-4">
+        <h2 className="text-base font-extrabold">{title}</h2>
+        {action}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+function SearchField({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder: string }) {
+  return (
+    <label className="flex h-12 min-w-0 flex-[1_1_280px] items-center gap-2.5 rounded-xl border border-zinc-200 bg-white px-4 focus-within:ring-2 focus-within:ring-[#1fad9d]">
+      <Search className="h-[18px] w-[18px] shrink-0 text-zinc-500" />
+      <span className="sr-only">{label}</span>
+      <input
+        type="search"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-zinc-400"
+        {...createHandlers('search')}
+      />
+    </label>
+  )
+}
+
+function Chip({ active, onClick, count, children }: { active: boolean; onClick: () => void; count?: number; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`h-10 rounded-full border px-4 text-sm font-semibold transition-colors ${
+        active ? 'border-black bg-black text-white hover:bg-zinc-800' : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300'
+      }`}
+    >
+      {children}
+      {count !== undefined && <span className="ml-1.5 font-admin-mono text-xs opacity-75">{count}</span>}
+    </button>
+  )
+}
+
+function EmptyState({ icon: Icon = Package, children }: { icon?: React.ElementType; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-zinc-300 py-16 text-sm text-zinc-500">
+      <Icon className="h-10 w-10 opacity-20" />
+      {children}
+    </div>
+  )
+}
+
+function ShareBar({ pct, title }: { pct: number; title?: string }) {
+  return (
+    <span title={title} className="block h-1.5 overflow-hidden rounded-full bg-zinc-100">
+      <span className="block h-1.5 rounded-full bg-[#1fad9d]" style={{ width: `${Math.max(0, Math.min(100, pct))}%` }} />
+    </span>
+  )
+}
+
+function MethodPicker({ value, onChange, dark }: { value: string; onChange: (v: string) => void; dark?: boolean }) {
+  return (
+    <div role="group" aria-label="Método de pago" className="grid grid-cols-2 gap-2">
+      {Object.entries(METHOD_LABELS).map(([v, label]) => {
+        const active = value === v
+        const cls = dark
+          ? active ? 'border-white bg-white text-[#111111] font-bold' : 'border-[#3A3A3A] text-[#E4E5E6] hover:border-[#5A5A5A]'
+          : active ? 'border-black bg-black text-white hover:bg-zinc-800 font-bold' : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300'
+        return (
+          <button key={v} type="button" onClick={() => onChange(v)} aria-pressed={active}
+            className={`h-11 rounded-[10px] border text-[13px] font-semibold transition-colors ${cls}`}
+          >
+            {label}
+          </button>
+        )
+      })}
     </div>
   )
 }
 
 // ── Sell Tab ────────────────────────────────────────────────
-function SellTab({ gymSlug, products, members }: { gymSlug: string; products: Product[]; members: Member[] }) {
+function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pendingTotal, onNavigate }: {
+  gymSlug: string
+  products: Product[]
+  lowStock: Product[]
+  members: Member[]
+  cut: CutSummary | null
+  dateParam: string
+  pendingTotal: number
+  onNavigate: (t: TabId) => void
+}) {
   const router = useRouter()
   const [cart, setCart] = useState<CartItem[]>([])
   const [mode, setMode] = useState<'sell' | 'credito'>('sell')
@@ -167,6 +430,8 @@ function SellTab({ gymSlug, products, members }: { gymSlug: string; products: Pr
   const [notes, setNotes] = useState('')
   const [memberId, setMemberId] = useState('')
   const [memberSearch, setMemberSearch] = useState('')
+  const [query, setQuery] = useState('')
+  const [categoryId, setCategoryId] = useState<string | null>(null)
   const [showConfirm, setShowConfirm] = useState(false)
   const [isPending, startTransition] = useTransition()
 
@@ -189,6 +454,7 @@ function SellTab({ gymSlug, products, members }: { gymSlug: string; products: Pr
   }
 
   const total = cart.reduce((s, i) => s + i.product.price * i.quantity, 0)
+  const units = cart.reduce((s, i) => s + i.quantity, 0)
 
   const filteredMembers = memberSearch && !memberId
     ? members.filter(m =>
@@ -196,6 +462,23 @@ function SellTab({ gymSlug, products, members }: { gymSlug: string; products: Pr
         m.email.toLowerCase().includes(memberSearch.toLowerCase())
       ).slice(0, 8)
     : []
+
+  const categoryChips = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; count: number }>()
+    for (const p of products) {
+      if (!p.category) continue
+      const entry = map.get(p.category.id) ?? { id: p.category.id, name: p.category.name, count: 0 }
+      entry.count++
+      map.set(p.category.id, entry)
+    }
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name))
+  }, [products])
+
+  const q = query.trim().toLowerCase()
+  const visible = products.filter(p =>
+    (!categoryId || p.categoryId === categoryId) &&
+    (!q || p.name.toLowerCase().includes(q) || (p.description ?? '').toLowerCase().includes(q)),
+  )
 
   function handleSell() {
     if (!cart.length) return
@@ -231,235 +514,229 @@ function SellTab({ gymSlug, products, members }: { gymSlug: string; products: Pr
     })
   }
 
-  if (products.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed py-20 text-sm text-muted-foreground gap-2">
-        <Package className="h-10 w-10 opacity-20" />
-        No hay productos disponibles en stock
-      </div>
-    )
-  }
+  const isToday = dateParam === localISODate(new Date())
+  const salesCount = cut?.salesCount ?? 0
+  const average = salesCount ? Math.round((cut?.total ?? 0) / salesCount) : 0
+  const lowNames = lowStock.slice(0, 3).map(p => p.name).join(', ') + (lowStock.length > 3 ? ` y ${lowStock.length - 3} más` : '')
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Product grid */}
-      <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {products.map(p => {
-          const inCart = cart.find(i => i.product.id === p.id)
-          const lowStock = p.stock <= 3
-          return (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => addToCart(p)}
-              className="group relative flex flex-col overflow-hidden rounded-3xl border border-zinc-200 bg-white text-left transition-all duration-300 hover:-translate-y-1 hover:border-[#1fad9d]/40 hover:shadow-xl active:scale-[0.98]"
-            >
-              {/* Image / Placeholder */}
-              <div className="relative h-auto w-full overflow-hidden bg-gradient-to-br from-zinc-100 via-zinc-50 to-zinc-200 shrink-0">
-                {p.imageUrl ? (
-                  <>
-                    <img src={p.imageUrl} alt={p.name} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                    <div className="absolute inset-0 bg-[#1fad9d]/0 transition-all duration-300 group-hover:bg-[#1fad9d]/10" />
-                  </>
-                ) : (
-                  <>
-                    <div className="absolute inset-0 bg-[#1fad9d]/0 transition-all duration-300 group-hover:bg-[#1fad9d]/10" />
-                    <div className="flex h-full items-center justify-center">
-                      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/80 shadow-sm backdrop-blur-sm transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3">
-                        <Package className="h-8 w-8 text-[#1fad9d]" />
-                      </div>
-                    </div>
-                  </>
-                )}
-                {/* + / cart qty badge */}
-                {inCart ? (
-                  <div className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-[#1fad9d] text-white shadow-md font-black text-sm">
-                    {inCart.quantity}
-                  </div>
-                ) : (
-                  <div className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-[#1fad9d] shadow-md backdrop-blur transition-all duration-300 group-hover:scale-110 group-hover:bg-[#1fad9d] group-hover:text-white font-black text-lg leading-none">
-                    +
-                  </div>
-                )}
-              </div>
-
-              {/* Content */}
-              <div className="flex flex-1 flex-col gap-3 p-4">
-                <div className="space-y-1">
-                  <h3 className="line-clamp-1 text-sm font-extrabold tracking-tight text-zinc-800">{p.name}</h3>
-                  {p.category && (
-                    <span className="inline-flex items-center rounded-full bg-[#1fad9d]/10 px-2.5 py-1 text-[11px] font-semibold text-[#1fad9d]">
-                      {p.category.name}
-                    </span>
-                  )}
-                </div>
-                <div className="mt-auto flex items-end justify-between">
-                  <div>
-                    <p className="text-[11px] font-medium text-zinc-400">Precio</p>
-                    <p className="text-xl font-black tracking-tight text-[#1fad9d]">${p.price.toLocaleString('es-AR')}</p>
-                  </div>
-                  <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold ${
-                    lowStock
-                      ? 'border border-amber-100 bg-amber-50 text-amber-600'
-                      : 'border border-emerald-100 bg-emerald-50 text-emerald-600'
-                  }`}>
-                    <span className={`h-2 w-2 rounded-full animate-pulse ${lowStock ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                    {p.stock} stock
-                  </div>
-                </div>
-              </div>
-
-              {/* Shimmer sweep on hover */}
-              <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100">
-                <div className="absolute -left-1/2 top-0 h-full w-1/3 rotate-12 bg-white/20 blur-2xl transition-all duration-700 group-hover:left-[120%]" />
-              </div>
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Cart */}
-      <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-4 h-fit">
-        {/* Mode toggle */}
-        <div className="flex gap-1 border rounded-xl p-1 bg-zinc-50">
-          <button
-            type="button"
-            onClick={() => setMode('sell')}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${mode === 'sell' ? 'bg-black text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-800'}`}
-          >
-            Cobrar
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('credito')}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${mode === 'credito' ? 'bg-amber-500 text-white shadow-sm' : 'text-zinc-500 hover:text-zinc-800'}`}
-          >
-            Credito
-          </button>
-        </div>
-
-        {cart.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4 text-center">Seleccioná productos</p>
-        ) : (
-          <div className="space-y-3">
-            {cart.map(({ product, quantity }) => (
-              <div key={product.id} className="flex items-center gap-2">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate">{product.name}</p>
-                  <p className="text-xs text-zinc-400">${product.price.toLocaleString('es-AR')} c/u</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button type="button" onClick={() => changeQty(product.id, -1)} className="h-6 w-6 rounded-full bg-zinc-100 flex items-center justify-center hover:bg-zinc-200">
-                    <Minus className="h-3 w-3" />
-                  </button>
-                  <span className="w-6 text-center text-sm font-bold">{quantity}</span>
-                  <button
-                    type="button"
-                    onClick={() => changeQty(product.id, 1)}
-                    disabled={quantity >= product.stock}
-                    className="h-6 w-6 rounded-full bg-zinc-100 flex items-center justify-center hover:bg-zinc-200 disabled:opacity-40"
-                  >
-                    <Plus className="h-3 w-3" />
-                  </button>
-                </div>
-                <p className="text-sm font-bold w-16 text-right">${(product.price * quantity).toLocaleString('es-AR')}</p>
-              </div>
-            ))}
-            <div className="border-t pt-3 flex items-center justify-between">
-              <span className="font-bold">Total</span>
-              <span className="text-xl font-black text-[#1fad9d]">${total.toLocaleString('es-AR')}</span>
-            </div>
-          </div>
-        )}
-
-        {mode === 'sell' ? (
+    <div className="space-y-6">
+      <CashBand
+        label="Caja de hoy"
+        eyebrow={`${isToday ? 'Caja de hoy' : 'Caja del día'} · ${longDate(dateParam)}`}
+        total={cut?.total ?? 0}
+        subtitle={`${plural(salesCount, 'venta', 'ventas')} · ticket promedio ${money(average)} · ${money(pendingTotal)} en crédito sin cobrar`}
+        bars={methodBars(cut)}
+        actions={
           <>
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Método de pago</p>
-              <div className="grid grid-cols-2 gap-1.5">
-                {Object.entries(METHOD_LABELS).map(([v, label]) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => setMethod(v)}
-                    className={`rounded-lg border py-2 text-xs font-semibold transition-all ${
-                      method === v ? 'border-black bg-black text-white' : 'border-zinc-200 text-zinc-600 hover:border-zinc-300'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <input
-              type="text"
-              placeholder="Notas (opcional)"
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1fad9d]"
-              {...createHandlers('text')}
-            />
-            <button
-              type="button"
-              disabled={!cart.length || isPending}
-              onClick={handleSell}
-              className="w-full rounded-xl bg-[#1fad9d] py-3 text-sm font-black text-white hover:bg-[#0e7a70] disabled:opacity-40 transition-all active:scale-[0.98]"
-            >
-              {isPending ? 'Procesando…' : `Cobrar $${total.toLocaleString('es-AR')}`}
-            </button>
+            <BandButton onClick={() => onNavigate('monthly')}>Ver corte del mes</BandButton>
+            <BandButton primary onClick={() => onNavigate('daily')}>Ver corte del día</BandButton>
           </>
-        ) : (
-          <>
-            <div className="space-y-1 relative">
-              <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Miembro</p>
-              <input
-                type="text"
-                placeholder="Buscar miembro..."
-                value={memberSearch}
-                onChange={e => { setMemberSearch(e.target.value); setMemberId('') }}
-                className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                {...createHandlers('search')}
-              />
-              {filteredMembers.length > 0 && (
-                <div className="absolute z-10 w-full rounded-xl border border-zinc-200 bg-white shadow-lg max-h-48 overflow-y-auto">
-                  {filteredMembers.map(m => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => { setMemberId(m.id); setMemberSearch(`${m.firstName} ${m.lastName}`) }}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 border-b border-zinc-100 last:border-0"
-                    >
-                      <p className="font-semibold">{m.firstName} {m.lastName}</p>
-                      <p className="text-xs text-zinc-400">{m.email}</p>
-                    </button>
+        }
+      >
+        {lowStock.length > 0 && (
+          <p className="mt-1.5 flex flex-wrap items-center gap-2 text-[13px] text-[#E2EFED]">
+            <span className="rounded-md bg-[#FDBA74] px-2 py-0.5 font-admin-mono text-[11px] font-bold text-[#111111]">Stock bajo · {lowStock.length}</span>
+            {lowNames}
+          </p>
+        )}
+      </CashBand>
+
+      <div className="flex flex-wrap items-start gap-6">
+        <section aria-label="Catálogo" className="min-w-0 flex-[999_1_560px] space-y-4">
+          {products.length === 0 ? (
+            <EmptyState>No hay productos disponibles en stock</EmptyState>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-3">
+                <SearchField label="Buscar producto" value={query} onChange={setQuery} placeholder="Buscar producto" />
+              </div>
+              {categoryChips.length > 0 && (
+                <div role="group" aria-label="Filtrar por categoría" className="flex flex-wrap gap-2">
+                  <Chip active={!categoryId} onClick={() => setCategoryId(null)} count={products.length}>Todos</Chip>
+                  {categoryChips.map(c => (
+                    <Chip key={c.id} active={categoryId === c.id} onClick={() => setCategoryId(c.id)} count={c.count}>{c.name}</Chip>
                   ))}
                 </div>
               )}
-              {memberId && <p className="text-xs text-amber-600 font-semibold">✓ {memberSearch}</p>}
-            </div>
+              {visible.length === 0 ? (
+                <EmptyState icon={Search}>Ningún producto coincide con la búsqueda</EmptyState>
+              ) : (
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3">
+                  {visible.map(p => {
+                    const inCart = cart.find(i => i.product.id === p.id)
+                    const low = p.stock <= LOW_STOCK
+                    const atMax = (inCart?.quantity ?? 0) >= p.stock
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => addToCart(p)}
+                        disabled={atMax}
+                        className="group flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white text-left transition-all hover:-translate-y-0.5 hover:border-zinc-300 hover:shadow-md active:scale-[0.98] disabled:translate-y-0 disabled:opacity-60 disabled:shadow-none"
+                      >
+                        <div className="relative flex h-28 items-end p-3" style={p.imageUrl ? undefined : { background: tintFor(p.categoryId) }}>
+                          {p.imageUrl ? (
+                            <img src={p.imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                          ) : p.category && (
+                            <span className="font-admin-mono text-[11px] font-bold uppercase tracking-wider text-[#111111]/70">{p.category.name}</span>
+                          )}
+                          <span className={`absolute right-2.5 top-2.5 rounded-md px-2 py-0.5 font-admin-mono text-[11px] font-bold ${
+                            low ? 'bg-[#111111] text-white' : 'bg-white/85 text-[#111111]'
+                          }`}>
+                            {low ? `Quedan ${p.stock}` : `${p.stock} en stock`}
+                          </span>
+                        </div>
+                        <div className="flex flex-1 flex-col gap-2 p-3.5">
+                          <span className="line-clamp-2 text-[15px] font-bold leading-tight">{p.name}</span>
+                          <span className="mt-auto flex items-center justify-between gap-2">
+                            <span className="font-admin-mono text-base font-bold">{money(p.price)}</span>
+                            {inCart ? (
+                              <span className="flex h-8 min-w-8 items-center justify-center rounded-[10px] bg-accent px-2 font-admin-mono text-sm font-bold text-accent-foreground">{inCart.quantity}</span>
+                            ) : (
+                              <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-black text-white transition-transform group-hover:scale-110">
+                                <Plus className="h-4 w-4" />
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </>
+          )}
+        </section>
+
+        <aside aria-label="Ticket actual" className="flex max-w-full flex-[1_1_340px] flex-col overflow-hidden rounded-[20px] bg-[#111111] text-white ring-1 ring-white/10 lg:sticky lg:top-6">
+          <div className="flex items-center justify-between px-[22px] pb-4 pt-5">
+            <h2 className="text-xl font-extrabold tracking-tight">Ticket</h2>
+            <span className="font-admin-mono text-xs text-[#B5B7B9]">{plural(units, 'artículo', 'artículos')}</span>
+          </div>
+
+          <div role="group" aria-label="Tipo de operación" className="mx-[22px] grid grid-cols-2 gap-1 rounded-xl bg-[#262626] p-1">
+            <button type="button" onClick={() => setMode('sell')} aria-pressed={mode === 'sell'}
+              className={`h-10 rounded-[9px] text-sm transition-colors ${mode === 'sell' ? 'bg-white font-bold text-[#111111]' : 'font-semibold text-[#D4D5D6] hover:text-white'}`}
+            >
+              Venta
+            </button>
+            <button type="button" onClick={() => setMode('credito')} aria-pressed={mode === 'credito'}
+              className={`h-10 rounded-[9px] text-sm transition-colors ${mode === 'credito' ? 'bg-[#FDBA74] font-bold text-[#111111]' : 'font-semibold text-[#D4D5D6] hover:text-white'}`}
+            >
+              A crédito
+            </button>
+          </div>
+
+          {cart.length === 0 ? (
+            <p className="px-[22px] py-8 text-center text-sm text-[#B5B7B9]">Toca un producto para agregarlo</p>
+          ) : (
+            <ul className="mt-4 flex flex-col px-[22px]">
+              {cart.map(({ product, quantity }) => (
+                <li key={product.id} className="flex items-center gap-3 border-b border-dashed border-[#3A3A3A] py-3.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">{product.name}</p>
+                    <p className="font-admin-mono text-xs text-[#B5B7B9]">{money(product.price)} c/u</p>
+                  </div>
+                  <div className="flex items-center gap-1 rounded-[10px] bg-[#262626] p-0.5">
+                    <button type="button" aria-label={`Quitar un ${product.name}`} onClick={() => changeQty(product.id, -1)}
+                      className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-white/10"
+                    >
+                      <Minus className="h-3.5 w-3.5" />
+                    </button>
+                    <span className="min-w-5 text-center font-admin-mono text-sm font-bold">{quantity}</span>
+                    <button type="button" aria-label={`Agregar un ${product.name}`} onClick={() => changeQty(product.id, 1)} disabled={quantity >= product.stock}
+                      className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-white/10 disabled:opacity-30"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <span className="w-[76px] text-right font-admin-mono text-sm font-bold">{money(product.price * quantity)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="flex flex-col gap-2.5 px-[22px] pt-[18px]">
+            {mode === 'sell' ? (
+              <>
+                <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[#B5B7B9]">Método de pago</p>
+                <MethodPicker value={method} onChange={setMethod} dark />
+              </>
+            ) : (
+              <div className="relative flex flex-col gap-1.5">
+                <label htmlFor="credit-member" className="text-xs font-semibold uppercase tracking-[0.06em] text-[#B5B7B9]">Socio</label>
+                <input
+                  id="credit-member"
+                  type="text"
+                  placeholder="Buscar socio…"
+                  value={memberSearch}
+                  onChange={e => { setMemberSearch(e.target.value); setMemberId('') }}
+                  className="h-11 rounded-[10px] border border-[#3A3A3A] bg-[#1B1B1B] px-3.5 text-sm text-white outline-none placeholder:text-[#8A8C8E] focus:border-[#FDBA74]"
+                  {...createHandlers('search')}
+                />
+                {filteredMembers.length > 0 && (
+                  <div className="absolute top-full z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-[#3A3A3A] bg-[#1B1B1B] shadow-xl">
+                    {filteredMembers.map(m => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => { setMemberId(m.id); setMemberSearch(`${m.firstName} ${m.lastName}`) }}
+                        className="w-full border-b border-[#2E2E2E] px-3.5 py-2.5 text-left last:border-0 hover:bg-white/5"
+                      >
+                        <p className="text-sm font-semibold">{m.firstName} {m.lastName}</p>
+                        <p className="text-xs text-[#B5B7B9]">{m.email}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {memberId && <p className="text-xs font-semibold text-[#FDBA74]">✓ {memberSearch}</p>}
+              </div>
+            )}
+            <label htmlFor="sale-notes" className="mt-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-[#B5B7B9]">Nota</label>
             <input
+              id="sale-notes"
               type="text"
-              placeholder="Notas (opcional)"
+              placeholder="Opcional"
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+              className="h-11 rounded-[10px] border border-[#3A3A3A] bg-[#1B1B1B] px-3.5 text-sm text-white outline-none placeholder:text-[#8A8C8E] focus:border-white"
+              {...createHandlers('text')}
             />
-            <button
-              type="button"
-              disabled={!memberId || !cart.length || isPending}
-              onClick={() => setShowConfirm(true)}
-              className="w-full rounded-xl bg-amber-500 py-3 text-sm font-black text-white hover:bg-amber-600 disabled:opacity-40 transition-all active:scale-[0.98]"
-            >
-              {isPending ? 'Asignando…' : `Asignar credito $${total.toLocaleString('es-AR')}`}
-            </button>
-          </>
-        )}
+          </div>
+
+          <div className="mt-5 flex flex-col gap-3.5 border-t border-[#2E2E2E] px-[22px] pb-[22px] pt-5">
+            <div className="flex items-baseline justify-between">
+              <span className="text-sm text-[#B5B7B9]">{mode === 'sell' ? 'Total' : 'Total a fiar'}</span>
+              <span className="font-admin-mono text-4xl font-bold tracking-[-0.03em]">{money(total)}</span>
+            </div>
+            {mode === 'sell' ? (
+              <button
+                type="button"
+                disabled={!cart.length || isPending}
+                onClick={handleSell}
+                className="h-14 rounded-[14px] bg-accent text-[17px] font-extrabold text-accent-foreground transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-40"
+              >
+                {isPending ? 'Procesando…' : `Cobrar ${money(total)}`}
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={!memberId || !cart.length || isPending}
+                onClick={() => setShowConfirm(true)}
+                className="h-14 rounded-[14px] bg-[#FDBA74] text-[17px] font-extrabold text-[#111111] transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-40"
+              >
+                {isPending ? 'Asignando…' : `Fiar ${money(total)}`}
+              </button>
+            )}
+          </div>
+        </aside>
       </div>
 
       <AlertDialog open={showConfirm} onOpenChange={open => { if (!open) setShowConfirm(false) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar credito</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar crédito</AlertDialogTitle>
             <AlertDialogDescription>
               {memberSearch} — deuda pendiente, no se cobra ahora.
             </AlertDialogDescription>
@@ -468,12 +745,12 @@ function SellTab({ gymSlug, products, members }: { gymSlug: string; products: Pr
             {cart.map(({ product, quantity }) => (
               <div key={product.id} className="flex justify-between text-sm">
                 <span className="text-zinc-700">{product.name} <span className="text-zinc-400">×{quantity}</span></span>
-                <span className="font-semibold">${(product.price * quantity).toLocaleString('es-AR')}</span>
+                <span className="font-semibold">{money(product.price * quantity)}</span>
               </div>
             ))}
             <div className="flex justify-between text-sm font-black border-t pt-2">
               <span>Total deuda</span>
-              <span className="text-amber-600">${total.toLocaleString('es-AR')}</span>
+              <span className="text-amber-600">{money(total)}</span>
             </div>
           </div>
           <AlertDialogFooter>
@@ -481,7 +758,7 @@ function SellTab({ gymSlug, products, members }: { gymSlug: string; products: Pr
             <button onClick={confirmAssign} disabled={isPending}
               className="inline-flex items-center justify-center rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50 transition-all"
             >
-              {isPending ? 'Asignando…' : 'Confirmar credito'}
+              {isPending ? 'Asignando…' : 'Confirmar crédito'}
             </button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -491,11 +768,16 @@ function SellTab({ gymSlug, products, members }: { gymSlug: string; products: Pr
 }
 
 // ── Products Tab ────────────────────────────────────────────
+type ProductStatusFilter = 'all' | 'low' | 'inactive'
+
 function ProductsTab({ gymSlug, products, categories, canDelete }: { gymSlug: string; products: Product[]; categories: Category[]; canDelete: boolean }) {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
   const [editProduct, setEditProduct] = useState<Product | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
+  const [query, setQuery] = useState('')
+  const [status, setStatus] = useState<ProductStatusFilter>('all')
+  const [categoryId, setCategoryId] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
   function handleSaved() {
@@ -509,6 +791,11 @@ function ProductsTab({ gymSlug, products, categories, canDelete }: { gymSlug: st
     setEditProduct(null)
   }
 
+  function openNew() {
+    setEditProduct(null)
+    setModalOpen(true)
+  }
+
   function confirmDelete() {
     if (!deleteTarget) return
     startTransition(async () => {
@@ -520,19 +807,57 @@ function ProductsTab({ gymSlug, products, categories, canDelete }: { gymSlug: st
     })
   }
 
+  const isLow = (p: Product) => p.isActive && p.stock <= LOW_STOCK
+  const lowCount = products.filter(isLow).length
+  const inactiveCount = products.filter(p => !p.isActive).length
+  const maxStock = Math.max(1, ...products.map(p => p.stock))
+
+  const q = query.trim().toLowerCase()
+  const visible = products.filter(p =>
+    (status === 'all' || (status === 'low' ? isLow(p) : !p.isActive)) &&
+    (!categoryId || p.categoryId === categoryId) &&
+    (!q || p.name.toLowerCase().includes(q) || (p.description ?? '').toLowerCase().includes(q)),
+  )
+
+  const statusOptions: { id: ProductStatusFilter; label: string; count: number }[] = [
+    { id: 'all', label: 'Todos', count: products.length },
+    { id: 'low', label: 'Stock bajo', count: lowCount },
+    { id: 'inactive', label: 'Inactivos', count: inactiveCount },
+  ]
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{products.length} producto{products.length !== 1 ? 's' : ''}</p>
+      <div className="flex flex-wrap items-center gap-3">
+        <SearchField label="Buscar producto" value={query} onChange={setQuery} placeholder="Buscar producto" />
+        <div role="group" aria-label="Filtrar por estado" className="flex gap-1 rounded-xl border border-zinc-200 bg-white p-1">
+          {statusOptions.map(o => (
+            <button key={o.id} type="button" onClick={() => setStatus(o.id)} aria-pressed={status === o.id}
+              className={`h-10 rounded-[9px] px-3.5 text-[13px] transition-colors ${
+                status === o.id ? 'bg-black font-bold text-white hover:bg-zinc-800' : 'font-semibold text-zinc-600 hover:bg-zinc-100'
+              }`}
+            >
+              {o.label} <span className="font-admin-mono opacity-75">{o.count}</span>
+            </button>
+          ))}
+        </div>
         <button
           type="button"
-          onClick={() => { setEditProduct(null); setModalOpen(true) }}
-          className="inline-flex items-center gap-1.5 rounded-xl bg-black px-4 py-2.5 text-sm font-bold text-white hover:bg-zinc-800 transition-all"
+          onClick={openNew}
+          className="flex h-12 items-center gap-2 rounded-xl bg-accent px-[18px] text-sm font-extrabold text-accent-foreground transition-opacity hover:opacity-90"
         >
           <Plus className="h-4 w-4" />
           Nuevo producto
         </button>
       </div>
+
+      {categories.length > 0 && (
+        <div role="group" aria-label="Filtrar por categoría" className="flex flex-wrap gap-2">
+          <Chip active={!categoryId} onClick={() => setCategoryId(null)} count={products.length}>Todas</Chip>
+          {categories.map(c => (
+            <Chip key={c.id} active={categoryId === c.id} onClick={() => setCategoryId(c.id)} count={products.filter(p => p.categoryId === c.id).length}>{c.name}</Chip>
+          ))}
+        </div>
+      )}
 
       <Dialog open={modalOpen} onOpenChange={open => { if (!open) closeModal() }}>
         <DialogContent className="sm:max-w-xl">
@@ -550,70 +875,85 @@ function ProductsTab({ gymSlug, products, categories, canDelete }: { gymSlug: st
       </Dialog>
 
       {products.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed py-20 text-sm text-muted-foreground">
-          No hay productos creados
-        </div>
+        <EmptyState>No hay productos creados</EmptyState>
+      ) : visible.length === 0 ? (
+        <EmptyState icon={Search}>Ningún producto coincide con los filtros</EmptyState>
       ) : (
-        <div className="rounded-2xl border border-zinc-200 overflow-hidden bg-white">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-zinc-50 border-b border-zinc-200">
-                <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wider text-zinc-500">Producto</th>
-                <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wider text-zinc-500 hidden sm:table-cell">Categoría</th>
-                <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wider text-zinc-500">Precio</th>
-                <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wider text-zinc-500">Stock</th>
-                <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wider text-zinc-500 hidden md:table-cell">Vendidos</th>
-                <th className="px-5 py-3.5" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100">
-              {products.map(p => (
-                <tr key={p.id} className="hover:bg-zinc-50 transition-colors">
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-3">
-                      {p.imageUrl && (
-                        <img src={p.imageUrl} alt={p.name} className="h-9 w-9 rounded-lg object-cover shrink-0" />
-                      )}
-                      <div className="min-w-0">
-                        <p className="font-semibold">{p.name}</p>
-                        {p.description && <p className="text-xs text-muted-foreground truncate max-w-[180px]">{p.description}</p>}
-                        {!p.isActive && <span className="text-xs text-zinc-400 font-medium">(inactivo)</span>}
-                      </div>
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
+          {visible.map(p => {
+            const low = isLow(p)
+            const margin = p.cost != null && p.price > 0 ? Math.round(((p.price - p.cost) / p.price) * 100) : null
+            return (
+              <article key={p.id} className={`flex gap-3.5 rounded-2xl border border-zinc-200 bg-white p-3.5 ${p.isActive ? '' : 'opacity-70'}`}>
+                <div className="relative flex w-[88px] shrink-0 items-end overflow-hidden rounded-xl p-2" style={p.imageUrl ? undefined : { background: tintFor(p.categoryId) }}>
+                  {p.imageUrl ? (
+                    <img src={p.imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                  ) : p.category && (
+                    <span className="font-admin-mono text-[10px] font-bold uppercase tracking-wider text-[#111111]/70">{p.category.name}</span>
+                  )}
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="text-[15px] font-bold leading-tight">{p.name}</h3>
+                      {p.description && <p className="truncate text-xs text-zinc-500">{p.description}</p>}
                     </div>
-                  </td>
-                  <td className="px-5 py-4 text-muted-foreground hidden sm:table-cell">{p.category?.name ?? '—'}</td>
-                  <td className="px-5 py-4 font-bold">${p.price.toLocaleString('es-AR')}</td>
-                  <td className="px-5 py-4">
-                    <span className={`font-bold ${p.stock === 0 ? 'text-red-500' : p.stock <= 3 ? 'text-amber-500' : 'text-zinc-700'}`}>
-                      {p.stock}
+                    <span className={`shrink-0 rounded-md px-2 py-0.5 font-admin-mono text-[11px] font-bold ${
+                      p.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-600'
+                    }`}>
+                      {p.isActive ? 'Activo' : 'Inactivo'}
                     </span>
-                  </td>
-                  <td className="px-5 py-4 text-muted-foreground hidden md:table-cell">{p._count.saleItems}</td>
-                  <td className="px-5 py-4 text-right">
-                    <div className="flex gap-1 justify-end">
+                  </div>
+                  <div className="flex flex-wrap items-baseline gap-x-2.5">
+                    <span className="font-admin-mono text-xl font-bold">{money(p.price)}</span>
+                    <span className="text-xs text-zinc-500">
+                      {p.cost != null ? `costo ${money(p.cost)} · margen ${margin}%` : 'sin costo cargado'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100">
+                      <span className={`block h-1.5 rounded-full ${low ? 'bg-[#C2410C]' : 'bg-[#1fad9d]'}`} style={{ width: `${Math.round((p.stock / maxStock) * 100)}%` }} />
+                    </span>
+                    <span className={`font-admin-mono text-xs ${low ? 'font-bold text-amber-700' : 'text-zinc-600'}`}>
+                      {p.stock === 0 ? 'Sin stock' : low ? `Quedan ${p.stock}` : `${p.stock} en stock`}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-zinc-500">{p._count.saleItems} vendidos</span>
+                    <span className="flex gap-1">
                       <button
                         type="button"
+                        aria-label={`Editar ${p.name}`}
                         onClick={() => { setEditProduct(p); setModalOpen(true) }}
-                        className="p-1.5 rounded-lg text-zinc-400 hover:text-black hover:bg-zinc-100 transition-colors"
+                        className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-zinc-200 text-zinc-600 transition-colors hover:border-zinc-300 hover:text-black"
                       >
                         <Edit2 className="h-3.5 w-3.5" />
                       </button>
                       {canDelete && (
                         <button
                           type="button"
+                          aria-label={`Eliminar ${p.name}`}
                           disabled={isPending}
                           onClick={() => setDeleteTarget({ id: p.id, name: p.name })}
-                          className="p-1.5 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
+                          className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-zinc-200 text-red-600 transition-colors hover:bg-red-50 disabled:opacity-40"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    </span>
+                  </div>
+                </div>
+              </article>
+            )
+          })}
+          <button
+            type="button"
+            onClick={openNew}
+            className="flex min-h-[150px] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-300 text-sm font-bold text-zinc-600 transition-colors hover:border-zinc-400 hover:text-zinc-900"
+          >
+            <Plus className="h-5 w-5" />
+            Agregar producto
+          </button>
         </div>
       )}
 
@@ -740,7 +1080,14 @@ function FormField({ label, name, type = 'text', defaultValue, placeholder, min,
 }
 
 // ── Categories Tab ──────────────────────────────────────────
-function CategoriesTab({ gymSlug, categories, canDelete }: { gymSlug: string; categories: Category[]; canDelete: boolean }) {
+function CategoriesTab({ gymSlug, categories, products, monthlyCut, monthParam, canDelete }: {
+  gymSlug: string
+  categories: Category[]
+  products: Product[]
+  monthlyCut: CutSummary | null
+  monthParam: string
+  canDelete: boolean
+}) {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
   const [editCategory, setEditCategory] = useState<Category | null>(null)
@@ -766,24 +1113,93 @@ function CategoriesTab({ gymSlug, categories, canDelete }: { gymSlug: string; ca
     })
   }
 
+  // Month revenue per category, from the sales in the monthly cut
+  const revenueByCategory = useMemo(() => {
+    const categoryOf = new Map(products.map(p => [p.id, p.categoryId]))
+    const totals = new Map<string, number>()
+    for (const sale of monthlyCut?.sales ?? []) {
+      for (const item of sale.items) {
+        const cat = categoryOf.get(item.productId)
+        if (!cat) continue
+        totals.set(cat, (totals.get(cat) ?? 0) + item.unitPrice * item.quantity)
+      }
+    }
+    return totals
+  }, [products, monthlyCut])
+
+  const storeTotal = monthlyCut?.total ?? 0
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{categories.length} categoría{categories.length !== 1 ? 's' : ''}</p>
-        <button
-          type="button"
-          onClick={() => { setEditCategory(null); setModalOpen(true) }}
-          className="inline-flex items-center gap-1.5 rounded-xl bg-black px-4 py-2.5 text-sm font-bold text-white hover:bg-zinc-800 transition-all"
-        >
-          <Plus className="h-4 w-4" />
-          Nueva categoría
-        </button>
-      </div>
+    <div className="flex flex-wrap items-start gap-6">
+      <section aria-label="Categorías" className="min-w-0 flex-[999_1_560px] space-y-4">
+        <p className="text-sm text-zinc-500">
+          {plural(categories.length, 'categoría', 'categorías')} · {plural(products.length, 'producto', 'productos')} · ventas de {monthName(monthParam)}
+        </p>
+
+        {categories.length === 0 ? (
+          <EmptyState icon={Tag}>No hay categorías creadas</EmptyState>
+        ) : (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3">
+            {categories.map(c => {
+              const items = products.filter(p => p.categoryId === c.id)
+              const revenue = revenueByCategory.get(c.id) ?? 0
+              const share = storeTotal > 0 ? Math.round((revenue / storeTotal) * 100) : 0
+              const names = items.slice(0, 3).map(p => p.name).join(', ') + (items.length > 3 ? '…' : '')
+              return (
+                <article key={c.id} className="flex flex-col overflow-hidden rounded-[18px] border border-zinc-200 bg-white">
+                  <div className="relative flex h-[140px] items-end p-4" style={c.imageUrl ? undefined : { background: tintFor(c.id) }}>
+                    {c.imageUrl && (
+                      <>
+                        <img src={c.imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                      </>
+                    )}
+                    <h2 className={`relative text-[26px] font-black tracking-tight ${c.imageUrl ? 'text-white' : 'text-[#111111]'}`}>{c.name}</h2>
+                    <span className="absolute right-3 top-3 flex gap-1">
+                      <button
+                        type="button"
+                        aria-label={`Editar ${c.name}`}
+                        onClick={() => { setEditCategory(c); setModalOpen(true) }}
+                        className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-white/85 text-[#111111] transition-colors hover:bg-white"
+                      >
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </button>
+                      {canDelete && (
+                        <button
+                          type="button"
+                          aria-label={`Eliminar ${c.name}`}
+                          disabled={isPending}
+                          onClick={() => handleDelete(c.id)}
+                          className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-white/85 text-[#9A3412] transition-colors hover:bg-white disabled:opacity-40"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-3 p-4">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="font-admin-mono text-[22px] font-bold">{money(revenue)}</span>
+                      <span className="text-[13px] text-zinc-500">{share}% de la tienda</span>
+                    </div>
+                    <ShareBar pct={share} title={`${c.name}: ${share}% de las ventas del mes`} />
+                    <p className="text-[13px] text-zinc-600">
+                      {items.length === 0 ? 'Sin productos' : `${plural(items.length, 'producto', 'productos')} · ${names}`}
+                    </p>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        )}
+      </section>
+
+      <NewCategoryPanel gymSlug={gymSlug} />
 
       <Dialog open={modalOpen} onOpenChange={open => { if (!open) closeModal() }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{editCategory ? 'Editar categoría' : 'Nueva categoría'}</DialogTitle>
+            <DialogTitle>Editar categoría</DialogTitle>
           </DialogHeader>
           <CategoryForm
             gymSlug={gymSlug}
@@ -793,47 +1209,63 @@ function CategoriesTab({ gymSlug, categories, canDelete }: { gymSlug: string; ca
           />
         </DialogContent>
       </Dialog>
-
-      {categories.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed py-20 text-sm text-muted-foreground">
-          No hay categorías creadas
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {categories.map(c => (
-            <div key={c.id} className="flex items-center gap-3 rounded-2xl border border-zinc-200 bg-white p-4">
-              {c.imageUrl ? (
-                <img src={c.imageUrl} alt={c.name} className="h-10 w-10 rounded-xl object-cover shrink-0" />
-              ) : (
-                <div className="h-10 w-10 rounded-xl bg-zinc-100 flex items-center justify-center shrink-0">
-                  <Tag className="h-4 w-4 text-zinc-400" />
-                </div>
-              )}
-              <p className="font-semibold text-sm flex-1 truncate">{c.name}</p>
-              <div className="flex gap-1 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => { setEditCategory(c); setModalOpen(true) }}
-                  className="p-1.5 rounded-lg text-zinc-400 hover:text-black hover:bg-zinc-100 transition-colors"
-                >
-                  <Edit2 className="h-3.5 w-3.5" />
-                </button>
-                {canDelete && (
-                  <button
-                    type="button"
-                    disabled={isPending}
-                    onClick={() => handleDelete(c.id)}
-                    className="p-1.5 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
+  )
+}
+
+function NewCategoryPanel({ gymSlug }: { gymSlug: string }) {
+  const router = useRouter()
+  const [name, setName] = useState('')
+  const [imageUrl, setImageUrl] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setError(null)
+    startTransition(async () => {
+      const result = await createCategoryAction(gymSlug, { name, imageUrl })
+      if (result.error) { setError(result.error); return }
+      toast.success('Categoría creada')
+      setName('')
+      setImageUrl('')
+      router.refresh()
+    })
+  }
+
+  const preview = imageUrl.startsWith('https://') ? imageUrl : ''
+  const inputCls = 'h-11 rounded-[10px] border border-[#3A3A3A] bg-[#1B1B1B] px-3.5 text-sm text-white outline-none placeholder:text-[#8A8C8E] focus:border-white'
+
+  return (
+    <aside aria-labelledby="new-category" className="max-w-full flex-[1_1_340px] rounded-[20px] bg-[#111111] p-[22px] text-white ring-1 ring-white/10">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <h2 id="new-category" className="text-xl font-extrabold">Nueva categoría</h2>
+        <div className="relative flex h-[140px] flex-col items-center justify-center gap-1.5 overflow-hidden rounded-[14px] border-2 border-dashed border-[#3A3A3A] text-[13px] text-[#B5B7B9]">
+          {preview ? (
+            <img src={preview} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          ) : (
+            <>
+              <ImagePlus className="h-6 w-6" />
+              Vista previa de la imagen
+            </>
+          )}
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="new-category-name" className="text-xs font-semibold uppercase tracking-[0.06em] text-[#B5B7B9]">Nombre</label>
+          <input id="new-category-name" required value={name} onChange={e => setName(e.target.value)} placeholder="Suplementos" className={inputCls} {...createHandlers('text')} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="new-category-image" className="text-xs font-semibold uppercase tracking-[0.06em] text-[#B5B7B9]">URL de imagen</label>
+          <input id="new-category-image" type="url" value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://..." className={inputCls} {...createHandlers('url')} />
+        </div>
+        {error && <p className="text-xs font-medium text-[#FCA5A5]">{error}</p>}
+        <button type="submit" disabled={isPending || !name.trim()}
+          className="h-[52px] rounded-[14px] bg-accent text-[15px] font-extrabold text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+        >
+          {isPending ? 'Creando…' : 'Crear categoría'}
+        </button>
+      </form>
+    </aside>
   )
 }
 
@@ -887,40 +1319,65 @@ function CategoryForm({ gymSlug, category, onSave, onCancel }: {
 }
 
 // ── Credits Tab ─────────────────────────────────────────────
-function CreditsTab({ gymSlug, pendingCredits }: {
-  gymSlug: string
-  pendingCredits: PendingCredit[]
-}) {
-  const byMemberAll = pendingCredits.reduce<Record<string, { member: PendingCredit['member']; memberId: string; items: PendingCredit[] }>>((acc, c) => {
-    if (!acc[c.memberId]) acc[c.memberId] = { member: c.member, memberId: c.memberId, items: [] }
-    acc[c.memberId].items.push(c)
-    return acc
-  }, {})
-
-  return <AllCreditsView gymSlug={gymSlug} byMember={Object.values(byMemberAll)} />
+type CreditGroup = {
+  memberId: string
+  name: string
+  items: PendingCredit[]
+  total: number
+  oldestDays: number
 }
 
-function AllCreditsView({ gymSlug, byMember }: {
+function CreditsTab({ gymSlug, pendingCredits, onNavigate }: {
   gymSlug: string
-  byMember: { member: PendingCredit['member']; memberId: string; items: PendingCredit[] }[]
+  pendingCredits: PendingCredit[]
+  onNavigate: (t: TabId) => void
 }) {
   const router = useRouter()
   const [search, setSearch] = useState('')
+  const [onlyOld, setOnlyOld] = useState(false)
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [inlineMethod, setInlineMethod] = useState('CASH')
   const [payTarget, setPayTarget] = useState<{ creditIds: string[]; memberName: string; total: number; memberId: string } | null>(null)
   const [payMethod, setPayMethod] = useState('CASH')
   const [isPending, startTransition] = useTransition()
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
-  const filtered = search
-    ? byMember.filter(g => `${g.member.firstName} ${g.member.lastName}`.toLowerCase().includes(search.toLowerCase()))
-    : byMember
+  const { groups, aging, grandTotal } = useMemo(() => {
+    const now = new Date().getTime()
+    const ageOf = (c: PendingCredit) => Math.max(0, Math.floor((now - new Date(c.createdAt).getTime()) / DAY_MS))
+    const map = new Map<string, CreditGroup>()
+    const buckets = { today: 0, week: 0, old: 0 }
+    for (const c of pendingCredits) {
+      const amount = c.unitPrice * c.quantity
+      const days = ageOf(c)
+      if (days === 0) buckets.today += amount
+      else if (days <= OLD_CREDIT_DAYS) buckets.week += amount
+      else buckets.old += amount
+      const g = map.get(c.memberId) ?? { memberId: c.memberId, name: `${c.member.firstName} ${c.member.lastName}`, items: [], total: 0, oldestDays: 0 }
+      g.items.push(c)
+      g.total += amount
+      g.oldestDays = Math.max(g.oldestDays, days)
+      map.set(c.memberId, g)
+    }
+    const total = buckets.today + buckets.week + buckets.old
+    const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0)
+    return {
+      groups: [...map.values()].sort((a, b) => b.oldestDays - a.oldestDays),
+      grandTotal: total,
+      aging: [
+        { key: 'today', label: 'Hoy', total: buckets.today, pct: pct(buckets.today), color: '#FFFFFF' },
+        { key: 'week', label: `1 a ${OLD_CREDIT_DAYS} días`, total: buckets.week, pct: pct(buckets.week), color: '#5EEAD4' },
+        { key: 'old', label: `Más de ${OLD_CREDIT_DAYS} días`, total: buckets.old, pct: pct(buckets.old), color: '#FDBA74' },
+      ],
+    }
+  }, [pendingCredits])
 
-  const grandTotal = byMember.reduce((s, g) => s + g.items.reduce((a, c) => a + c.unitPrice * c.quantity, 0), 0)
+  const oldCount = groups.filter(g => g.oldestDays > OLD_CREDIT_DAYS).length
+  const q = search.trim().toLowerCase()
+  const filtered = groups.filter(g => (!onlyOld || g.oldestDays > OLD_CREDIT_DAYS) && (!q || g.name.toLowerCase().includes(q)))
 
-  function confirmPay() {
-    if (!payTarget) return
+  function pay(creditIds: string[], method: string, memberId: string) {
     startTransition(async () => {
-      const result = await payCreditsAction(gymSlug, payTarget.creditIds, payMethod, payTarget.memberId)
+      const result = await payCreditsAction(gymSlug, creditIds, method, memberId)
       setPayTarget(null)
       if (result.error) { toast.error(result.error); return }
       toast.success('Créditos cobrados')
@@ -928,110 +1385,139 @@ function AllCreditsView({ gymSlug, byMember }: {
     })
   }
 
-  if (byMember.length === 0) {
+  if (groups.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed py-20 text-sm text-muted-foreground">
+      <EmptyState icon={CreditCard}>
         No hay créditos pendientes
-      </div>
+        <button type="button" onClick={() => onNavigate('sell')} className="mt-2 text-sm font-bold text-[#0e7a70] hover:underline">Fiar productos</button>
+      </EmptyState>
     )
   }
 
+  const oldest = groups[0]?.oldestDays ?? 0
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3 flex-wrap">
-        <input
-          type="text"
-          placeholder="Buscar miembro..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1fad9d] w-64"
-          {...createHandlers('search')}
-        />
-        <p className="text-sm text-muted-foreground ml-auto">{filtered.length} miembro{filtered.length !== 1 ? 's' : ''} · Total: <span className="font-black text-[#1fad9d]">${grandTotal.toLocaleString('es-AR')}</span></p>
+    <div className="space-y-6">
+      <CashBand
+        label="Resumen de créditos"
+        eyebrow="Por cobrar"
+        total={grandTotal}
+        subtitle={`${plural(groups.length, 'socio', 'socios')} · ${plural(pendingCredits.length, 'producto fiado', 'productos fiados')} · el más antiguo, ${oldest === 0 ? 'de hoy' : `hace ${plural(oldest, 'día', 'días')}`}`}
+        bars={aging}
+      />
+
+      <div className="flex flex-wrap items-center gap-3">
+        <SearchField label="Buscar socio" value={search} onChange={setSearch} placeholder="Buscar socio" />
+        <div role="group" aria-label="Filtrar" className="flex gap-2">
+          <Chip active={!onlyOld} onClick={() => setOnlyOld(false)} count={groups.length}>Todos</Chip>
+          <Chip active={onlyOld} onClick={() => setOnlyOld(true)} count={oldCount}>Más de {OLD_CREDIT_DAYS} días</Chip>
+        </div>
+        <button
+          type="button"
+          onClick={() => onNavigate('sell')}
+          className="flex h-12 items-center gap-2 rounded-xl bg-black px-[18px] text-sm font-bold text-white transition-colors hover:bg-zinc-800"
+        >
+          <Plus className="h-4 w-4" />
+          Fiar productos
+        </button>
       </div>
 
-      {filtered.map(({ member, memberId, items }) => {
-        const memberTotal = items.reduce((s, c) => s + c.unitPrice * c.quantity, 0)
-        const isOpen = expanded[memberId]
-        return (
-          <div key={memberId} className="rounded-2xl border border-zinc-200 bg-white overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4">
-              <button
-                type="button"
-                onClick={() => setExpanded(prev => ({ ...prev, [memberId]: !isOpen }))}
-                className="flex items-center gap-3 flex-1 min-w-0 text-left"
-              >
-                <div className="min-w-0">
-                  <p className="font-bold text-sm">{member.firstName} {member.lastName}</p>
-                  <p className="text-xs text-zinc-400">{items.length} producto{items.length !== 1 ? 's' : ''} pendiente{items.length !== 1 ? 's' : ''}</p>
+      {filtered.length === 0 ? (
+        <EmptyState icon={Search}>Ningún socio coincide con la búsqueda</EmptyState>
+      ) : (
+        <ul className="flex flex-col gap-2.5">
+          {filtered.map(g => {
+            const isOpen = openId === g.memberId
+            const old = g.oldestDays > OLD_CREDIT_DAYS
+            return (
+              <li key={g.memberId} className={`overflow-hidden rounded-2xl border bg-white ${isOpen ? 'border-zinc-900' : 'border-zinc-200'}`}>
+                <div className="flex flex-wrap items-center gap-4 px-[18px] py-3.5">
+                  <button
+                    type="button"
+                    onClick={() => setOpenId(isOpen ? null : g.memberId)}
+                    aria-expanded={isOpen}
+                    className="flex min-h-11 min-w-0 flex-[1_1_280px] items-center gap-3.5 text-left"
+                  >
+                    <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-[13px] font-extrabold">{initials(g.name)}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-[15px] font-bold">{g.name}</span>
+                      <span className="block text-[13px] text-zinc-500">{plural(g.items.length, 'producto pendiente', 'productos pendientes')}</span>
+                    </span>
+                    <span className={`ml-auto shrink-0 rounded-md px-2 py-1 font-admin-mono text-[11px] font-bold ${old ? 'bg-[#FDBA74] text-[#111111]' : 'bg-zinc-100 text-zinc-900'}`}>
+                      {ageLabel(g.oldestDays)}
+                    </span>
+                  </button>
+                  <span className="w-24 text-right font-admin-mono text-lg font-bold">{money(g.total)}</span>
+                  <button
+                    type="button"
+                    onClick={() => setPayTarget({ creditIds: g.items.map(c => c.id), memberName: g.name, total: g.total, memberId: g.memberId })}
+                    className="h-11 rounded-xl border border-current px-4 text-sm font-bold transition-colors hover:bg-zinc-50"
+                  >
+                    Cobrar todo
+                  </button>
                 </div>
-                <span className="text-xs text-zinc-400 ml-auto mr-3">{isOpen ? '▲' : '▼'}</span>
-              </button>
-              <div className="flex items-center gap-2 shrink-0">
-                <p className="font-black text-[#1fad9d]">${memberTotal.toLocaleString('es-AR')}</p>
-                <button
-                  type="button"
-                  onClick={() => setPayTarget({ creditIds: items.map(c => c.id), memberName: `${member.firstName} ${member.lastName}`, total: memberTotal, memberId })}
-                  className="rounded-xl bg-[#1fad9d] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#0e7a70] transition-all"
-                >
-                  Cobrar
-                </button>
-              </div>
-            </div>
-            {isOpen && (
-              <div className="divide-y divide-zinc-100 border-t border-zinc-200">
-                {items.map(credit => (
-                  <div key={credit.id} className="px-5 py-3 flex items-start justify-between gap-3 bg-zinc-50/50">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-sm">{credit.product.name}</span>
-                        <span className="text-xs text-zinc-400">×{credit.quantity}</span>
-                        <span className="font-bold text-sm text-[#1fad9d]">${(credit.unitPrice * credit.quantity).toLocaleString('es-AR')}</span>
+
+                {isOpen && (
+                  <div className="border-t border-zinc-100 bg-zinc-50/50">
+                    <ul className="px-[18px]">
+                      {g.items.map(credit => (
+                        <li key={credit.id} className="flex flex-wrap items-center gap-3 border-b border-dashed border-zinc-200 py-3 sm:pl-[54px]">
+                          <span className="min-w-0 flex-[1_1_200px] text-sm font-semibold">
+                            {credit.product.name} <span className="font-admin-mono font-medium text-zinc-500">×{credit.quantity}</span>
+                            {credit.notes && <span className="block text-xs font-normal italic text-zinc-500">{credit.notes}</span>}
+                          </span>
+                          <span className="text-[13px] text-zinc-500">{new Date(credit.createdAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}</span>
+                          <span className="w-20 text-right font-admin-mono text-sm font-bold">{money(credit.unitPrice * credit.quantity)}</span>
+                          <button
+                            type="button"
+                            onClick={() => setPayTarget({ creditIds: [credit.id], memberName: g.name, total: credit.unitPrice * credit.quantity, memberId: g.memberId })}
+                            className="h-9 rounded-[10px] border border-zinc-200 bg-white px-3 text-[13px] font-semibold text-zinc-600 transition-colors hover:border-zinc-300"
+                          >
+                            Cobrar
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="flex flex-wrap items-center justify-end gap-2.5 px-[18px] py-3.5">
+                      <span className="mr-auto text-[13px] text-zinc-500 sm:pl-[54px]">Cobrar todo con</span>
+                      <div className="w-full sm:w-auto sm:min-w-[280px]">
+                        <MethodPicker value={inlineMethod} onChange={setInlineMethod} />
                       </div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-xs text-zinc-400">{new Date(credit.createdAt).toLocaleDateString('es-AR')}</span>
-                        {credit.notes && <span className="text-xs text-zinc-400 italic">— {credit.notes}</span>}
-                      </div>
+                      <button
+                        type="button"
+                        disabled={isPending}
+                        onClick={() => pay(g.items.map(c => c.id), inlineMethod, g.memberId)}
+                        className="h-11 rounded-xl bg-accent px-[18px] text-sm font-extrabold text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+                      >
+                        {isPending ? 'Procesando…' : `Cobrar ${money(g.total)}`}
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setPayTarget({ creditIds: [credit.id], memberName: `${member.firstName} ${member.lastName}`, total: credit.unitPrice * credit.quantity, memberId })}
-                      className="rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-semibold text-zinc-600 hover:border-[#1fad9d] hover:text-[#1fad9d] transition-all shrink-0"
-                    >
-                      Cobrar
-                    </button>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )
-      })}
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
 
       <AlertDialog open={!!payTarget} onOpenChange={open => { if (!open) setPayTarget(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cobrar credito</AlertDialogTitle>
+            <AlertDialogTitle>Cobrar crédito</AlertDialogTitle>
             <AlertDialogDescription>
-              {payTarget?.memberName} — ${payTarget?.total.toLocaleString('es-AR')}
+              {payTarget?.memberName} — {money(payTarget?.total ?? 0)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="px-6 pb-2">
             <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Método de pago</p>
-            <div className="grid grid-cols-2 gap-1.5">
-              {Object.entries(METHOD_LABELS).map(([v, label]) => (
-                <button key={v} type="button" onClick={() => setPayMethod(v)}
-                  className={`rounded-lg border py-2 text-xs font-semibold transition-all ${payMethod === v ? 'border-black bg-black text-white' : 'border-zinc-200 text-zinc-600 hover:border-zinc-300'}`}
-                >{label}</button>
-              ))}
-            </div>
+            <MethodPicker value={payMethod} onChange={setPayMethod} />
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
-            <button onClick={confirmPay} disabled={isPending}
+            <button onClick={() => payTarget && pay(payTarget.creditIds, payMethod, payTarget.memberId)} disabled={isPending}
               className="inline-flex items-center justify-center rounded-xl bg-[#1fad9d] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0e7a70] disabled:opacity-50 transition-all"
             >
-              {isPending ? 'Procesando…' : `Cobrar $${payTarget?.total.toLocaleString('es-AR')}`}
+              {isPending ? 'Procesando…' : `Cobrar ${money(payTarget?.total ?? 0)}`}
             </button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1040,11 +1526,42 @@ function AllCreditsView({ gymSlug, byMember }: {
   )
 }
 
-// ── Cut Tab ─────────────────────────────────────────────────
-function CutTab({ cut, type, dateParam, monthParam, gymSlug, canDelete }: {
-  cut: CutSummary | null; type: 'daily' | 'monthly'; dateParam?: string; monthParam?: string; gymSlug: string; canDelete: boolean
-}) {
+// ── Cut Tabs ────────────────────────────────────────────────
+function PeriodStepper({ type, value, onChange }: { type: 'date' | 'month'; value: string; onChange: (v: string) => void }) {
+  const now = new Date()
+  const max = type === 'date' ? localISODate(now) : localISODate(now).slice(0, 7)
+  const shift = (d: number) => (type === 'date' ? shiftDate(value, d) : shiftMonth(value, d))
+  const unit = type === 'date' ? 'Día' : 'Mes'
+  const stepCls = 'flex h-11 w-11 items-center justify-center rounded-xl border border-zinc-200 bg-white transition-colors hover:border-zinc-300 disabled:opacity-40'
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button type="button" aria-label={`${unit} anterior`} onClick={() => onChange(shift(-1))} className={stepCls}>
+        <ChevronLeft className="h-[18px] w-[18px]" />
+      </button>
+      <label className="sr-only" htmlFor={`period-${type}`}>{type === 'date' ? 'Fecha del corte' : 'Mes del corte'}</label>
+      <input
+        id={`period-${type}`}
+        type={type}
+        value={value}
+        max={max}
+        onChange={e => { if (e.target.value) onChange(e.target.value) }}
+        className="h-11 rounded-xl border border-zinc-200 bg-white px-3.5 text-[15px] font-semibold focus:outline-none focus:ring-2 focus:ring-[#1fad9d]"
+      />
+      <button type="button" aria-label={`${unit} siguiente`} onClick={() => onChange(shift(1))} disabled={value >= max} className={stepCls}>
+        <ChevronRight className="h-[18px] w-[18px]" />
+      </button>
+      {value !== max && (
+        <button type="button" onClick={() => onChange(max)} className="h-11 rounded-xl px-3.5 text-sm font-bold text-[#0e7a70] hover:bg-zinc-100">
+          {type === 'date' ? 'Hoy' : 'Este mes'}
+        </button>
+      )}
+    </div>
+  )
+}
+
+function SalesPanel({ sales, gymSlug, canDelete, showDate }: { sales: Sale[]; gymSlug: string; canDelete: boolean; showDate?: boolean }) {
   const router = useRouter()
+  const [expanded, setExpanded] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Sale | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -1059,167 +1576,56 @@ function CutTab({ cut, type, dateParam, monthParam, gymSlug, canDelete }: {
     })
   }
 
+  const sorted = [...sales].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  const shown = expanded ? sorted : sorted.slice(0, 8)
+
   return (
-    <div className="space-y-5">
-      {/* Date/month picker */}
-      <div className="flex items-center gap-3">
-        {type === 'daily' ? (
-          <input
-            type="date"
-            defaultValue={dateParam}
-            onChange={e => router.push(`?tab=daily&date=${e.target.value}`)}
-            className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1fad9d]"
-          />
-        ) : (
-          <input
-            type="month"
-            defaultValue={monthParam}
-            onChange={e => router.push(`?tab=monthly&month=${e.target.value}`)}
-            className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1fad9d]"
-          />
-        )}
-      </div>
-
-      {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <div className="rounded-2xl border border-[#1fad9d]/25 bg-[#1fad9d]/5 p-5">
-          <p className="text-xs font-bold uppercase tracking-widest text-[#0e7a70] mb-1">Total</p>
-          <p className="text-3xl font-black text-[#1fad9d]">${(cut?.total ?? 0).toLocaleString('es-AR')}</p>
-        </div>
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5">
-          <p className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-1">Ventas</p>
-          <p className="text-3xl font-black">{cut?.salesCount ?? 0}</p>
-        </div>
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5 col-span-2 sm:col-span-1">
-          <p className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-1">Promedio</p>
-          <p className="text-3xl font-black">
-            ${cut?.salesCount ? Math.round((cut.total) / cut.salesCount).toLocaleString('es-AR') : 0}
-          </p>
-        </div>
-      </div>
-
-      {/* By method */}
-      {(cut?.byMethod.length ?? 0) > 0 && (
-        <div className="rounded-2xl border border-zinc-200 overflow-hidden bg-white">
-          <p className="px-5 py-3 text-xs font-bold uppercase tracking-widest text-zinc-400 bg-zinc-50 border-b border-zinc-200">Por método de pago</p>
-          <table className="w-full text-sm">
-            <tbody className="divide-y divide-zinc-100">
-              {cut!.byMethod.map(m => (
-                <tr key={m.method} className="hover:bg-zinc-50">
-                  <td className="px-5 py-3 font-semibold">{METHOD_LABELS[m.method] ?? m.method}</td>
-                  <td className="px-5 py-3 text-muted-foreground">{m.count} venta{m.count !== 1 ? 's' : ''}</td>
-                  <td className="px-5 py-3 font-bold text-right">${m.total.toLocaleString('es-AR')}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+    <Panel
+      title="Detalle de ventas"
+      action={sorted.length > 8 && (
+        <button type="button" onClick={() => setExpanded(e => !e)} className="text-[13px] font-bold text-[#0e7a70] hover:underline">
+          {expanded ? 'Ver menos' : `Ver las ${sorted.length}`}
+        </button>
       )}
-
-      {/* By product */}
-      {(cut?.byProduct.length ?? 0) > 0 && (
-        <div className="rounded-2xl border border-zinc-200 overflow-hidden bg-white">
-          <p className="px-5 py-3 text-xs font-bold uppercase tracking-widest text-zinc-400 bg-zinc-50 border-b border-zinc-200">Por producto</p>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-zinc-50/50">
-                <th className="text-left px-5 py-3 font-semibold text-xs text-zinc-500">Producto</th>
-                <th className="text-left px-5 py-3 font-semibold text-xs text-zinc-500">Unidades</th>
-                <th className="text-right px-5 py-3 font-semibold text-xs text-zinc-500">Total</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100">
-              {cut!.byProduct.map((p, i) => (
-                <tr key={i} className="hover:bg-zinc-50">
-                  <td className="px-5 py-3 font-semibold">{p.name}</td>
-                  <td className="px-5 py-3 text-muted-foreground">{p.quantity}</td>
-                  <td className="px-5 py-3 font-bold text-right">${p.total.toLocaleString('es-AR')}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Individual sales */}
-      {(cut?.sales.length ?? 0) > 0 && (
-        <div className="rounded-2xl border border-zinc-200 overflow-hidden bg-white">
-          <p className="px-5 py-3 text-xs font-bold uppercase tracking-widest text-zinc-400 bg-zinc-50 border-b border-zinc-200">Detalle de ventas</p>
-          <div className="divide-y divide-zinc-100">
-            {cut!.sales.map(sale => (
-              <div key={sale.id} className="px-5 py-3 flex items-start justify-between gap-3 hover:bg-zinc-50">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-sm">${sale.total.toLocaleString('es-AR')}</span>
-                    <span className="text-xs text-zinc-400">{METHOD_LABELS[sale.method] ?? sale.method}</span>
-                    <span className="text-xs text-zinc-400">{new Date(sale.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
-                  <p className="text-xs text-zinc-400 mt-0.5">
-                    {sale.items.map(i => `${i.product.name} ×${i.quantity}`).join(', ')}
-                  </p>
-                  {sale.notes && <p className="text-xs text-zinc-400 italic mt-0.5">{sale.notes}</p>}
-                </div>
-                {canDelete && (
-                  <button
-                    type="button"
-                    disabled={isPending}
-                    onClick={() => setDeleteTarget(sale)}
-                    className="p-1.5 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0 disabled:opacity-40"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {cut?.salesCount === 0 && (cut?.credits?.count ?? 0) === 0 && (
-        <div className="flex items-center justify-center rounded-2xl border border-dashed py-16 text-sm text-muted-foreground">
-          Sin movimientos en este período
-        </div>
-      )}
-
-      {/* Credits in period */}
-      {(cut?.credits?.count ?? 0) > 0 && (
-        <div className="rounded-2xl border border-amber-200 overflow-hidden bg-amber-50/40">
-          <div className="flex items-center justify-between px-5 py-3 bg-amber-50 border-b border-amber-200">
-            <p className="text-xs font-bold uppercase tracking-widest text-amber-700">Ventas fiadas del período</p>
-            <p className="font-black text-amber-700">${(cut!.credits.total).toLocaleString('es-AR')}</p>
-          </div>
-          <div className="px-5 py-3 grid grid-cols-2 gap-3">
-            <div>
-              <p className="text-xs text-amber-600 font-semibold">Asignaciones</p>
-              <p className="text-2xl font-black text-amber-800">{cut!.credits.count}</p>
-            </div>
-            <div>
-              <p className="text-xs text-amber-600 font-semibold">Miembros</p>
-              <p className="text-2xl font-black text-amber-800">{cut!.credits.byMember.length}</p>
-            </div>
-          </div>
-          {cut!.credits.byMember.length > 0 && (
-            <div className="border-t border-amber-200">
-              {cut!.credits.byMember.map((m, i) => (
-                <div key={i} className="flex items-center justify-between px-5 py-2.5 border-b border-amber-100 last:border-0">
-                  <span className="text-sm font-semibold text-amber-900">{m.memberName}</span>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-amber-600">{m.count} ítem{m.count !== 1 ? 's' : ''}</span>
-                    <span className="font-bold text-amber-800">${m.total.toLocaleString('es-AR')}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+    >
+      <ul className="px-5 pb-2">
+        {shown.map(sale => {
+          const d = new Date(sale.createdAt)
+          const time = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+          const when = showDate ? `${d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })} ${time}` : time
+          return (
+            <li key={sale.id} className="flex items-center gap-3 border-b border-dashed border-zinc-200 py-2.5 last:border-0">
+              <span className="shrink-0 font-admin-mono text-[13px] text-zinc-500">{when}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm">{sale.items.map(i => `${i.product.name} ×${i.quantity}`).join(', ')}</span>
+                <span className="block text-xs text-zinc-500">
+                  {METHOD_LABELS[sale.method] ?? sale.method}
+                  {sale.notes && <span className="italic"> — {sale.notes}</span>}
+                </span>
+              </span>
+              <span className="font-admin-mono text-sm font-bold">{money(sale.total)}</span>
+              {canDelete && (
+                <button
+                  type="button"
+                  aria-label={`Anular venta de las ${time}`}
+                  disabled={isPending}
+                  onClick={() => setDeleteTarget(sale)}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-red-600 transition-colors hover:bg-red-50 disabled:opacity-40"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </li>
+          )
+        })}
+      </ul>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>¿Anular venta?</AlertDialogTitle>
             <AlertDialogDescription>
-              Se eliminará la venta de ${deleteTarget?.total.toLocaleString('es-AR')} y se restaurará el stock de los productos. Esta acción no se puede deshacer.
+              Se eliminará la venta de {money(deleteTarget?.total ?? 0)} y se restaurará el stock de los productos. Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1234,6 +1640,222 @@ function CutTab({ cut, type, dateParam, monthParam, gymSlug, canDelete }: {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </Panel>
+  )
+}
+
+function ProductBreakdown({ title, rows, limit }: { title: string; rows: CutSummary['byProduct']; limit?: number }) {
+  const sorted = [...rows].sort((a, b) => b.total - a.total).slice(0, limit)
+  const max = sorted[0]?.total ?? 0
+  return (
+    <Panel title={title}>
+      <ol className="px-5 pb-4 pt-2">
+        {sorted.map((p, i) => (
+          <li key={`${p.name}-${i}`} title={`${p.name}: ${p.quantity} unidades, ${money(p.total)}`}
+            className="grid grid-cols-[minmax(0,1fr)_56px_88px] items-center gap-3 border-b border-dashed border-zinc-200 py-2.5 last:border-0"
+          >
+            <span className="flex min-w-0 flex-col gap-1.5">
+              <span className="truncate text-sm font-semibold">{p.name}</span>
+              <ShareBar pct={max > 0 ? (p.total / max) * 100 : 0} />
+            </span>
+            <span className="text-right font-admin-mono text-[13px] text-zinc-600">×{p.quantity}</span>
+            <span className="text-right font-admin-mono text-sm font-bold">{money(p.total)}</span>
+          </li>
+        ))}
+      </ol>
+    </Panel>
+  )
+}
+
+function CreditsInPeriod({ credits, title, onNavigate }: { credits: CutSummary['credits']; title: string; onNavigate: (t: TabId) => void }) {
+  const top = [...credits.byMember].sort((a, b) => b.total - a.total)
+  return (
+    <section className="flex min-w-0 flex-col gap-3 rounded-[18px] border border-amber-200 bg-amber-50 px-5 py-[18px]">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-base font-extrabold text-amber-900">{title}</h2>
+        <span className="font-admin-mono text-[22px] font-bold text-amber-900">{money(credits.total)}</span>
+      </div>
+      <p className="text-[13px] text-amber-800">
+        {plural(credits.count, 'producto', 'productos')} · {plural(credits.byMember.length, 'socio', 'socios')} · no entra en el total de caja hasta que se cobra
+      </p>
+      {top.length > 0 && (
+        <ul>
+          {top.slice(0, 5).map((m, i) => (
+            <li key={`${m.memberName}-${i}`} className="flex justify-between gap-3 border-t border-amber-200 py-2 text-sm text-amber-900">
+              <span className="font-semibold">{m.memberName}</span>
+              <span className="font-admin-mono font-bold">{money(m.total)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button type="button" onClick={() => onNavigate('credits')} className="self-start text-[13px] font-bold text-amber-900 hover:underline">
+        Ver créditos
+      </button>
+    </section>
+  )
+}
+
+function DailyCutTab({ cut, dateParam, gymSlug, canDelete, onNavigate }: {
+  cut: CutSummary | null; dateParam: string; gymSlug: string; canDelete: boolean; onNavigate: (t: TabId) => void
+}) {
+  const router = useRouter()
+  const isToday = dateParam === localISODate(new Date())
+  const salesCount = cut?.salesCount ?? 0
+  const units = cut?.byProduct.reduce((s, p) => s + p.quantity, 0) ?? 0
+  const average = salesCount ? Math.round((cut?.total ?? 0) / salesCount) : 0
+  const hasCredits = (cut?.credits?.count ?? 0) > 0
+
+  return (
+    <div className="space-y-6">
+      <PeriodStepper type="date" value={dateParam} onChange={v => router.push(`?tab=daily&date=${v}`)} />
+
+      <CashBand
+        label="Total del día"
+        eyebrow={`${longDate(dateParam)}${isToday ? ' · en curso' : ''}`}
+        total={cut?.total ?? 0}
+        subtitle={`${plural(salesCount, 'venta', 'ventas')} · ${plural(units, 'unidad', 'unidades')} · ticket promedio ${money(average)}`}
+        bars={methodBars(cut, true)}
+        emptyBars="Sin ventas en este día"
+        actions={<BandButton onClick={() => window.print()}><Printer className="h-4 w-4" />Imprimir</BandButton>}
+      />
+
+      {salesCount === 0 && !hasCredits ? (
+        <EmptyState icon={Calendar}>Sin movimientos en este día</EmptyState>
+      ) : (
+        <div className="flex flex-wrap items-start gap-6">
+          {(cut?.byProduct.length ?? 0) > 0 && (
+            <div className="min-w-0 flex-[1_1_420px]">
+              <ProductBreakdown title="Por producto" rows={cut!.byProduct} />
+            </div>
+          )}
+          <div className="flex min-w-0 flex-[1_1_420px] flex-col gap-4">
+            {(cut?.sales.length ?? 0) > 0 && <SalesPanel sales={cut!.sales} gymSlug={gymSlug} canDelete={canDelete} />}
+            {hasCredits && <CreditsInPeriod credits={cut!.credits} title="Fiado este día" onNavigate={onNavigate} />}
+          </div>
+        </div>
+      )}
     </div>
+  )
+}
+
+function MonthlyCutTab({ cut, monthParam, gymSlug, canDelete, onNavigate }: {
+  cut: CutSummary | null; monthParam: string; gymSlug: string; canDelete: boolean; onNavigate: (t: TabId) => void
+}) {
+  const router = useRouter()
+  const [y, m] = monthParam.split('-').map(Number)
+  const daysInMonth = new Date(y, m, 0).getDate()
+  const now = new Date()
+  const isCurrent = localISODate(now).slice(0, 7) === monthParam
+  const lastDay = isCurrent ? now.getDate() : daysInMonth
+  const salesCount = cut?.salesCount ?? 0
+  const total = cut?.total ?? 0
+  const average = salesCount ? Math.round(total / salesCount) : 0
+  const perDay = lastDay > 0 ? Math.round(total / lastDay) : 0
+  const hasCredits = (cut?.credits?.count ?? 0) > 0
+  const name = monthName(monthParam)
+
+  return (
+    <div className="space-y-6">
+      <PeriodStepper type="month" value={monthParam} onChange={v => router.push(`?tab=monthly&month=${v}`)} />
+
+      <CashBand
+        label="Total del mes"
+        eyebrow={`${name}${isCurrent ? ` · 1 al ${lastDay}` : ''}`}
+        total={total}
+        subtitle={`${plural(salesCount, 'venta', 'ventas')} · ticket promedio ${money(average)} · ${money(perDay)} por día`}
+        bars={methodBars(cut)}
+        emptyBars="Sin ventas en este mes"
+      />
+
+      {salesCount === 0 && !hasCredits ? (
+        <EmptyState icon={BarChart2}>Sin movimientos en este mes</EmptyState>
+      ) : (
+        <>
+          {salesCount > 0 && <DailySalesChart sales={cut!.sales} year={y} month={m} daysInMonth={daysInMonth} lastDay={lastDay} today={isCurrent ? lastDay : null} />}
+          <div className="flex flex-wrap items-start gap-6">
+            {(cut?.byProduct.length ?? 0) > 0 && (
+              <div className="min-w-0 flex-[1_1_420px]">
+                <ProductBreakdown title="Productos más vendidos" rows={cut!.byProduct} limit={5} />
+              </div>
+            )}
+            {hasCredits && (
+              <div className="min-w-0 flex-[1_1_420px]">
+                <CreditsInPeriod credits={cut!.credits} title={`Fiado en ${name.split(' ')[0]}`} onNavigate={onNavigate} />
+              </div>
+            )}
+          </div>
+          {salesCount > 0 && <SalesPanel sales={cut!.sales} gymSlug={gymSlug} canDelete={canDelete} showDate />}
+        </>
+      )}
+    </div>
+  )
+}
+
+function DailySalesChart({ sales, year, month, daysInMonth, lastDay, today }: { sales: Sale[]; year: number; month: number; daysInMonth: number; lastDay: number; today: number | null }) {
+  const totals = Array<number>(daysInMonth).fill(0)
+  for (const s of sales) {
+    const d = new Date(s.createdAt)
+    if (d.getFullYear() === year && d.getMonth() === month - 1) totals[d.getDate() - 1] += s.total
+  }
+  const max = Math.max(0, ...totals)
+  const scaleMax = niceCeil(max)
+  const best = totals.indexOf(max)
+  const monthShort = new Date(year, month - 1, 1).toLocaleDateString('es-AR', { month: 'short' })
+  const bestLabel = max > 0
+    ? new Date(year, month - 1, best + 1).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })
+    : ''
+
+  return (
+    <Panel title="Ventas por día" action={max > 0 && <span className="text-[13px] text-zinc-500">Mejor día: {bestLabel} · {money(max)}</span>}>
+      <div className="overflow-x-auto px-5 pb-4 pt-2">
+        <div className="flex min-w-[640px] gap-3">
+          <div aria-hidden="true" className="flex h-[200px] w-14 flex-col justify-between pt-6 text-right font-admin-mono text-[11px] text-zinc-500">
+            <span className="-translate-y-1/2">{money(scaleMax)}</span>
+            <span className="-translate-y-1/2">{money(scaleMax / 2)}</span>
+            <span className="translate-y-1/2">$0</span>
+          </div>
+          <div className="flex flex-1 flex-col gap-1.5">
+            <div
+              role="img"
+              aria-label={`Ventas diarias de ${monthShort}. Mejor día ${bestLabel} con ${money(max)}.`}
+              className="relative flex h-[200px] items-end gap-1 border-b border-zinc-300 pt-6"
+            >
+              <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-6 border-t border-zinc-100" />
+              <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-[calc(24px+(100%-24px)/2)] border-t border-zinc-100" />
+              {totals.map((v, i) => {
+                const day = i + 1
+                const future = day > lastDay
+                const pct = (v / scaleMax) * 100
+                return (
+                  <div key={day} className="group relative flex h-full flex-1 items-end">
+                    {future ? (
+                      <div className="h-1 w-full rounded-sm border border-dashed border-zinc-300" />
+                    ) : (
+                      <div
+                        className={`w-full rounded-t-[4px] ${v === 0 ? 'bg-zinc-200' : day === today ? 'bg-[#0e7a70]' : 'bg-[#1fad9d]'}`}
+                        style={{ height: v > 0 ? `${pct}%` : '2px' }}
+                      />
+                    )}
+                    {!future && (
+                      <span
+                        className="pointer-events-none absolute left-1/2 z-10 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-[#111111] px-2 py-1 font-admin-mono text-[11px] text-white group-hover:block"
+                        style={{ bottom: `calc(${v > 0 ? pct : 0}% + 6px)` }}
+                      >
+                        {day} {monthShort} · {money(v)}
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            <div aria-hidden="true" className="flex gap-1 font-admin-mono text-[11px] text-zinc-500">
+              {totals.map((_, i) => (
+                <span key={i} className="flex-1 text-center">{i === 0 || (i + 1) % 5 === 0 ? i + 1 : ''}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </Panel>
   )
 }

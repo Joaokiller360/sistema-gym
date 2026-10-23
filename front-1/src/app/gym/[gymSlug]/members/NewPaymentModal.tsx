@@ -11,9 +11,10 @@ interface Props {
   gymSlug: string
   members: Member[]
   plans: Plan[]
+  initialMemberId?: string
 }
 
-export function NewPaymentModal({ gymSlug, members, plans }: Props) {
+export function NewPaymentModal({ gymSlug, members, plans, initialMemberId }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isOpen, setIsOpen] = useState(true)
@@ -23,6 +24,7 @@ export function NewPaymentModal({ gymSlug, members, plans }: Props) {
     setTimeout(() => {
       const params = new URLSearchParams(searchParams.toString())
       params.delete('new')
+      params.delete('payFor')
       router.push(`?${params.toString()}`)
     }, 120)
   }
@@ -33,6 +35,7 @@ export function NewPaymentModal({ gymSlug, members, plans }: Props) {
     setTimeout(() => {
       const params = new URLSearchParams(searchParams.toString())
       params.delete('new')
+      params.delete('payFor')
       params.set('member', memberId)
       router.push(`?${params.toString()}`)
       router.refresh()
@@ -55,6 +58,7 @@ export function NewPaymentModal({ gymSlug, members, plans }: Props) {
           plans={plans}
           onSuccess={handleSuccess}
           onClose={close}
+          initialMemberId={initialMemberId}
         />
       </DialogContent>
     </Dialog>

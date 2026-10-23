@@ -3,7 +3,8 @@
 import { cookies } from 'next/headers'
 import { updateTag } from 'next/cache'
 import { z } from 'zod'
-import { apiFetchWithError } from '@/lib/api'
+import { apiFetch, apiFetchWithError } from '@/lib/api'
+import type { WalletPassInfo } from './[id]/wallet-actions'
 
 async function getToken() {
   const store = await cookies()
@@ -59,4 +60,23 @@ export async function createMemberAction(
 
   updateTag(`members-${gymSlug}`)
   return { memberId: result.data.id }
+}
+
+export interface MemberPanelData {
+  /** Check-in timestamps of the last 28 days */
+  checkIns: string[]
+  wallet: WalletPassInfo | null
+}
+
+/** Lazy data for the members list side panel (attendance heatmap + Wallet pass status). */
+export async function getMemberPanelAction(gymSlug: string, memberId: string): Promise<MemberPanelData> {
+  if (!/^[0-9a-f-]{36}$/i.test(memberId)) return { checkIns: [], wallet: null }
+  const token = await getToken()
+  const headers = { 'x-gym-slug': gymSlug }
+  const since = new Date(Date.now() - 27 * 86_400_000).toISOString().slice(0, 10)
+  const [attendance, wallet] = await Promise.all([
+    apiFetch<{ checkIn: string }[]>(`/attendance?memberId=${memberId}&startDate=${since}`, token, { headers, silent: true }),
+    apiFetch<WalletPassInfo>(`/wallet/members/${memberId}/pass`, token, { headers, silent: true }),
+  ])
+  return { checkIns: (attendance ?? []).map(a => a.checkIn), wallet: wallet ?? null }
 }

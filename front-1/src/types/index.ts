@@ -95,6 +95,8 @@ export interface Plan {
   daysPerWeek: number | null;
   /** Gym days included; null = unlimited for durationDays */
   visitLimit: number | null;
+  /** People covered by one purchase (1 = individual, 2+ = shared plan) */
+  maxMembers: number;
   benefits: string[];
   isActive: boolean;
   isFeatured: boolean;
@@ -129,6 +131,8 @@ export interface Membership {
   /** Snapshot of plan.visitLimit; one visit consumed per gym day attended */
   visitsTotal: number | null;
   visitsUsed: number;
+  /** Shared by every membership bought together under a shared plan */
+  groupId: string | null;
   notes: string | null;
   gymId: string;
   memberId: string;
@@ -320,10 +324,19 @@ export interface MemberWithMembership extends Member {
   activeMembership?: Membership & { plan: Plan };
 }
 
+export interface MembershipGroupMate {
+  id: string;
+  memberId: string;
+  status: MembershipStatus;
+  member: { firstName: string; lastName: string };
+}
+
 export interface MembershipWithRelations extends Membership {
   member: Member;
   plan: Plan;
   branch?: Branch | null;
+  /** Other people in the same shared-plan purchase */
+  group?: MembershipGroupMate[];
 }
 
 export interface ClassWithRelations extends Class {

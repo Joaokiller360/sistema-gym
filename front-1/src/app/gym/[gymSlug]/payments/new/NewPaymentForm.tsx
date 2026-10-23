@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { registerMemberPaymentAction } from './actions'
 import { createHandlers } from '@/lib/input-validation'
 import type { Member, Plan } from '@/types'
+import { CompanionPicker } from '../../members/[id]/CompanionPicker'
 
 const inputClass = 'w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all disabled:opacity-50'
 
@@ -38,12 +39,14 @@ export function NewPaymentForm({
   plans,
   onSuccess,
   onClose,
+  initialMemberId,
 }: {
   gymSlug: string
   members: Member[]
   plans: Plan[]
   onSuccess?: (memberId: string) => void
   onClose?: () => void
+  initialMemberId?: string
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -51,7 +54,9 @@ export function NewPaymentForm({
 
   // Step 1 — member
   const [memberSearch, setMemberSearch] = useState('')
-  const [selectedMember, setSelectedMember] = useState<Member | null>(null)
+  const [selectedMember, setSelectedMember] = useState<Member | null>(
+    () => members.find(m => m.id === initialMemberId) ?? null,
+  )
 
   // Step 2 — plan
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
@@ -60,6 +65,16 @@ export function NewPaymentForm({
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10))
   const [months, setMonths] = useState(1)
   const [method, setMethod] = useState<'CASH' | 'CARD' | 'TRANSFER' | 'OTHER'>('CASH')
+  const [companionIds, setCompanionIds] = useState<string[]>([])
+
+  // Shared plans: only keep companions that still fit the chosen plan and aren't the holder
+  const companionSlots = selectedPlan ? Math.max(0, (selectedPlan.maxMembers ?? 1) - 1) : 0
+  const effectiveCompanions = companionIds.filter(id => id !== selectedMember?.id).slice(0, companionSlots)
+  const busyIds = useMemo(() => new Set(
+    members
+      .filter(m => (m as Member & { memberships?: { status: string }[] }).memberships?.some(ms => ms.status === 'ACTIVE'))
+      .map(m => m.id),
+  ), [members])
 
   const filteredMembers = useMemo(() => {
     const active = members.filter(m => m.isActive)
@@ -99,6 +114,7 @@ export function NewPaymentForm({
         amount: totalAmount,
         currency: selectedPlan.currency,
         method,
+        companionIds: effectiveCompanions,
       })
       if (res?.error) {
         toast.error(res.error)
@@ -108,7 +124,7 @@ export function NewPaymentForm({
       if (onSuccess && res.memberId) {
         onSuccess(res.memberId)
       } else {
-        router.push(`/gym/${gymSlug}/members/${res.memberId}`)
+        router.push(`/gym/${gymSlug}/members?member=${res.memberId}`)
       }
     })
   }
@@ -317,6 +333,26 @@ export function NewPaymentForm({
                 </div>
               )}
             </div>
+
+            {companionSlots > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">
+                  Acompañantes · hasta {companionSlots}
+                </p>
+                <CompanionPicker
+                  candidates={members}
+                  excludeIds={selectedMember ? [selectedMember.id] : []}
+                  busyIds={busyIds}
+                  max={companionSlots}
+                  value={effectiveCompanions}
+                  onChange={setCompanionIds}
+                  disabled={isPending}
+                />
+                <p className="text-xs text-zinc-400">
+                  Un solo pago cubre a todos. Cada uno recibe su propio acceso con las mismas fechas.
+                </p>
+              </div>
+            )}
 
             {/* Payment method */}
             <div className="space-y-2">

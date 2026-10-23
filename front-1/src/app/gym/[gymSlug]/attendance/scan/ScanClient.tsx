@@ -14,6 +14,14 @@ export interface ScanProduct {
   stock: number
 }
 
+export interface ScanMember {
+  id: string
+  firstName: string
+  lastName: string
+  email: string
+  phone: string | null
+}
+
 type Mode = 'idle' | 'sale' | 'credit'
 type CameraState = 'off' | 'starting' | 'on' | 'error'
 
@@ -47,7 +55,19 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-export function ScanClient({ gymSlug, products }: { gymSlug: string; products: ScanProduct[] }) {
+// Case- and accent-insensitive, so "jose" finds "José"
+function normalize(text: string) {
+  return text.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
+}
+
+// What a QR / USB reader types: "GYMOS-<token>" or the bare 32-hex token
+function looksLikeCode(text: string) {
+  return /^gymos-/i.test(text) || /^[a-f0-9]{32}$/i.test(text)
+}
+
+const MAX_SUGGESTIONS = 6
+
+export function ScanClient({ gymSlug, products, members }: { gymSlug: string; products: ScanProduct[]; members: ScanMember[] }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -60,6 +80,7 @@ export function ScanClient({ gymSlug, products }: { gymSlug: string; products: S
   const [camera, setCamera] = useState<CameraState>('off')
   const [cameraError, setCameraError] = useState('')
   const [manual, setManual] = useState('')
+  const [activeSuggestion, setActiveSuggestion] = useState(0)
 
   const [code, setCode] = useState<string | null>(null)
   const [result, setResult] = useState<ScanResult | null>(null)
@@ -254,6 +275,35 @@ export function ScanClient({ gymSlug, products }: { gymSlug: string; products: S
   const q = productQuery.trim().toLowerCase()
   const shownProducts = products.filter(p => !q || p.name.toLowerCase().includes(q))
 
+  const manualValue = manual.trim()
+  const isCode = looksLikeCode(manualValue)
+  const memberQuery = normalize(manualValue)
+  const suggestions = memberQuery.length >= 2 && !isCode
+    ? members
+        .filter(m => normalize(`${m.firstName} ${m.lastName} ${m.email} ${m.phone ?? ''}`).includes(memberQuery))
+        .slice(0, MAX_SUGGESTIONS)
+    : []
+  const highlighted = Math.min(activeSuggestion, Math.max(0, suggestions.length - 1))
+
+  function pickMember(member: ScanMember) {
+    setManual('')
+    setActiveSuggestion(0)
+    void lookup(member.id)
+  }
+
+  function onManualKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!suggestions.length) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActiveSuggestion((highlighted + 1) % suggestions.length)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActiveSuggestion((highlighted - 1 + suggestions.length) % suggestions.length)
+    } else if (e.key === 'Escape') {
+      setManual('')
+    }
+  }
+
   return (
     <div className="flex flex-wrap items-start gap-4">
       {/* Scanner */}
@@ -286,28 +336,73 @@ export function ScanClient({ gymSlug, products }: { gymSlug: string; products: S
         <form
           onSubmit={e => {
             e.preventDefault()
+            if (suggestions.length) {
+              pickMember(suggestions[highlighted])
+              return
+            }
             const value = manual
             setManual('')
             void lookup(value)
           }}
         >
-          <label htmlFor="scan-code" className={field.label}>Lector USB o código manual</label>
+          <label htmlFor="scan-code" className={field.label}>Lector USB, código o nombre del socio</label>
           <div className="flex gap-2">
-            <input
-              id="scan-code"
-              ref={inputRef}
-              value={manual}
-              onChange={e => setManual(e.target.value)}
-              autoFocus
-              autoComplete="off"
-              placeholder="GYMOS-…"
-              className={cn(field.input, 'font-admin-mono')}
-            />
-            <button type="submit" disabled={!manual.trim() || looking} className={cn(btn.dark, 'min-h-11')}>
+            <div className="relative min-w-0 flex-1">
+              <input
+                id="scan-code"
+                ref={inputRef}
+                value={manual}
+                onChange={e => { setManual(e.target.value); setActiveSuggestion(0) }}
+                onKeyDown={onManualKeyDown}
+                autoFocus
+                autoComplete="off"
+                placeholder="GYMOS-… o nombre"
+                role="combobox"
+                aria-expanded={suggestions.length > 0}
+                aria-controls="scan-member-suggestions"
+                aria-autocomplete="list"
+                aria-activedescendant={suggestions.length ? `scan-member-${suggestions[highlighted].id}` : undefined}
+                className={cn(field.input, isCode && 'font-admin-mono')}
+              />
+              {suggestions.length > 0 && (
+                <ul
+                  id="scan-member-suggestions"
+                  role="listbox"
+                  aria-label="Socios que coinciden"
+                  className="absolute inset-x-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-xl border border-adm-line bg-adm-surface py-1 shadow-lg"
+                >
+                  {suggestions.map((m, i) => (
+                    <li
+                      key={m.id}
+                      id={`scan-member-${m.id}`}
+                      role="option"
+                      aria-selected={i === highlighted}
+                      onMouseDown={e => e.preventDefault()}
+                      onMouseEnter={() => setActiveSuggestion(i)}
+                      onClick={() => pickMember(m)}
+                      className={cn('flex cursor-pointer items-center gap-3 px-3 py-2', i === highlighted && 'bg-adm-subtle')}
+                    >
+                      <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-adm-chip text-xs font-bold">
+                        {initials(`${m.firstName} ${m.lastName}`)}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold">{m.firstName} {m.lastName}</span>
+                        <span className="block truncate text-xs text-adm-muted">{m.email}{m.phone ? ` · ${m.phone}` : ''}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <button type="submit" disabled={!manualValue || looking} className={cn(btn.dark, 'min-h-11')}>
               Buscar
             </button>
           </div>
-          <p className={field.hint}>Los lectores USB escriben el código y presionan Enter solos.</p>
+          <p className={field.hint}>
+            {manualValue.length >= 2 && !isCode && suggestions.length === 0
+              ? 'Ningún socio coincide con ese nombre.'
+              : 'Los lectores USB escriben el código y presionan Enter solos. También podés escribir el nombre, correo o teléfono del socio.'}
+          </p>
         </form>
       </section>
 

@@ -247,7 +247,7 @@ export default async function GymDashboardPage({ params, searchParams }: Props) 
               <ul>
                 {recentMembers.map(m => (
                   <li key={m.id}>
-                    <Link href={`members/${m.id}`} className="flex items-center gap-3 border-t border-adm-line-soft px-5 py-3 transition-colors hover:bg-adm-subtle">
+                    <Link href={`members?member=${m.id}`} className="flex items-center gap-3 border-t border-adm-line-soft px-5 py-3 transition-colors hover:bg-adm-subtle">
                       <PersonMark name={`${m.firstName} ${m.lastName}`} />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold">{m.firstName} {m.lastName}</p>

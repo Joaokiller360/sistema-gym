@@ -1,19 +1,16 @@
-import { Suspense } from 'react'
+import { Suspense, type ComponentProps } from 'react'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { Plus } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
 import { verifyToken } from '@/lib/auth'
 import { Member, MembershipWithRelations, Payment, Attendance, Plan } from '@/types'
-import { MembersTable } from './MembersTable'
-import { SearchInput } from './SearchInput'
+import { MembersBoard } from './MembersBoard'
 import { MemberModal } from './MemberModal'
 import { NewMemberModal } from './NewMemberModal'
 import { NewPaymentModal } from './NewPaymentModal'
-
-const LIMIT = 25
-
-type MemberRow = Member & { memberships?: Array<{ plan: { name: string } }> }
+import { EditMemberModal } from './[id]/EditMemberModal'
+import type { WalletPassInfo } from './[id]/wallet-actions'
+import type { MemberRow } from './memberStatus'
 
 interface MembersResponse {
   data: MemberRow[]
@@ -22,38 +19,32 @@ interface MembersResponse {
 
 interface Props {
   params: Promise<{ gymSlug: string }>
-  searchParams: Promise<{ q?: string; status?: string; page?: string; member?: string; new?: string }>
+  searchParams: Promise<{ q?: string; member?: string; new?: string; payFor?: string; edit?: string }>
 }
 
 export default async function MembersPage({ params, searchParams }: Props) {
   const { gymSlug } = await params
-  const { q, status, page: pageStr, member: rawMemberId, new: newParam } = await searchParams
-  const page = Math.max(1, parseInt(pageStr ?? '1', 10))
+  const { q, member: rawMemberId, new: newParam, payFor: rawPayFor, edit } = await searchParams
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   const selectedMemberId = rawMemberId && UUID_RE.test(rawMemberId) ? rawMemberId : undefined
+  const payForId = rawPayFor && UUID_RE.test(rawPayFor) ? rawPayFor : undefined
 
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value ?? ''
 
   const session = await verifyToken(token)
   const canDelete = session?.role === 'SUPER_ADMIN' || session?.role === 'GYM_OWNER'
+  const canRevokeWallet = ['SUPER_ADMIN', 'GYM_OWNER', 'GYM_ADMIN'].includes(session?.role ?? '')
 
-  const qs = new URLSearchParams()
-  if (q) qs.set('search', q)
-  if (status) qs.set('status', status)
-  qs.set('page', String(page))
-  qs.set('limit', String(LIMIT))
-
+  // The board searches and filters client-side over every member (counts per status need the full set)
   const currentParams = new URLSearchParams()
   if (q) currentParams.set('q', q)
-  if (status) currentParams.set('status', status)
-  if (page > 1) currentParams.set('page', String(page))
 
   const newMemberHref = `?${new URLSearchParams({ ...Object.fromEntries(currentParams), new: 'member' }).toString()}`
   const newPaymentHref = `?${new URLSearchParams({ ...Object.fromEntries(currentParams), new: 'payment' }).toString()}`
 
   const raw = await apiFetch<MembersResponse | MemberRow[]>(
-    `/members?${qs.toString()}`,
+    `/members`,
     token,
     { next: { tags: [`members-${gymSlug}`] }, headers: { 'x-gym-slug': gymSlug } },
   )
@@ -62,25 +53,18 @@ export default async function MembersPage({ params, searchParams }: Props) {
     ? Array.isArray(raw) ? raw : raw.data
     : []
 
-  const total: number = raw
-    ? Array.isArray(raw) ? raw.length : raw.total
-    : 0
-
-  const STATUSES = [
-    { value: '', label: 'Todos' },
-    { value: 'active', label: 'Activos' },
-    { value: 'inactive', label: 'Inactivos' },
-  ]
-
   // Fetch data for member profile modal
   let selectedMember: Member | null = null
   let memberships: MembershipWithRelations[] = []
   let payments: Payment[] = []
   let attendance: Attendance[] = []
   let memberPlans: Plan[] = []
+  let walletPass: WalletPassInfo | null = null
+  let storeProducts: ComponentProps<typeof MemberModal>['storeProducts'] = []
+  let memberCredits: ComponentProps<typeof MemberModal>['memberCredits'] = []
 
   if (selectedMemberId) {
-    const [member, mbs, pays, att, pls] = await Promise.all([
+    const [member, mbs, pays, att, pls, products, credits, pass] = await Promise.all([
       apiFetch<Member>(`/members/${selectedMemberId}`, token, {
         silent: true,
         next: { tags: [`member-${selectedMemberId}`] },
@@ -99,6 +83,15 @@ export default async function MembersPage({ params, searchParams }: Props) {
         headers: { 'x-gym-slug': gymSlug },
       }),
       apiFetch<Plan[]>(`/plans`, token, { headers: { 'x-gym-slug': gymSlug } }),
+      apiFetch<typeof storeProducts>('/store/products', token, {
+        next: { tags: [`store-products-${gymSlug}`] }, headers: { 'x-gym-slug': gymSlug }, silent: true,
+      }),
+      apiFetch<typeof memberCredits>(`/store/credits/${selectedMemberId}`, token, {
+        cache: 'no-store', headers: { 'x-gym-slug': gymSlug }, silent: true,
+      }),
+      apiFetch<WalletPassInfo>(`/wallet/members/${selectedMemberId}/pass`, token, {
+        next: { tags: [`member-${selectedMemberId}-wallet`] }, headers: { 'x-gym-slug': gymSlug }, silent: true,
+      }),
     ])
     if (!member) {
       redirect(`/gym/${gymSlug}/members?${currentParams.toString()}`)
@@ -108,6 +101,9 @@ export default async function MembersPage({ params, searchParams }: Props) {
     payments = pays ?? []
     attendance = att ?? []
     memberPlans = pls ?? []
+    storeProducts = products ?? []
+    memberCredits = credits ?? []
+    walletPass = pass ?? null
   }
 
   // Fetch data for payment modal
@@ -115,73 +111,29 @@ export default async function MembersPage({ params, searchParams }: Props) {
   let paymentPlans: Plan[] = []
 
   if (newParam === 'payment') {
-    const [membersRaw, plans] = await Promise.all([
-      apiFetch<MembersResponse | Member[]>(`/members?limit=200`, token, {
-        next: { tags: [`members-${gymSlug}`] },
-        headers: { 'x-gym-slug': gymSlug },
-      }),
-      apiFetch<Plan[]>(`/plans`, token, { headers: { 'x-gym-slug': gymSlug } }),
-    ])
-    paymentMembers = membersRaw
-      ? Array.isArray(membersRaw) ? membersRaw : membersRaw.data
-      : []
+    const plans = await apiFetch<Plan[]>(`/plans`, token, { headers: { 'x-gym-slug': gymSlug } })
+    paymentMembers = members
     paymentPlans = (plans ?? []).filter(p => p.isActive)
   }
 
   return (
-    <div className="p-8 space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight">Miembros</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            {total > 0 ? `${total} miembro${total !== 1 ? 's' : ''}` : 'Sin miembros registrados'}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <a
-            href={newPaymentHref}
-            className="flex items-center gap-2 rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-bold text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50 transition-all active:scale-[0.98]"
-          >
-            Registrar pago
-          </a>
-          <a
-            href={newMemberHref}
-            className="flex items-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-bold text-white hover:bg-zinc-800 transition-all active:scale-[0.98]"
-          >
-            <Plus className="h-4 w-4" />
-            Nuevo miembro
-          </a>
-        </div>
-      </div>
+    <div className="p-6 lg:p-8">
+      <MembersBoard
+        members={members}
+        gymSlug={gymSlug}
+        paramsString={currentParams.toString()}
+        newMemberHref={newMemberHref}
+        newPaymentHref={newPaymentHref}
+        initialQuery={q ?? ''}
+      />
 
-      <div className="flex items-center gap-3 flex-wrap">
+      {selectedMember && edit === 'member' && (
         <Suspense>
-          <SearchInput defaultValue={q} />
+          <EditMemberModal gymSlug={gymSlug} member={selectedMember} />
         </Suspense>
+      )}
 
-        <div className="flex gap-1">
-          {STATUSES.map(({ value, label }) => {
-            const active = (status ?? '') === value
-            return (
-              <a
-                key={value}
-                href={`?${new URLSearchParams({ ...(q ? { q } : {}), ...(value ? { status: value } : {}) }).toString()}`}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-                  active
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border hover:bg-muted text-muted-foreground'
-                }`}
-              >
-                {label}
-              </a>
-            )
-          })}
-        </div>
-      </div>
-
-      <MembersTable members={members} gymSlug={gymSlug} paramsString={currentParams.toString()} />
-
-      {selectedMember && (
+      {selectedMember && edit !== 'member' && (
         <Suspense>
           <MemberModal
             member={selectedMember}
@@ -191,6 +143,12 @@ export default async function MembersPage({ params, searchParams }: Props) {
             plans={memberPlans}
             gymSlug={gymSlug}
             canDelete={canDelete}
+            canRevokeWallet={canRevokeWallet}
+            walletPass={walletPass}
+            storeProducts={storeProducts}
+            memberCredits={memberCredits}
+            candidates={members}
+            busyIds={members.filter(m => m.memberships?.some(ms => ms.status === 'ACTIVE')).map(m => m.id)}
           />
         </Suspense>
       )}
@@ -203,7 +161,7 @@ export default async function MembersPage({ params, searchParams }: Props) {
 
       {newParam === 'payment' && (
         <Suspense>
-          <NewPaymentModal gymSlug={gymSlug} members={paymentMembers} plans={paymentPlans} />
+          <NewPaymentModal gymSlug={gymSlug} members={paymentMembers} plans={paymentPlans} initialMemberId={payForId} />
         </Suspense>
       )}
     </div>

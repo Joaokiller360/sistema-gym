@@ -20,6 +20,7 @@ const schema = z.object({
   currency: z.string().min(1),
   method: z.enum(['CASH', 'CARD', 'TRANSFER', 'OTHER']),
   notes: z.string().optional(),
+  companionIds: z.array(z.string().uuid()).max(4).default([]),
 })
 
 export type NewPaymentInput = z.infer<typeof schema>
@@ -32,7 +33,7 @@ export async function registerMemberPaymentAction(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
 
   const token = await getToken()
-  const { memberId, planId, startDate, durationDays, periods, amount, currency, method, notes } = parsed.data
+  const { memberId, planId, startDate, durationDays, periods, amount, currency, method, notes, companionIds } = parsed.data
 
   const start = new Date(startDate)
   const end = new Date(start)
@@ -48,6 +49,7 @@ export async function registerMemberPaymentAction(
       startDate: start.toISOString(),
       endDate: end.toISOString(),
       periods,
+      ...(companionIds.length ? { companionIds } : {}),
     }),
   })
 
@@ -73,5 +75,6 @@ export async function registerMemberPaymentAction(
   updateTag(`memberships-${gymSlug}`)
   updateTag(`member-${memberId}`)
   updateTag(`member-${memberId}-memberships`)
+  for (const id of companionIds) updateTag(`member-${id}-memberships`)
   return { memberId }
 }

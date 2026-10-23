@@ -1,11 +1,11 @@
 import { Suspense } from 'react'
+import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { Plus } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
 import { Plan } from '@/types'
-import { PlansList } from './PlansList'
-import { NewPlanModal } from './NewPlanModal'
-import { EditPlanModal } from './EditPlanModal'
+import { PlansTable } from './PlansTable'
+import { PlanDrawer } from './PlanDrawer'
 
 interface Props {
   params: Promise<{ gymSlug: string }>
@@ -18,69 +18,68 @@ export default async function PlansPage({ params, searchParams }: Props) {
 
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value ?? ''
+  const gymHeader = { 'x-gym-slug': gymSlug }
 
-  const plans =
-    (await apiFetch<Plan[]>(`/plans`, token, {
+  const [plansRaw, activeMemberships] = await Promise.all([
+    apiFetch<Plan[]>(`/plans`, token, {
       next: { tags: [`plans-${gymSlug}`] },
-      headers: { 'x-gym-slug': gymSlug },
-    })) ?? []
+      headers: gymHeader,
+    }),
+    apiFetch<{ planId: string }[]>(`/memberships?status=ACTIVE`, token, {
+      headers: gymHeader,
+      silent: true,
+    }),
+  ])
+  const plans = plansRaw ?? []
 
-  const editPlan = editParam
-    ? await apiFetch<Plan>(`/plans/${editParam}`, token, {
-        next: { tags: [`plan-${editParam}`] },
-        headers: { 'x-gym-slug': gymSlug },
-      })
-    : null
+  const memberCounts: Record<string, number> = {}
+  for (const m of activeMemberships ?? []) memberCounts[m.planId] = (memberCounts[m.planId] ?? 0) + 1
+  const totalMembers = Object.values(memberCounts).reduce((a, b) => a + b, 0)
+  const activeCount = plans.filter(p => p.isActive).length
 
-  const sorted = [...plans].sort((a, b) => {
-    if (a.isFeatured && !b.isFeatured) return -1
-    if (!a.isFeatured && b.isFeatured) return 1
-    return 0
-  })
-
-  const newPlanHref = `?new=plan`
+  const editPlan = editParam ? plans.find(p => p.id === editParam) ?? null : null
+  const featured = plans.find(p => p.isFeatured && p.isActive) ?? null
 
   return (
-    <div className="p-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Planes</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Gestioná los planes de tu gimnasio
-          </p>
-        </div>
-        <a
-          href={newPlanHref}
-          className="inline-flex items-center gap-1.5 rounded-xl bg-black px-4 py-2.5 text-sm font-bold text-white hover:bg-zinc-800 transition-all active:scale-[0.98]"
-        >
-          <Plus className="h-4 w-4" />
-          Nuevo plan
-        </a>
+    <div className="dark admin-surface min-h-full bg-adm-ground px-4 pb-14 pt-8 text-adm-ink sm:px-8 sm:pt-9">
+      <div className="mx-auto flex max-w-[1360px] flex-col gap-5">
+        <header className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
+            <h1 className="text-[34px] font-black tracking-[-0.02em]">Tarifario</h1>
+            <p className="font-admin-mono text-sm text-adm-muted">
+              {plans.length} {plans.length === 1 ? 'plan' : 'planes'} · {activeCount} {activeCount === 1 ? 'activo' : 'activos'} · {totalMembers} socios
+            </p>
+          </div>
+          <Link
+            href="?new=plan"
+            className="inline-flex h-11 items-center gap-2 rounded-xl bg-adm-brand px-[18px] text-sm font-black text-adm-night transition-opacity hover:opacity-90"
+          >
+            <Plus className="h-4 w-4" strokeWidth={2.6} aria-hidden="true" />
+            Nuevo plan
+          </Link>
+        </header>
+
+        {plans.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-4 rounded-[18px] border border-dashed border-adm-line py-20 text-center">
+            <p className="text-sm text-adm-muted">No hay planes creados todavía.</p>
+            <Link href="?new=plan" className="inline-flex h-11 items-center rounded-xl border border-adm-ink px-4 text-sm font-bold">
+              Crear primer plan
+            </Link>
+          </div>
+        ) : (
+          <PlansTable plans={plans} memberCounts={memberCounts} gymSlug={gymSlug} />
+        )}
       </div>
 
-      {sorted.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-20 text-center">
-          <p className="text-muted-foreground text-sm">No hay planes creados todavía.</p>
-          <a
-            href={newPlanHref}
-            className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 px-4 py-2 text-sm font-semibold text-zinc-700 hover:border-zinc-300 transition-all"
-          >
-            Crear primer plan
-          </a>
-        </div>
-      ) : (
-        <PlansList plans={sorted} gymSlug={gymSlug} />
-      )}
-
-      {newParam === 'plan' && (
+      {(newParam === 'plan' || editPlan) && (
         <Suspense>
-          <NewPlanModal gymSlug={gymSlug} />
-        </Suspense>
-      )}
-
-      {editParam && editPlan && (
-        <Suspense>
-          <EditPlanModal gymSlug={gymSlug} plan={editPlan} />
+          <PlanDrawer
+            key={editPlan?.id ?? 'new'}
+            gymSlug={gymSlug}
+            plan={editPlan}
+            members={editPlan ? memberCounts[editPlan.id] ?? 0 : 0}
+            featured={featured}
+          />
         </Suspense>
       )}
     </div>

@@ -33,10 +33,10 @@ export function ResendWelcomeButton({ memberId }: Props) {
         type="button"
         onClick={handleClick}
         disabled={isPending || sent}
-        className={`flex items-center gap-2 rounded-xl border px-4 py-2 text-xs font-semibold transition-all disabled:opacity-60 ${
+        className={`flex h-11 items-center gap-2 rounded-xl border px-4 text-[13px] font-bold transition-colors disabled:opacity-60 ${
           sent
-            ? 'border-[#1fad9d]/30 bg-[#1fad9d]/8 text-[#1fad9d]'
-            : 'border-zinc-200 text-zinc-600 hover:border-zinc-300'
+            ? 'border-adm-ok-line bg-adm-ok-bg text-adm-ok-fg'
+            : 'border-adm-line bg-adm-surface text-adm-ink hover:bg-adm-chip'
         }`}
       >
         {sent ? (
@@ -51,7 +51,7 @@ export function ResendWelcomeButton({ memberId }: Props) {
           </>
         )}
       </button>
-      {error && <p className="text-xs text-[#ff0000] font-medium">{error}</p>}
+      {error && <p className="text-xs font-medium text-adm-bad-fg">{error}</p>}
     </div>
   )
 }

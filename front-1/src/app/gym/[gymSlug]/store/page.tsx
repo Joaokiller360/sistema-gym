@@ -108,17 +108,11 @@ export default async function StorePage({ params, searchParams }: Props) {
   ])
 
   return (
-    <div className="p-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-black tracking-tight">Tienda</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Ventas, productos y cortes de caja
-        </p>
-      </div>
-
+    <div className="p-4 sm:p-6 lg:p-8">
       <Suspense>
         <StoreTabs
           gymSlug={gymSlug}
+          gymName={gym.name}
           products={products}
           categories={categories}
           dailyCut={dailyCut}

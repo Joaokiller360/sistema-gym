@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Plus, X } from 'lucide-react'
 import { Plan } from '@/types'
 import { assignPlanAction } from './actions'
+import { CompanionPicker, type CompanionCandidate } from './CompanionPicker'
 
 const METHODS = [
   { value: 'CASH', label: 'Efectivo' },
@@ -19,14 +20,17 @@ interface Props {
   gymSlug: string
   plans: Plan[]
   activeMembershipId?: string
+  candidates?: CompanionCandidate[]
+  busyIds?: Set<string>
 }
 
-export function AssignPlanForm({ memberId, gymSlug, plans, activeMembershipId }: Props) {
+export function AssignPlanForm({ memberId, gymSlug, plans, activeMembershipId, candidates = [], busyIds }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [planId, setPlanId] = useState('')
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0])
   const [method, setMethod] = useState<'CASH' | 'CARD' | 'TRANSFER' | 'OTHER'>('CASH')
+  const [companionIds, setCompanionIds] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -45,12 +49,14 @@ export function AssignPlanForm({ memberId, gymSlug, plans, activeMembershipId }:
         price: Number(selectedPlan.price),
         currency: selectedPlan.currency,
         method,
+        companionIds: selectedPlan.maxMembers > 1 ? companionIds : [],
       }, activeMembershipId)
       if (res.error) {
         setError(res.error)
       } else {
         setOpen(false)
         setPlanId('')
+        setCompanionIds([])
         router.refresh()
       }
     })
@@ -95,7 +101,7 @@ export function AssignPlanForm({ memberId, gymSlug, plans, activeMembershipId }:
                   name="plan"
                   value={p.id}
                   checked={planId === p.id}
-                  onChange={() => setPlanId(p.id)}
+                  onChange={() => { setPlanId(p.id); setCompanionIds([]) }}
                   className="accent-[#1fad9d]"
                 />
                 <div className="flex-1 min-w-0">
@@ -104,6 +110,7 @@ export function AssignPlanForm({ memberId, gymSlug, plans, activeMembershipId }:
                     {p.price.toLocaleString('es-AR', { style: 'currency', currency: p.currency })}
                     {' · '}{planAccessSummary(p)}
                     {p.visitLimit == null && p.daysPerWeek === null ? ' · Ilimitado' : ''}
+                    {p.maxMembers > 1 ? ` · Para ${p.maxMembers} personas` : ''}
                   </p>
                 </div>
                 {p.isFeatured && (
@@ -135,6 +142,26 @@ export function AssignPlanForm({ memberId, gymSlug, plans, activeMembershipId }:
               })()}
             </p>
           </div>
+
+          {selectedPlan.maxMembers > 1 && (
+            <div className="space-y-1.5">
+              <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">
+                Acompañantes · hasta {selectedPlan.maxMembers - 1}
+              </p>
+              <CompanionPicker
+                candidates={candidates}
+                excludeIds={[memberId]}
+                busyIds={busyIds}
+                max={selectedPlan.maxMembers - 1}
+                value={companionIds}
+                onChange={setCompanionIds}
+                disabled={isPending}
+              />
+              <p className="text-xs text-muted-foreground">
+                Se paga una sola vez. Cada acompañante recibe su propio acceso con las mismas fechas; si falta alguno lo podés agregar después.
+              </p>
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Método de pago</label>

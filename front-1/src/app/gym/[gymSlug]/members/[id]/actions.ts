@@ -88,12 +88,13 @@ const assignPlanSchema = z.object({
   price: z.number().positive(),
   currency: z.string().min(1),
   method: z.enum(['CASH', 'CARD', 'TRANSFER', 'OTHER']),
+  companionIds: z.array(z.string().uuid()).max(4).default([]),
 })
 
 export async function assignPlanAction(
   gymSlug: string,
   memberId: string,
-  data: { planId: string; startDate: string; durationDays: number; price: number; currency: string; method: 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER' },
+  data: { planId: string; startDate: string; durationDays: number; price: number; currency: string; method: 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER'; companionIds?: string[] },
   activeMembershipId?: string,
 ): Promise<{ error?: string }> {
   const parsed = assignPlanSchema.safeParse(data)
@@ -104,14 +105,9 @@ export async function assignPlanAction(
   end.setDate(end.getDate() + parsed.data.durationDays)
 
   const token = await getToken()
+  const { companionIds } = parsed.data
 
-  if (activeMembershipId) {
-    await apiFetch(`/memberships/${activeMembershipId}/cancel`, token, {
-      method: 'PATCH',
-      headers: { 'x-gym-slug': gymSlug },
-    })
-  }
-
+  // Create first, so a rejected companion never leaves the member without their current plan
   const membershipResult = await apiFetchWithError<{ id: string }>('/memberships', token, {
     method: 'POST',
     headers: { 'x-gym-slug': gymSlug },
@@ -120,10 +116,18 @@ export async function assignPlanAction(
       planId: parsed.data.planId,
       startDate: start.toISOString(),
       endDate: end.toISOString(),
+      ...(companionIds.length ? { companionIds } : {}),
     }),
   })
 
   if ('error' in membershipResult) return { error: membershipResult.error }
+
+  if (activeMembershipId) {
+    await apiFetch(`/memberships/${activeMembershipId}/cancel`, token, {
+      method: 'PATCH',
+      headers: { 'x-gym-slug': gymSlug },
+    })
+  }
 
   await apiFetch('/payments', token, {
     method: 'POST',
@@ -140,6 +144,29 @@ export async function assignPlanAction(
   updateTag(`member-${memberId}-memberships`)
   updateTag(`member-${memberId}-payments`)
   updateTag(`memberships-${gymSlug}`)
+  for (const id of companionIds) updateTag(`member-${id}-memberships`)
+  if (companionIds.length) updateTag(`members-${gymSlug}`)
+  return {}
+}
+
+export async function addCompanionAction(
+  gymSlug: string,
+  membershipId: string,
+  holderId: string,
+  companionId: string,
+): Promise<{ error?: string }> {
+  if (!z.string().uuid().safeParse(companionId).success) return { error: 'Acompañante inválido' }
+  const token = await getToken()
+  const result = await apiFetchWithError(`/memberships/${membershipId}/companions`, token, {
+    method: 'POST',
+    headers: { 'x-gym-slug': gymSlug },
+    body: JSON.stringify({ memberId: companionId }),
+  })
+  if ('error' in result) return { error: result.error }
+  updateTag(`member-${holderId}-memberships`)
+  updateTag(`member-${companionId}-memberships`)
+  updateTag(`memberships-${gymSlug}`)
+  updateTag(`members-${gymSlug}`)
   return {}
 }
 

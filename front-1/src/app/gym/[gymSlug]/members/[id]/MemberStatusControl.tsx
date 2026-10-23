@@ -30,24 +30,12 @@ export function MemberStatusControl({ memberId, gymSlug, isActive }: Props) {
 
   return (
     <div className="space-y-1.5">
-      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Estado del miembro</p>
-      <div className="flex gap-2">
-        <StatusButton
-          label="Activo"
-          selected={active === true}
-          disabled={isPending}
-          onClick={() => handleSelect(true)}
-          variant="teal"
-        />
-        <StatusButton
-          label="Inactivo"
-          selected={active === false}
-          disabled={isPending}
-          onClick={() => handleSelect(false)}
-          variant="zinc"
-        />
+      <p className="text-xs font-bold uppercase tracking-[0.08em] text-adm-muted">Estado del miembro</p>
+      <div role="group" aria-label="Estado del miembro" className="inline-flex gap-1 rounded-xl bg-adm-chip p-1">
+        <StatusButton label="Activo" selected={active} disabled={isPending} onClick={() => handleSelect(true)} dot="bg-[#1fad9d]" />
+        <StatusButton label="Inactivo" selected={!active} disabled={isPending} onClick={() => handleSelect(false)} dot="bg-zinc-400" />
       </div>
-      {error && <p className="text-xs text-[#ff0000] font-medium">{error}</p>}
+      {error && <p className="text-xs font-medium text-adm-bad-fg">{error}</p>}
     </div>
   )
 }
@@ -57,39 +45,27 @@ function StatusButton({
   selected,
   disabled,
   onClick,
-  variant,
+  dot,
 }: {
   label: string
   selected: boolean
   disabled: boolean
   onClick: () => void
-  variant: 'teal' | 'red' | 'zinc'
+  dot: string
 }) {
-  const STYLES = {
-    teal: {
-      active: 'bg-[#1fad9d] text-white border-[#1fad9d]',
-      inactive: 'bg-white text-zinc-500 border-zinc-200 hover:border-[#1fad9d]/40 hover:text-[#1fad9d]',
-    },
-    red: {
-      active: 'bg-[#ff0000] text-white border-[#ff0000]',
-      inactive: 'bg-white text-zinc-500 border-zinc-200 hover:border-[#ff0000]/40 hover:text-[#ff0000]',
-    },
-    zinc: {
-      active: 'bg-zinc-700 text-white border-zinc-700',
-      inactive: 'bg-white text-zinc-500 border-zinc-200 hover:border-zinc-400 hover:text-zinc-700',
-    },
-  }
-  const style = STYLES[variant]
-
   return (
     <button
       type="button"
+      aria-pressed={selected}
       disabled={disabled}
       onClick={onClick}
-      className={`rounded-full px-4 py-1.5 text-xs font-bold border transition-all disabled:opacity-50 ${
-        selected ? style.active : style.inactive
+      className={`inline-flex h-9 items-center gap-2 rounded-[9px] px-3.5 text-[13px] transition-all disabled:opacity-50 ${
+        selected
+          ? 'bg-adm-surface font-extrabold text-adm-ink shadow-[0_1px_3px_rgba(18,20,19,0.12)]'
+          : 'font-semibold text-adm-muted hover:text-adm-ink'
       }`}
     >
+      <span className={`h-2 w-2 rounded-full ${selected ? dot : 'bg-adm-line'}`} />
       {label}
     </button>
   )
