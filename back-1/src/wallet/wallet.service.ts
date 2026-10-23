@@ -22,6 +22,8 @@ import {
 export { WALLET_CODE_PREFIX };
 
 const TOKEN_RE = /^[a-f0-9]{32}$/;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function escapeHtml(value: string) {
   return value.replace(
@@ -43,6 +45,19 @@ export function parseWalletCode(code: string): string {
   if (!TOKEN_RE.test(normalized))
     throw new BadRequestException('Código QR no reconocido');
   return normalized;
+}
+
+/**
+ * Reception lookups come from the pass QR or, when staff search the member by
+ * name, from the member id itself. A UUID can never be a wallet token (32 hex,
+ * no dashes), so the two never collide.
+ */
+export function parseScanRef(
+  code: string,
+): { memberId: string } | { token: string } {
+  const raw = (code ?? '').trim();
+  if (UUID_RE.test(raw)) return { memberId: raw.toLowerCase() };
+  return { token: parseWalletCode(raw) };
 }
 
 @Injectable()
@@ -217,9 +232,12 @@ export class WalletService {
   // ── Reception scan ────────────────────────────────────────
 
   private async memberFromCode(gymId: string, code: string) {
-    const token = parseWalletCode(code);
+    const ref = parseScanRef(code);
     const member = await this.prisma.member.findFirst({
-      where: { walletToken: token, gymId },
+      where:
+        'memberId' in ref
+          ? { id: ref.memberId, gymId }
+          : { walletToken: ref.token, gymId },
       select: {
         id: true,
         firstName: true,
@@ -268,7 +286,8 @@ export class WalletService {
 
     // Defensive: an ACTIVE visit plan with no days left counts as inactive
     const membership = pickMembership(memberships);
-    const exhausted = !membership && memberships.length > 0 ? memberships[0] : null;
+    const exhausted =
+      !membership && memberships.length > 0 ? memberships[0] : null;
 
     return {
       member,

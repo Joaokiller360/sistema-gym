@@ -16,6 +16,7 @@ export class MembersService {
         { firstName: { contains: searchStr, mode: 'insensitive' } },
         { lastName: { contains: searchStr, mode: 'insensitive' } },
         { email: { contains: searchStr, mode: 'insensitive' } },
+        { phone: { contains: searchStr } },
       ];
     }
     if (status === 'active') where.isActive = true;
@@ -25,12 +26,13 @@ export class MembersService {
     return this.prisma.member.findMany({
       where,
       include: {
+        // Latest memberships of any status, so the list can tell active / expiring / expired / used-up apart
         memberships: {
-          where: { status: 'ACTIVE' },
-          include: { plan: true },
-          take: 1,
-          orderBy: { createdAt: 'desc' },
+          include: { plan: { select: { id: true, name: true, durationDays: true, visitLimit: true } } },
+          take: 3,
+          orderBy: { endDate: 'desc' },
         },
+        attendances: { select: { checkIn: true }, take: 1, orderBy: { checkIn: 'desc' } },
       },
       orderBy: { createdAt: 'desc' },
     });
