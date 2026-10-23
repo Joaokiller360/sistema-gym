@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Resend } from 'resend';
@@ -67,31 +68,119 @@ export class MembershipsService {
       // --- END TEMP DEBUG LOGS ---
     }
 
-    return this.prisma.membership.findMany({
+    const memberships = await this.prisma.membership.findMany({
       where,
       include: { member: true, plan: true, branch: true },
       orderBy: { createdAt: 'desc' },
     });
+    return this.withGroups(memberships);
+  }
+
+  /** Attach the other people sharing each membership's plan purchase. */
+  private async withGroups<T extends { id: string; groupId: string | null }>(memberships: T[]) {
+    const groupIds = [...new Set(memberships.map(m => m.groupId).filter((g): g is string => !!g))];
+    if (groupIds.length === 0) return memberships.map(m => ({ ...m, group: [] }));
+    const mates = await this.prisma.membership.findMany({
+      where: { groupId: { in: groupIds } },
+      select: {
+        id: true, groupId: true, status: true, memberId: true,
+        member: { select: { firstName: true, lastName: true } },
+      },
+    });
+    return memberships.map(m => ({
+      ...m,
+      group: m.groupId ? mates.filter(x => x.groupId === m.groupId && x.id !== m.id) : [],
+    }));
+  }
+
+  /** Companions must belong to the gym, be distinct and not hold another active plan. */
+  private async assertCompanions(gymId: string, holderId: string, ids: string[]) {
+    if (new Set(ids).size !== ids.length || ids.includes(holderId)) {
+      throw new BadRequestException('Los acompañantes deben ser personas distintas al titular');
+    }
+    const members = await this.prisma.member.findMany({
+      where: { id: { in: ids }, gymId },
+      select: { id: true, firstName: true, lastName: true },
+    });
+    if (members.length !== ids.length) throw new NotFoundException('Acompañante no encontrado');
+    const busy = await this.prisma.membership.findFirst({
+      where: { gymId, memberId: { in: ids }, status: 'ACTIVE' },
+      include: { member: { select: { firstName: true, lastName: true } } },
+    });
+    if (busy) {
+      throw new BadRequestException(`${busy.member.firstName} ${busy.member.lastName} ya tiene un plan activo`);
+    }
   }
 
   async create(gymId: string, data: any) {
     const plan = await this.prisma.plan.findFirst({
       where: { id: data.planId, gymId },
-      select: { visitLimit: true },
+      select: { visitLimit: true, maxMembers: true },
     });
     if (!plan) throw new NotFoundException('Plan no encontrado');
 
-    const { periods = 1, ...rest } = data;
-    const membership = await this.prisma.membership.create({
+    const { periods = 1, companionIds = [], ...rest } = data;
+    if (companionIds.length > plan.maxMembers - 1) {
+      throw new BadRequestException(
+        plan.maxMembers === 1
+          ? 'Este plan es individual'
+          : `Este plan cubre hasta ${plan.maxMembers} personas`,
+      );
+    }
+    if (companionIds.length) await this.assertCompanions(gymId, data.memberId, companionIds);
+
+    const shared = {
+      ...rest,
+      gymId,
+      groupId: plan.maxMembers > 1 ? randomUUID() : null,
+      visitsTotal: plan.visitLimit != null ? plan.visitLimit * periods : null,
+      visitsUsed: 0,
+    };
+    const [membership, ...companions] = await this.prisma.$transaction([
+      this.prisma.membership.create({ data: shared, include: { member: true, plan: true } }),
+      ...companionIds.map((memberId: string) =>
+        this.prisma.membership.create({
+          data: { ...shared, memberId, notes: shared.notes ?? 'Acompañante en plan compartido' },
+        }),
+      ),
+    ]);
+    companions.forEach(c => this.syncPass(c));
+    return this.syncPass(membership);
+  }
+
+  /** Add one more person to a shared plan while it has free spots. */
+  async addCompanion(membershipId: string, gymId: string, memberId: string) {
+    const base = await this.prisma.membership.findFirst({
+      where: { id: membershipId, gymId, status: 'ACTIVE' },
+      include: { plan: { select: { maxMembers: true } } },
+    });
+    if (!base) throw new NotFoundException('Membresía activa no encontrada');
+    if (!base.groupId || base.plan.maxMembers < 2) throw new BadRequestException('Este plan es individual');
+
+    const taken = await this.prisma.membership.count({
+      where: { groupId: base.groupId, status: { in: ['ACTIVE', 'FROZEN', 'SUSPENDED'] } },
+    });
+    if (taken >= base.plan.maxMembers) {
+      throw new BadRequestException(`El plan ya cubre a ${base.plan.maxMembers} personas`);
+    }
+    await this.assertCompanions(gymId, base.memberId, [memberId]);
+
+    const companion = await this.prisma.membership.create({
       data: {
-        ...rest,
         gymId,
-        visitsTotal: plan.visitLimit != null ? plan.visitLimit * periods : null,
+        memberId,
+        planId: base.planId,
+        branchId: base.branchId,
+        groupId: base.groupId,
+        startDate: base.startDate,
+        endDate: base.endDate,
+        visitsTotal: base.visitsTotal,
         visitsUsed: 0,
+        notes: 'Acompañante en plan compartido',
       },
       include: { member: true, plan: true },
     });
-    return this.syncPass(membership);
+    return this.syncPass(companion);
   }
 
   async changePlan(membershipId: string, gymId: string | undefined, data: {
@@ -115,8 +204,9 @@ export class MembershipsService {
     if (!newPlan) throw new NotFoundException('Plan destino no encontrado');
 
     const now = new Date();
+    // A shared plan was paid once for everyone: credit only this person's share
     const proration = calculateProration({
-      oldPlanPrice: Number(current.plan.price),
+      oldPlanPrice: Math.round(Number(current.plan.price) / (current.groupId ? Math.max(1, current.plan.maxMembers) : 1)),
       oldPlanDurationDays: current.plan.durationDays,
       periodStart: current.startDate,
       newPlanPrice: Number(newPlan.price),

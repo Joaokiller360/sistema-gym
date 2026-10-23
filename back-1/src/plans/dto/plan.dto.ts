@@ -36,6 +36,13 @@ export class CreatePlanDto {
   @IsOptional()
   visitLimit?: number | null;
 
+  // People covered by one purchase (1 = individual, 2+ = shared plan)
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  @IsOptional()
+  maxMembers?: number;
+
   @IsArray()
   @IsOptional()
   benefits?: unknown[];
@@ -87,6 +94,13 @@ export class UpdatePlanDto {
   @Max(365)
   @IsOptional()
   visitLimit?: number | null;
+
+  // People covered by one purchase (1 = individual, 2+ = shared plan)
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  @IsOptional()
+  maxMembers?: number;
 
   @IsArray()
   @IsOptional()

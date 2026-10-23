@@ -190,6 +190,8 @@ model Plan {
   daysPerWeek Int?
   // Visit-limited plan: number of gym days included (null = unlimited within durationDays)
   visitLimit  Int?
+  // People covered by one purchase (1 = individual, 2+ = shared "entre amigos" plan)
+  maxMembers  Int      @default(1)
   benefits       Json     @default("[]")
   accessSchedule Json?
   isActive      Boolean  @default(true)
@@ -255,6 +257,8 @@ model Membership {
   // Snapshot of plan.visitLimit at creation; one visit is consumed per gym day attended
   visitsTotal Int?
   visitsUsed  Int            @default(0)
+  // Memberships bought together under a shared plan share this id (one row per person)
+  groupId   String?
   notes     String?
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
@@ -274,6 +278,7 @@ model Membership {
   @@index([memberId])
   @@index([planId])
   @@index([status])
+  @@index([groupId])
   @@map("memberships")
 }
 
