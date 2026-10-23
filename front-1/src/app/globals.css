@@ -46,6 +46,35 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Admin panel tokens (scoped values live under .admin-shell) */
+  --font-admin: var(--font-archivo), var(--font-sans), system-ui, sans-serif;
+  --font-admin-mono: var(--font-jetbrains), ui-monospace, monospace;
+  --color-adm-ground: var(--adm-ground);
+  --color-adm-surface: var(--adm-surface);
+  --color-adm-subtle: var(--adm-subtle);
+  --color-adm-chip: var(--adm-chip);
+  --color-adm-ink: var(--adm-ink);
+  --color-adm-muted: var(--adm-muted);
+  --color-adm-line: var(--adm-line);
+  --color-adm-line-soft: var(--adm-line-soft);
+  --color-adm-brand: #fffb00;
+  --color-adm-night: #0b0b0c;
+  --color-adm-ok-bg: var(--adm-ok-bg);
+  --color-adm-ok-fg: var(--adm-ok-fg);
+  --color-adm-ok-line: var(--adm-ok-line);
+  --color-adm-warn-bg: var(--adm-warn-bg);
+  --color-adm-warn-fg: var(--adm-warn-fg);
+  --color-adm-warn-line: var(--adm-warn-line);
+  --color-adm-bad-bg: var(--adm-bad-bg);
+  --color-adm-bad-fg: var(--adm-bad-fg);
+  --color-adm-bad-line: var(--adm-bad-line);
+  --color-adm-info-bg: var(--adm-info-bg);
+  --color-adm-info-fg: var(--adm-info-fg);
+  --color-adm-info-line: var(--adm-info-line);
+  --color-adm-high-bg: var(--adm-high-bg);
+  --color-adm-high-fg: var(--adm-high-fg);
+  --color-adm-high-line: var(--adm-high-line);
 }
 
 /* Brand palette
@@ -164,6 +193,139 @@
 .dark .text-zinc-800 { color: oklch(0.82 0 0); }
 .dark .text-zinc-900 { color: oklch(0.88 0 0); }
 .dark .text-zinc-950 { color: oklch(0.92 0 0); }
+.dark .bg-zinc-50\/50 { background-color: oklch(1 0 0 / 0.03); }
+.dark .bg-zinc-200 { background-color: var(--border); }
+.dark .bg-zinc-300 { background-color: oklch(0.35 0 0); }
+.dark .border-zinc-300 { border-color: oklch(0.35 0 0); }
+.dark .divide-zinc-100 > * + * { border-color: var(--border); }
+.dark .placeholder\:text-zinc-400::placeholder { color: oklch(0.5 0 0); }
+.dark .focus\:ring-black:focus { --tw-ring-color: var(--foreground); }
+
+/* Hover states: light hovers flash white / dark hover text disappears */
+.dark .hover\:bg-white:hover,
+.dark .hover\:bg-zinc-50:hover { background-color: oklch(1 0 0 / 0.05); }
+.dark .hover\:bg-zinc-100:hover { background-color: var(--muted); }
+.dark .hover\:bg-zinc-200:hover { background-color: oklch(0.3 0 0); }
+.dark .hover\:border-zinc-300:hover,
+.dark .hover\:border-zinc-400:hover { border-color: oklch(0.4 0 0); }
+.dark .hover\:border-black:hover { border-color: var(--foreground); }
+.dark .hover\:text-black:hover,
+.dark .hover\:text-zinc-900:hover { color: var(--foreground); }
+.dark .hover\:text-zinc-800:hover,
+.dark .hover\:text-zinc-700:hover,
+.dark .hover\:text-zinc-600:hover { color: oklch(0.85 0 0); }
+
+/* Black primary buttons would vanish on dark cards: invert them */
+.dark .bg-black.hover\:bg-zinc-800 { background-color: var(--foreground); color: var(--background); }
+.dark .bg-black.hover\:bg-zinc-800:hover { background-color: oklch(0.82 0 0); }
+
+/* Status tints (alerts, badges): pastel bg → translucent, dark text → light */
+.dark .bg-red-50, .dark .hover\:bg-red-50:hover { background-color: oklch(63.7% 0.237 25.331 / 0.12); }
+.dark .bg-red-100, .dark .hover\:bg-red-100:hover { background-color: oklch(63.7% 0.237 25.331 / 0.18); }
+.dark .bg-red-200 { background-color: oklch(63.7% 0.237 25.331 / 0.25); }
+.dark .border-red-100, .dark .border-red-200 { border-color: oklch(63.7% 0.237 25.331 / 0.3); }
+.dark .text-red-600, .dark .text-red-700, .dark .text-red-800, .dark .text-red-900 { color: oklch(70.4% 0.191 22.216); }
+.dark .bg-amber-50, .dark .hover\:bg-amber-50:hover { background-color: oklch(76.9% 0.188 70.08 / 0.12); }
+.dark .bg-amber-100, .dark .hover\:bg-amber-100:hover { background-color: oklch(76.9% 0.188 70.08 / 0.18); }
+.dark .bg-amber-200 { background-color: oklch(76.9% 0.188 70.08 / 0.25); }
+.dark .border-amber-100, .dark .border-amber-200 { border-color: oklch(76.9% 0.188 70.08 / 0.3); }
+.dark .text-amber-600, .dark .text-amber-700, .dark .text-amber-800, .dark .text-amber-900 { color: oklch(82.8% 0.189 84.429); }
+.dark .bg-emerald-50, .dark .hover\:bg-emerald-50:hover { background-color: oklch(69.6% 0.17 162.48 / 0.12); }
+.dark .bg-emerald-100, .dark .hover\:bg-emerald-100:hover { background-color: oklch(69.6% 0.17 162.48 / 0.18); }
+.dark .bg-emerald-200 { background-color: oklch(69.6% 0.17 162.48 / 0.25); }
+.dark .border-emerald-100, .dark .border-emerald-200 { border-color: oklch(69.6% 0.17 162.48 / 0.3); }
+.dark .text-emerald-600, .dark .text-emerald-700, .dark .text-emerald-800, .dark .text-emerald-900 { color: oklch(76.5% 0.177 163.223); }
+.dark .bg-blue-50, .dark .hover\:bg-blue-50:hover { background-color: oklch(62.3% 0.214 259.815 / 0.12); }
+.dark .bg-blue-100, .dark .hover\:bg-blue-100:hover { background-color: oklch(62.3% 0.214 259.815 / 0.18); }
+.dark .bg-blue-200 { background-color: oklch(62.3% 0.214 259.815 / 0.25); }
+.dark .border-blue-100, .dark .border-blue-200 { border-color: oklch(62.3% 0.214 259.815 / 0.3); }
+.dark .text-blue-600, .dark .text-blue-700, .dark .text-blue-800, .dark .text-blue-900 { color: oklch(70.7% 0.165 254.624); }
+.dark .bg-violet-50, .dark .hover\:bg-violet-50:hover { background-color: oklch(60.6% 0.25 292.717 / 0.12); }
+.dark .bg-violet-100, .dark .hover\:bg-violet-100:hover { background-color: oklch(60.6% 0.25 292.717 / 0.18); }
+.dark .bg-violet-200 { background-color: oklch(60.6% 0.25 292.717 / 0.25); }
+.dark .border-violet-100, .dark .border-violet-200 { border-color: oklch(60.6% 0.25 292.717 / 0.3); }
+.dark .text-violet-600, .dark .text-violet-700, .dark .text-violet-800, .dark .text-violet-900 { color: oklch(70.2% 0.183 293.541); }
+.dark .bg-sky-50, .dark .hover\:bg-sky-50:hover { background-color: oklch(68.5% 0.169 237.323 / 0.12); }
+.dark .bg-sky-100, .dark .hover\:bg-sky-100:hover { background-color: oklch(68.5% 0.169 237.323 / 0.18); }
+.dark .bg-sky-200 { background-color: oklch(68.5% 0.169 237.323 / 0.25); }
+.dark .border-sky-100, .dark .border-sky-200 { border-color: oklch(68.5% 0.169 237.323 / 0.3); }
+.dark .text-sky-600, .dark .text-sky-700, .dark .text-sky-800, .dark .text-sky-900 { color: oklch(74.6% 0.16 232.661); }
+.dark .bg-rose-50, .dark .hover\:bg-rose-50:hover { background-color: oklch(64.5% 0.246 16.439 / 0.12); }
+.dark .bg-rose-100, .dark .hover\:bg-rose-100:hover { background-color: oklch(64.5% 0.246 16.439 / 0.18); }
+.dark .bg-rose-200 { background-color: oklch(64.5% 0.246 16.439 / 0.25); }
+.dark .border-rose-100, .dark .border-rose-200 { border-color: oklch(64.5% 0.246 16.439 / 0.3); }
+.dark .text-rose-600, .dark .text-rose-700, .dark .text-rose-800, .dark .text-rose-900 { color: oklch(71.2% 0.194 13.428); }
+.dark .bg-green-50, .dark .hover\:bg-green-50:hover { background-color: oklch(72.3% 0.219 149.579 / 0.12); }
+.dark .bg-green-100, .dark .hover\:bg-green-100:hover { background-color: oklch(72.3% 0.219 149.579 / 0.18); }
+.dark .bg-green-200 { background-color: oklch(72.3% 0.219 149.579 / 0.25); }
+.dark .border-green-100, .dark .border-green-200 { border-color: oklch(72.3% 0.219 149.579 / 0.3); }
+.dark .text-green-600, .dark .text-green-700, .dark .text-green-800, .dark .text-green-900 { color: oklch(79.2% 0.209 151.711); }
+.dark .bg-purple-50, .dark .hover\:bg-purple-50:hover { background-color: oklch(62.7% 0.265 303.9 / 0.12); }
+.dark .bg-purple-100, .dark .hover\:bg-purple-100:hover { background-color: oklch(62.7% 0.265 303.9 / 0.18); }
+.dark .bg-purple-200 { background-color: oklch(62.7% 0.265 303.9 / 0.25); }
+.dark .border-purple-100, .dark .border-purple-200 { border-color: oklch(62.7% 0.265 303.9 / 0.3); }
+.dark .text-purple-600, .dark .text-purple-700, .dark .text-purple-800, .dark .text-purple-900 { color: oklch(71.4% 0.203 305.504); }
+.dark .bg-orange-50, .dark .hover\:bg-orange-50:hover { background-color: oklch(70.5% 0.213 47.604 / 0.12); }
+.dark .bg-orange-100, .dark .hover\:bg-orange-100:hover { background-color: oklch(70.5% 0.213 47.604 / 0.18); }
+.dark .bg-orange-200 { background-color: oklch(70.5% 0.213 47.604 / 0.25); }
+.dark .border-orange-100, .dark .border-orange-200 { border-color: oklch(70.5% 0.213 47.604 / 0.3); }
+.dark .text-orange-600, .dark .text-orange-700, .dark .text-orange-800, .dark .text-orange-900 { color: oklch(75% 0.183 55.934); }
+.dark .bg-yellow-50, .dark .hover\:bg-yellow-50:hover { background-color: oklch(79.5% 0.184 86.047 / 0.12); }
+.dark .bg-yellow-100, .dark .hover\:bg-yellow-100:hover { background-color: oklch(79.5% 0.184 86.047 / 0.18); }
+.dark .bg-yellow-200 { background-color: oklch(79.5% 0.184 86.047 / 0.25); }
+.dark .border-yellow-100, .dark .border-yellow-200 { border-color: oklch(79.5% 0.184 86.047 / 0.3); }
+.dark .text-yellow-600, .dark .text-yellow-700, .dark .text-yellow-800, .dark .text-yellow-900 { color: oklch(85.2% 0.199 91.936); }
+
+/* Admin panel palette — light (on :root so portaled dialogs get it too) */
+:root {
+  --adm-ground: #f3f3ef;
+  --adm-surface: #ffffff;
+  --adm-subtle: #fafaf7;
+  --adm-chip: #f1f1ec;
+  --adm-ink: #111111;
+  --adm-muted: #5e5e58;
+  --adm-line: #e3e3dc;
+  --adm-line-soft: #edede7;
+  --adm-ok-bg: #e3f4f1;   --adm-ok-fg: #0a6158;   --adm-ok-line: #a9dcd4;
+  --adm-warn-bg: #fff4db; --adm-warn-fg: #7a4e00; --adm-warn-line: #f0d28f;
+  --adm-bad-bg: #fdecea;  --adm-bad-fg: #b42318;  --adm-bad-line: #f6c2bc;
+  --adm-info-bg: #e8f0fe; --adm-info-fg: #1d4ed8; --adm-info-line: #bfd3fb;
+  --adm-high-bg: #fff0e5; --adm-high-fg: #a3410b; --adm-high-line: #f8cdae;
+}
+
+/* Admin panel palette — dark */
+.dark {
+  --adm-ground: #0e0e0f;
+  --adm-surface: #17171a;
+  --adm-subtle: #1c1c1f;
+  --adm-chip: #232326;
+  --adm-ink: #f2f2ee;
+  --adm-muted: #a3a39d;
+  --adm-line: #2a2a2e;
+  --adm-line-soft: #222225;
+  --adm-ok-bg: #0f2a27;   --adm-ok-fg: #5fd4c4;   --adm-ok-line: #1e4a45;
+  --adm-warn-bg: #2b2210; --adm-warn-fg: #f2c46b; --adm-warn-line: #4a3a18;
+  --adm-bad-bg: #2e1513;  --adm-bad-fg: #ff8a80;  --adm-bad-line: #5a2622;
+  --adm-info-bg: #14203a; --adm-info-fg: #8ab4ff; --adm-info-line: #26385e;
+  --adm-high-bg: #2e1a0e; --adm-high-fg: #ffa66b; --adm-high-line: #5a3218;
+}
+
+.admin-shell,
+.admin-surface {
+  font-family: var(--font-archivo), var(--font-sans), system-ui, sans-serif;
+  color: var(--adm-ink);
+}
+.admin-shell {
+  background-color: var(--adm-ground);
+}
+
+.admin-shell :focus-visible {
+  outline: 2px solid var(--adm-ink);
+  outline-offset: 2px;
+}
+.admin-shell .adm-night :focus-visible {
+  outline-color: #fffb00;
+}
 
 /* Landing hero gradient — end color flips with theme */
 .landing-h1-gradient {
@@ -182,5 +344,16 @@
   }
   html {
     @apply font-sans;
+  }
+  /* Tailwind v4 dropped cursor:pointer on buttons; restore it globally */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  select:not(:disabled),
+  summary,
+  label[for],
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  input[type="submit"]:not(:disabled) {
+    cursor: pointer;
   }
 }

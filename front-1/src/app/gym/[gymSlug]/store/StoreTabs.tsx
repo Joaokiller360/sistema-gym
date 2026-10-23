@@ -699,8 +699,8 @@ function ProductForm({ gymSlug, product, categories, onSave, onCancel }: {
         <FormField label="Descripción" name="description" defaultValue={product?.description ?? ''} placeholder="Descripción opcional" fieldType="text" />
         <FormField label="URL de imagen" name="imageUrl" defaultValue={product?.imageUrl ?? ''} placeholder="https://..." fieldType="url" />
         <div className="grid grid-cols-3 gap-3">
-          <FormField label="Precio *" name="price" type="number" defaultValue={String(product?.price ?? '')} placeholder="500" min="0.01" step="0.01" />
-          <FormField label="Costo" name="cost" type="number" defaultValue={String(product?.cost ?? '')} placeholder="300" min="0" step="0.01" />
+          <FormField label="Precio *" name="price" type="number" defaultValue={String(product?.price ?? '')} placeholder="500" min="0.01" step="0.01" fieldType="price" />
+          <FormField label="Costo" name="cost" type="number" defaultValue={String(product?.cost ?? '')} placeholder="300" min="0" step="0.01" fieldType="price" />
           <FormField label="Stock *" name="stock" type="number" defaultValue={String(product?.stock ?? '0')} placeholder="10" min="0" step="1" />
         </div>
         <div className="flex items-center gap-2">

@@ -1,40 +1,56 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Building2, ExternalLink, MapPin, Globe, Clock, CreditCard, ShoppingBag, Calendar, Users, Star, ArrowRightLeft, CheckCircle2, AlertTriangle, Ban, Loader2, Plus, Trash2 } from 'lucide-react'
+import { Building2, MapPin, Globe, Clock, CreditCard, ShoppingBag, Calendar, Star, ArrowRightLeft, Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
-import { Switch } from '@/components/ui/switch'
-import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { cn } from '@/lib/utils'
 import { Gym } from '@/types'
+import { EmptyState, GymMark, Pill, Switch, btn, chip, field, td, th, type Tone } from '@/components/admin/ui'
 import { toggleGymActiveAction, fetchGymModalDataAction, changeGymPlanAction, bulkDeleteGymsAction, type GymModalData, type ProratedResult } from './actions'
-import { CreateGymForm } from './new/CreateGymForm'
 import type { SubscriptionPlan } from './new/page'
 
-function initials(name: string) {
-  return name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase()
-}
+const PAGE_SIZE = 25
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-function SubscriptionBadge({ status }: { status: 'ACTIVE' | 'GRACE' | 'SUSPENDED' }) {
-  if (status === 'ACTIVE') return (
-    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-[#1fad9d]/15 text-[#0e7a70] border border-[#1fad9d]/30">
-      <CheckCircle2 className="h-2.5 w-2.5" /> Activa
-    </span>
-  )
-  if (status === 'GRACE') return (
-    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-      <AlertTriangle className="h-2.5 w-2.5" /> Prórroga
-    </span>
-  )
+function daysUntil(iso: string) {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  return Math.ceil((new Date(iso).getTime() - today) / 86_400_000)
+}
+
+const SUB: Record<string, { label: string; tone: Tone }> = {
+  ACTIVE: { label: 'Activa', tone: 'ok' },
+  TRIAL: { label: 'Prueba', tone: 'info' },
+  GRACE: { label: 'Prórroga', tone: 'warn' },
+  SUSPENDED: { label: 'Suspendida', tone: 'bad' },
+}
+
+type Filter = 'all' | 'ACTIVE' | 'GRACE' | 'SUSPENDED' | 'off'
+
+const FILTERS: { key: Filter; label: string; test: (g: Gym) => boolean }[] = [
+  { key: 'all', label: 'Todos', test: () => true },
+  { key: 'ACTIVE', label: 'Activas', test: g => g.subscriptionStatus === 'ACTIVE' || g.subscriptionStatus === 'TRIAL' },
+  { key: 'GRACE', label: 'En prórroga', test: g => g.subscriptionStatus === 'GRACE' },
+  { key: 'SUSPENDED', label: 'Suspendidas', test: g => g.subscriptionStatus === 'SUSPENDED' },
+  { key: 'off', label: 'Inactivos', test: g => !g.isActive },
+]
+
+function ExpiryCell({ gym }: { gym: Gym }) {
+  if (!gym.subscriptionExpiresAt) return <span className="text-adm-muted">—</span>
+  const days = daysUntil(gym.subscriptionExpiresAt)
+  const late = gym.subscriptionStatus === 'GRACE' || gym.subscriptionStatus === 'SUSPENDED' || days < 0
   return (
-    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-red-50 text-red-600 border border-red-200">
-      <Ban className="h-2.5 w-2.5" /> Suspendida
+    <span
+      className={cn('font-admin-mono text-[13px]', late ? 'text-adm-bad-fg' : days <= 7 ? 'text-adm-warn-fg font-bold' : '')}
+      title={days >= 0 ? `Faltan ${days} días` : `Venció hace ${-days} días`}
+    >
+      {formatDate(gym.subscriptionExpiresAt)}
     </span>
   )
 }
@@ -42,38 +58,59 @@ function SubscriptionBadge({ status }: { status: 'ACTIVE' | 'GRACE' | 'SUSPENDED
 function ProratedBreakdown({ p, currency, onDone }: { p: ProratedResult; currency: string; onDone: () => void }) {
   const fmt = (n: number) => `${currency} ${n.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
   return (
-    <div className="rounded-xl bg-[#1fad9d]/8 border border-[#1fad9d]/20 p-4 space-y-2">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-[#0e7a70]">Detalle del cambio</p>
+    <div className="space-y-2 rounded-xl border border-adm-ok-line bg-adm-ok-bg p-4">
+      <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-adm-ok-fg">Detalle del cambio</p>
       <div className="space-y-1">
         {([
-          ['Crédito a favor', fmt(p.creditAmount/100)],
-          ['Precio nuevo plan', fmt(p.newPlanPrice/100)],
-          ['Crédito aplicado', `- ${fmt(p.creditApplied/100)}`],
+          ['Crédito a favor', fmt(p.creditAmount / 100)],
+          ['Precio nuevo plan', fmt(p.newPlanPrice / 100)],
+          ['Crédito aplicado', `- ${fmt(p.creditApplied / 100)}`],
         ] as const).map(([label, value]) => (
           <div key={label} className="flex justify-between text-xs">
-            <span className="text-zinc-500">{label}</span>
+            <span className="text-adm-muted">{label}</span>
             <span className="font-semibold">{value}</span>
           </div>
         ))}
-        <div className="border-t border-[#1fad9d]/20 pt-1.5 flex justify-between text-sm font-black">
+        <div className="flex justify-between border-t border-adm-ok-line pt-1.5 text-sm font-black">
           <span>Total cobrado</span>
-          <span className="text-[#0e7a70]">{fmt(p.amountDue/100)}</span>
+          <span className="font-admin-mono text-adm-ok-fg">{fmt(p.amountDue / 100)}</span>
         </div>
       </div>
-      <button type="button" onClick={onDone} className="text-xs font-semibold text-[#1fad9d] hover:text-[#0e7a70] transition-colors">
-        ✓ Listo
-      </button>
+      <button type="button" onClick={onDone} className={btn.link}>Listo</button>
     </div>
   )
 }
 
-export function GymTable({ gyms, plans }: { gyms: Gym[]; plans: SubscriptionPlan[] }) {
+export function GymTable({ gyms, plans, initialQuery = '' }: { gyms: Gym[]; plans: SubscriptionPlan[]; initialQuery?: string }) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [selected, setSelected] = useState<Gym | null>(null)
-  const [newGymOpen, setNewGymOpen] = useState(false)
   const [modalData, setModalData] = useState<GymModalData | null>(null)
   const [loadingModal, setLoadingModal] = useState(false)
+
+  const [query, setQuery] = useState(initialQuery)
+  const [filter, setFilter] = useState<Filter>('all')
+  const [page, setPage] = useState(1)
+
+  // Optimistic active toggles
+  const [activeOverrides, setActiveOverrides] = useState<Record<string, boolean>>({})
+  const rows = useMemo(
+    () => gyms.map(g => (g.id in activeOverrides ? { ...g, isActive: activeOverrides[g.id] } : g)),
+    [gyms, activeOverrides],
+  )
+
+  const q = query.trim().toLowerCase()
+  const searched = rows.filter(g =>
+    !q ||
+    g.name.toLowerCase().includes(q) ||
+    g.slug.toLowerCase().includes(q) ||
+    g.owner?.email.toLowerCase().includes(q) ||
+    g.owner?.name.toLowerCase().includes(q),
+  )
+  const visible = searched.filter(FILTERS.find(f => f.key === filter)!.test)
+  const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const pageRows = visible.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
 
   // Bulk delete state
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set())
@@ -89,8 +126,15 @@ export function GymTable({ gyms, plans }: { gyms: Gym[]; plans: SubscriptionPlan
     })
   }
 
+  const allPageChecked = pageRows.length > 0 && pageRows.every(g => checkedIds.has(g.id))
+  const somePageChecked = pageRows.some(g => checkedIds.has(g.id))
+
   function toggleAll() {
-    setCheckedIds(prev => prev.size === gyms.length ? new Set() : new Set(gyms.map(g => g.id)))
+    setCheckedIds(prev => {
+      const next = new Set(prev)
+      pageRows.forEach(g => (allPageChecked ? next.delete(g.id) : next.add(g.id)))
+      return next
+    })
   }
 
   async function handleBulkDelete() {
@@ -116,6 +160,7 @@ export function GymTable({ gyms, plans }: { gyms: Gym[]; plans: SubscriptionPlan
   const [planError, setPlanError] = useState<string | null>(null)
 
   function handleToggle(gymId: string, active: boolean) {
+    setActiveOverrides(prev => ({ ...prev, [gymId]: active }))
     startTransition(async () => {
       await toggleGymActiveAction(gymId, active)
     })
@@ -158,7 +203,6 @@ export function GymTable({ gyms, plans }: { gyms: Gym[]; plans: SubscriptionPlan
         setPlanError(res.error)
       } else {
         setProration(res.proration ?? null)
-        // refresh modal data
         const data = await fetchGymModalDataAction(selected.id)
         setModalData(data)
       }
@@ -169,436 +213,337 @@ export function GymTable({ gyms, plans }: { gyms: Gym[]; plans: SubscriptionPlan
     p => p.key.toUpperCase() !== modalData.subscription?.subscriptionPlan?.toUpperCase()
   ) ?? []
 
-  const newGymModal = (
-    <Dialog open={newGymOpen} onOpenChange={v => { if (!v) setNewGymOpen(false) }}>
-      <DialogContent className="sm:max-w-2xl max-h-[92vh] overflow-y-auto" showCloseButton>
-        <div className="space-y-1 mb-2">
-          <h2 className="text-lg font-black tracking-tight">Nuevo gimnasio</h2>
-          <p className="text-xs text-zinc-400">Registrá un nuevo gimnasio en la plataforma</p>
-        </div>
-        <CreateGymForm
-          plans={plans}
-          onSuccess={() => {
-            setNewGymOpen(false)
-            router.refresh()
-          }}
-        />
-      </DialogContent>
-    </Dialog>
-  )
-
-  if (gyms.length === 0) {
-    return (
-      <>
-        <div className="flex items-center justify-end">
-          <button
-            type="button"
-            onClick={() => setNewGymOpen(true)}
-            className="flex items-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-bold text-white hover:bg-zinc-800 transition-all"
-          >
-            <Plus className="h-4 w-4" />
-            Nuevo gimnasio
-          </button>
-        </div>
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed py-20 text-sm text-muted-foreground">
-          <Building2 className="h-12 w-12 mb-3 opacity-20" />
-          No se encontraron gimnasios.
-        </div>
-        {newGymModal}
-      </>
-    )
-  }
-
-  const inputClass = 'w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black transition-all disabled:opacity-50'
+  const planLabel = (key: string) => plans.find(p => p.key.toUpperCase() === key?.toUpperCase())?.label ?? key
 
   return (
     <>
-      {/* New gym button */}
-      <div className="flex items-center justify-end">
-        <button
-          type="button"
-          onClick={() => setNewGymOpen(true)}
-          className="flex items-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-bold text-white hover:bg-zinc-800 transition-all"
-        >
-          <Plus className="h-4 w-4" />
-          Nuevo gimnasio
-        </button>
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div role="group" aria-label="Filtrar por estado" className="flex flex-wrap gap-2">
+          {FILTERS.map(f => (
+            <button
+              key={f.key}
+              type="button"
+              aria-pressed={filter === f.key}
+              onClick={() => { setFilter(f.key); setPage(1) }}
+              className={chip(filter === f.key)}
+            >
+              {f.label}
+              <span className="font-admin-mono text-xs opacity-75">{searched.filter(f.test).length}</span>
+            </button>
+          ))}
+        </div>
+        <label className="relative flex min-w-[220px] flex-[0_1_320px] items-center">
+          <span className="sr-only">Buscar gimnasio</span>
+          <Search className="pointer-events-none absolute left-3 size-4 text-adm-muted" aria-hidden="true" />
+          <input
+            type="search"
+            value={query}
+            onChange={e => { setQuery(e.target.value); setPage(1) }}
+            placeholder="Nombre, slug o dueño"
+            className={cn(field.input, 'min-h-10 pl-9')}
+          />
+        </label>
       </div>
-
-      {newGymModal}
 
       {/* Bulk action bar */}
       {checkedIds.size > 0 && (
-        <div className="flex items-center justify-between rounded-xl bg-zinc-900 px-4 py-2.5">
-          <span className="text-xs font-bold text-white">
+        <div className="adm-night flex flex-wrap items-center gap-3 rounded-xl bg-adm-night py-2.5 pl-4.5 pr-3 text-white">
+          <span className="flex-1 text-sm font-semibold">
             {checkedIds.size} gimnasio{checkedIds.size !== 1 ? 's' : ''} seleccionado{checkedIds.size !== 1 ? 's' : ''}
           </span>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setCheckedIds(new Set())}
-              className="text-xs text-zinc-400 hover:text-white transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={() => setBulkConfirmOpen(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-red-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-600 transition-colors"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              Eliminar {checkedIds.size}
-            </button>
-          </div>
+          <button type="button" onClick={() => setBulkConfirmOpen(true)} className={btn.dangerSolid}>
+            Eliminar
+          </button>
+          <button type="button" onClick={() => setCheckedIds(new Set())} className="min-h-9 px-2.5 text-[13px] text-[#a3a39d] hover:text-white">
+            Cancelar
+          </button>
         </div>
       )}
 
-      {/* Mobile cards */}
-      <div className="space-y-2 sm:hidden">
-        {gyms.map(gym => (
-          <div
-            key={gym.id}
-            onClick={() => openModal(gym)}
-            className="bg-white rounded-2xl border border-zinc-200 px-4 py-3.5 cursor-pointer hover:border-[#1fad9d]/40 hover:shadow-sm transition-all"
-          >
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                checked={checkedIds.has(gym.id)}
-                onChange={() => toggleCheck(gym.id)}
-                onClick={e => e.stopPropagation()}
-                className="h-4 w-4 rounded cursor-pointer shrink-0 accent-[#1fad9d]"
-              />
-              <div className="h-10 w-10 rounded-xl bg-[#fffb00] flex items-center justify-center shrink-0 overflow-hidden">
-                {gym.logoUrl
-                  ? <img src={gym.logoUrl} alt={gym.name} className="h-full w-full object-cover" />
-                  : <span className="text-sm font-black text-black">{initials(gym.name)}</span>
-                }
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-sm truncate">{gym.name}</p>
-                <p className="text-xs text-muted-foreground">{gym.slug}</p>
-              </div>
-              <div className="flex items-center gap-3 shrink-0" onClick={e => e.stopPropagation()}>
-                <Switch
-                  checked={gym.isActive}
-                  onCheckedChange={v => handleToggle(gym.id, v)}
-                  aria-label={gym.isActive ? 'Deshabilitar' : 'Habilitar'}
-                />
-                <Link
-                  href={`/admin/gyms/${gym.id}`}
-                  className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-50 transition-colors"
-                >
-                  Entrar
-                </Link>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Desktop table */}
-      <div className="hidden sm:block rounded-2xl border border-zinc-200 overflow-hidden bg-white">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-zinc-50 border-b border-zinc-200">
-              <th className="px-5 py-3.5 w-10">
-                <input
-                  type="checkbox"
-                  checked={gyms.length > 0 && checkedIds.size === gyms.length}
-                  ref={el => { if (el) el.indeterminate = checkedIds.size > 0 && checkedIds.size < gyms.length }}
-                  onChange={toggleAll}
-                  className="h-4 w-4 rounded cursor-pointer accent-[#1fad9d]"
-                />
-              </th>
-              <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wider text-zinc-500">Gimnasio</th>
-              <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wider text-zinc-500 hidden md:table-cell">Dueño</th>
-              <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wider text-zinc-500">Estado</th>
-              <th className="text-left px-5 py-3.5 font-semibold text-xs uppercase tracking-wider text-zinc-500 hidden lg:table-cell">Creado</th>
-              <th className="text-center px-5 py-3.5 font-semibold text-xs uppercase tracking-wider text-zinc-500">Activo</th>
-              <th className="px-5 py-3.5" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-100">
-            {gyms.map(gym => (
-              <tr
-                key={gym.id}
-                onClick={() => openModal(gym)}
-                className="hover:bg-zinc-50 transition-colors cursor-pointer"
-              >
-                <td className="px-5 py-4" onClick={e => e.stopPropagation()}>
+      <section aria-label="Listado de gimnasios" className="overflow-hidden rounded-2xl border border-adm-line bg-adm-surface">
+        {pageRows.length === 0 ? (
+          <EmptyState icon={<Building2 className="size-12" />}>
+            {gyms.length === 0 ? 'Todavía no hay gimnasios registrados.' : 'Ningún gimnasio coincide con el filtro.'}
+          </EmptyState>
+        ) : (
+          <>
+            {/* Mobile list */}
+            <ul className="md:hidden">
+              {pageRows.map(gym => (
+                <li key={gym.id} className={cn('flex items-center gap-3 border-t border-adm-line-soft px-4 py-3.5 first:border-t-0', checkedIds.has(gym.id) && 'bg-[#fffde0] dark:bg-[#24230f]')}>
                   <input
                     type="checkbox"
                     checked={checkedIds.has(gym.id)}
                     onChange={() => toggleCheck(gym.id)}
-                    className="h-4 w-4 rounded cursor-pointer accent-[#1fad9d]"
+                    aria-label={`Seleccionar ${gym.name}`}
+                    className="size-[18px] shrink-0 cursor-pointer accent-adm-ink"
                   />
-                </td>
-                <td className="px-5 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-xl bg-[#fffb00] flex items-center justify-center shrink-0 overflow-hidden">
-                      {gym.logoUrl
-                        ? <img src={gym.logoUrl} alt={gym.name} className="h-full w-full object-cover" />
-                        : <span className="text-xs font-black text-black">{initials(gym.name)}</span>
-                      }
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-bold truncate">{gym.name}</p>
-                      <p className="text-xs text-muted-foreground">{gym.slug}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-5 py-4 hidden md:table-cell">
-                  {gym.owner
-                    ? <div>
-                        <p className="font-medium text-sm">{gym.owner.name}</p>
-                        <p className="text-xs text-zinc-400">{gym.owner.email}</p>
-                      </div>
-                    : <span className="text-zinc-400">—</span>
-                  }
-                </td>
-                <td className="px-5 py-4">
-                  <StatusBadge status={gym.isActive ? 'active' : 'inactive'} />
-                </td>
-                <td className="px-5 py-4 text-muted-foreground hidden lg:table-cell">{formatDate(gym.createdAt)}</td>
-                <td className="px-5 py-4 text-center" onClick={e => e.stopPropagation()}>
-                  <Switch
-                    checked={gym.isActive}
-                    onCheckedChange={v => handleToggle(gym.id, v)}
-                    aria-label={gym.isActive ? 'Deshabilitar' : 'Habilitar'}
-                  />
-                </td>
-                <td className="px-5 py-4 text-right" onClick={e => e.stopPropagation()}>
-                  <Link
-                    href={`/admin/gyms/${gym.id}`}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3.5 py-2 text-xs font-bold text-zinc-700 hover:border-[#1fad9d]/50 hover:text-[#1fad9d] transition-all shadow-xs"
-                  >
-                    Entrar
-                    <ExternalLink className="h-3 w-3" />
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                  <button type="button" onClick={() => openModal(gym)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                    <GymMark name={gym.name} logoUrl={gym.logoUrl} />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-bold">{gym.name}</span>
+                      <span className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                        {SUB[gym.subscriptionStatus] && <Pill tone={SUB[gym.subscriptionStatus].tone}>{SUB[gym.subscriptionStatus].label}</Pill>}
+                        <span className="text-xs text-adm-muted">{planLabel(gym.subscriptionPlan)}</span>
+                      </span>
+                    </span>
+                  </button>
+                  <Switch checked={gym.isActive} onChange={v => handleToggle(gym.id, v)} label={`Activo: ${gym.name}`} />
+                </li>
+              ))}
+            </ul>
+
+            {/* Desktop table */}
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[960px] border-collapse text-sm">
+                <thead>
+                  <tr>
+                    <th scope="col" className={cn(th, 'w-5 pl-5 pr-2')}>
+                      <input
+                        type="checkbox"
+                        checked={allPageChecked}
+                        ref={el => { if (el) el.indeterminate = somePageChecked && !allPageChecked }}
+                        onChange={toggleAll}
+                        aria-label="Seleccionar todos"
+                        className="size-[18px] cursor-pointer accent-adm-ink"
+                      />
+                    </th>
+                    <th scope="col" className={th}>Gimnasio</th>
+                    <th scope="col" className={th}>Dueño</th>
+                    <th scope="col" className={th}>Plan</th>
+                    <th scope="col" className={th}>Suscripción</th>
+                    <th scope="col" className={th}>Vence</th>
+                    <th scope="col" className={th}>Activo</th>
+                    <th scope="col" className={cn(th, 'pr-5')}><span className="sr-only">Acciones</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.map(gym => {
+                    const checked = checkedIds.has(gym.id)
+                    const sub = SUB[gym.subscriptionStatus]
+                    return (
+                      <tr
+                        key={gym.id}
+                        onClick={() => openModal(gym)}
+                        className={cn('cursor-pointer transition-colors', checked ? 'bg-[#fffde0] dark:bg-[#24230f]' : 'hover:bg-adm-subtle')}
+                      >
+                        <td className={cn(td, 'pl-5 pr-2')} onClick={e => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleCheck(gym.id)}
+                            aria-label={`Seleccionar ${gym.name}`}
+                            className="size-[18px] cursor-pointer accent-adm-ink"
+                          />
+                        </td>
+                        <td className={td}>
+                          <div className="flex items-center gap-3">
+                            <GymMark name={gym.name} logoUrl={gym.logoUrl} />
+                            <div className="min-w-0">
+                              <p className="truncate font-bold">{gym.name}</p>
+                              <p className="font-admin-mono text-xs text-adm-muted">/{gym.slug}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className={td}>
+                          {gym.owner ? (
+                            <div className="min-w-0">
+                              <p className="truncate font-medium">{gym.owner.name}</p>
+                              <p className="truncate text-xs text-adm-muted">{gym.owner.email}</p>
+                            </div>
+                          ) : (
+                            <span className="text-adm-muted">—</span>
+                          )}
+                        </td>
+                        <td className={cn(td, 'font-semibold')}>{planLabel(gym.subscriptionPlan)}</td>
+                        <td className={td}>{sub ? <Pill tone={sub.tone}>{sub.label}</Pill> : '—'}</td>
+                        <td className={td}><ExpiryCell gym={gym} /></td>
+                        <td className={td} onClick={e => e.stopPropagation()}>
+                          <Switch checked={gym.isActive} onChange={v => handleToggle(gym.id, v)} label={`Activo: ${gym.name}`} />
+                        </td>
+                        <td className={cn(td, 'pr-5')} onClick={e => e.stopPropagation()}>
+                          <div className="flex justify-end gap-2">
+                            <Link href={`/gym/${gym.slug}/dashboard`} className={btn.dark}>Entrar</Link>
+                            <Link href={`/admin/gyms/${gym.id}`} className={btn.line}>Detalle</Link>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-adm-line-soft px-5 py-3.5 text-[13px] text-adm-muted">
+          <span>Mostrando {pageRows.length} de {visible.length}</span>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1.5">
+              <button type="button" onClick={() => setPage(currentPage - 1)} disabled={currentPage <= 1} className={btn.line}>
+                <ChevronLeft className="size-4" aria-hidden="true" /> Anterior
+              </button>
+              <span className="px-2 font-admin-mono">{currentPage} / {totalPages}</span>
+              <button type="button" onClick={() => setPage(currentPage + 1)} disabled={currentPage >= totalPages} className={btn.line}>
+                Siguiente <ChevronRight className="size-4" aria-hidden="true" />
+              </button>
+            </div>
+          )}
+        </div>
+      </section>
 
       {/* Bulk delete confirm */}
       <Dialog open={bulkConfirmOpen} onOpenChange={v => { if (!v) setBulkConfirmOpen(false) }}>
-        <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-md">
+        <DialogContent className="admin-surface max-w-[calc(100%-2rem)] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Eliminar {checkedIds.size} gimnasio{checkedIds.size !== 1 ? 's' : ''}</DialogTitle>
             <DialogDescription>
-              Esta acción eliminará permanentemente los siguientes gimnasios y <strong>todos sus datos</strong> (miembros, planes, pagos, asistencias, etc.). No se puede deshacer.
+              Se eliminan permanentemente estos gimnasios y <strong>todos sus datos</strong> (miembros, planes, pagos, asistencias). No se puede deshacer.
             </DialogDescription>
           </DialogHeader>
-          <ul className="mt-1 max-h-52 overflow-y-auto space-y-1">
+          <ul className="mt-1 max-h-52 space-y-1 overflow-y-auto">
             {gyms.filter(g => checkedIds.has(g.id)).map(g => (
-              <li key={g.id} className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2">
-                <div className="h-6 w-6 rounded-lg bg-[#fffb00] flex items-center justify-center shrink-0 overflow-hidden">
-                  {g.logoUrl
-                    ? <img src={g.logoUrl} alt={g.name} className="h-full w-full object-cover" />
-                    : <span className="text-[9px] font-black text-black">{initials(g.name)}</span>
-                  }
-                </div>
-                <span className="font-medium text-sm truncate flex-1">{g.name}</span>
-                <span className="text-xs text-zinc-400 font-mono shrink-0">{g.slug}</span>
+              <li key={g.id} className="flex items-center gap-2 rounded-lg border border-adm-bad-line bg-adm-bad-bg px-3 py-2">
+                <span className="flex-1 truncate text-sm font-medium">{g.name}</span>
+                <span className="shrink-0 font-admin-mono text-xs text-adm-muted">/{g.slug}</span>
               </li>
             ))}
           </ul>
-          <div className="flex gap-2 mt-2">
-            <button
-              onClick={handleBulkDelete}
-              disabled={isBulkDeleting}
-              className="flex-1 rounded-lg bg-red-500 text-white text-sm font-bold py-2 hover:bg-red-600 transition-colors disabled:opacity-50"
-            >
-              {isBulkDeleting ? 'Eliminando...' : `Eliminar ${checkedIds.size} gimnasio${checkedIds.size !== 1 ? 's' : ''}`}
+          <div className="mt-2 flex gap-2">
+            <button onClick={handleBulkDelete} disabled={isBulkDeleting} className={cn(btn.dangerSolid, 'flex-1 min-h-10')}>
+              {isBulkDeleting ? 'Eliminando…' : `Eliminar ${checkedIds.size}`}
             </button>
-            <button
-              onClick={() => setBulkConfirmOpen(false)}
-              disabled={isBulkDeleting}
-              className="flex-1 rounded-lg border text-sm font-medium py-2 hover:bg-muted transition-colors"
-            >
+            <button onClick={() => setBulkConfirmOpen(false)} disabled={isBulkDeleting} className={cn(btn.line, 'flex-1 min-h-10')}>
               Cancelar
             </button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Gym detail modal */}
+      {/* Quick view */}
       <Dialog open={!!selected} onOpenChange={open => { if (!open) closeModal() }}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto" showCloseButton>
+        <DialogContent className="admin-surface max-h-[90vh] overflow-y-auto sm:max-w-lg" showCloseButton>
           {selected && (
             <div className="space-y-5">
-              {/* Header */}
               <div className="flex items-center gap-4">
-                <div className="h-16 w-16 rounded-2xl bg-[#fffb00] flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
-                  {selected.logoUrl
-                    ? <img src={selected.logoUrl} alt={selected.name} className="h-full w-full object-cover" />
-                    : <span className="text-xl font-black text-black">{initials(selected.name)}</span>
-                  }
-                </div>
+                <GymMark name={selected.name} logoUrl={selected.logoUrl} size="lg" />
                 <div className="min-w-0 flex-1">
-                  <h2 className="text-lg font-black tracking-tight truncate">{selected.name}</h2>
-                  <p className="text-xs text-zinc-400 font-mono">{selected.slug}</p>
-                  <div className="flex items-center gap-2 mt-1 flex-wrap">
-                    <StatusBadge status={selected.isActive ? 'active' : 'inactive'} />
-                    {modalData?.subscription && <SubscriptionBadge status={modalData.subscription.subscriptionStatus} />}
-                  </div>
-                </div>
-              </div>
-
-              {/* Owner */}
-              {selected.owner && (
-                <div className="rounded-xl border border-zinc-100 bg-zinc-50 px-4 py-3">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-1">Dueño</p>
-                  <p className="font-bold text-sm">{selected.owner.name}</p>
-                  <p className="text-xs text-zinc-500">{selected.owner.email}</p>
-                </div>
-              )}
-
-              {/* Details grid */}
-              <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2.5 flex items-center gap-2">
-                  <CreditCard className="h-4 w-4 text-zinc-400 shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Plan sub.</p>
-                    <p className="text-sm font-bold truncate">
-                      {modalData?.subscription?.subscriptionPlan ?? selected.subscriptionPlan}
-                    </p>
-                    {modalData?.subscription?.subscriptionExpiresAt && (
-                      <p className="text-[10px] text-zinc-400">
-                        Vence {formatDate(modalData.subscription.subscriptionExpiresAt)}
-                      </p>
+                  <DialogTitle className="truncate text-xl font-extrabold tracking-tight">{selected.name}</DialogTitle>
+                  <p className="font-admin-mono text-xs text-adm-muted">/{selected.slug}</p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <Pill tone={selected.isActive ? 'ok' : 'neutral'}>{selected.isActive ? 'Activo' : 'Inactivo'}</Pill>
+                    {modalData?.subscription && SUB[modalData.subscription.subscriptionStatus] && (
+                      <Pill tone={SUB[modalData.subscription.subscriptionStatus].tone}>
+                        Suscripción {SUB[modalData.subscription.subscriptionStatus].label.toLowerCase()}
+                      </Pill>
                     )}
                   </div>
                 </div>
-                <div className="rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2.5 flex items-center gap-2">
-                  <ShoppingBag className="h-4 w-4 text-zinc-400 shrink-0" />
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Tienda</p>
-                    <p className="text-sm font-bold">{selected.storeEnabled ? 'Habilitada' : 'Deshabilitada'}</p>
-                  </div>
-                </div>
-                {selected.country && (
-                  <div className="rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2.5 flex items-center gap-2">
-                    <Globe className="h-4 w-4 text-zinc-400 shrink-0" />
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">País</p>
-                      <p className="text-sm font-bold">{selected.country}</p>
-                    </div>
-                  </div>
-                )}
-                <div className="rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2.5 flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-zinc-400 shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Timezone</p>
-                    <p className="text-sm font-bold truncate">{selected.timezone}</p>
-                  </div>
-                </div>
-                {selected.address && (
-                  <div className="col-span-2 rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2.5 flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-zinc-400 shrink-0" />
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Dirección</p>
-                      <p className="text-sm font-bold">{selected.address}</p>
-                    </div>
-                  </div>
-                )}
-                <div className="rounded-xl border border-zinc-100 bg-zinc-50 px-3 py-2.5 flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-zinc-400 shrink-0" />
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Creado</p>
-                    <p className="text-sm font-bold">{formatDate(selected.createdAt)}</p>
-                  </div>
-                </div>
               </div>
 
-              {/* Loading spinner */}
+              {selected.owner && (
+                <div className="rounded-xl border border-adm-line-soft bg-adm-subtle px-4 py-3">
+                  <p className="mb-1 text-xs font-semibold text-adm-muted">Dueño</p>
+                  <p className="text-sm font-bold">{selected.owner.name}</p>
+                  <p className="text-xs text-adm-muted">{selected.owner.email}</p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  [CreditCard, 'Plan', planLabel(modalData?.subscription?.subscriptionPlan ?? selected.subscriptionPlan),
+                    modalData?.subscription?.subscriptionExpiresAt ? `Vence ${formatDate(modalData.subscription.subscriptionExpiresAt)}` : null],
+                  [ShoppingBag, 'Tienda', selected.storeEnabled ? 'Habilitada' : 'Deshabilitada', null],
+                  ...(selected.country ? [[Globe, 'País', selected.country, null]] : []),
+                  [Clock, 'Zona horaria', selected.timezone, null],
+                  ...(selected.address ? [[MapPin, 'Dirección', selected.address, null]] : []),
+                  [Calendar, 'Creado', formatDate(selected.createdAt), null],
+                ] as [typeof CreditCard, string, string, string | null][]).map(([Icon, label, value, sub]) => (
+                  <div key={label} className="flex items-center gap-2.5 rounded-xl border border-adm-line-soft bg-adm-subtle px-3 py-2.5">
+                    <Icon className="size-4 shrink-0 text-adm-muted" aria-hidden="true" />
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold text-adm-muted">{label}</p>
+                      <p className="truncate text-sm font-bold">{value}</p>
+                      {sub && <p className="text-[11px] text-adm-muted">{sub}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
               {loadingModal && (
                 <div className="flex items-center justify-center py-6">
-                  <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+                  <Loader2 className="size-5 animate-spin text-adm-muted" aria-label="Cargando" />
                 </div>
               )}
 
               {modalData && (
                 <>
-                  {/* Members */}
-                  <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-3 bg-zinc-50 border-b border-zinc-100">
-                      <div className="flex items-center gap-2">
-                        <Users className="h-3.5 w-3.5 text-zinc-400" />
-                        <span className="text-xs font-bold uppercase tracking-widest text-zinc-500">Miembros</span>
-                      </div>
-                      <Link
-                        href={`/gym/${selected.slug}/members`}
-                        className="text-[10px] font-bold text-[#1fad9d] hover:text-[#0e7a70] transition-colors"
-                        onClick={e => e.stopPropagation()}
-                      >
-                        Ver todos →
-                      </Link>
+                  <div className="overflow-hidden rounded-xl border border-adm-line">
+                    <div className="flex items-center justify-between border-b border-adm-line-soft bg-adm-subtle px-4 py-3">
+                      <span className="text-[13px] font-bold">Miembros recientes</span>
+                      <Link href={`/gym/${selected.slug}/members`} className={btn.link}>Ver todos</Link>
                     </div>
                     {modalData.members.length === 0 ? (
-                      <p className="px-4 py-5 text-xs text-zinc-400 text-center">Sin miembros registrados</p>
+                      <p className="px-4 py-5 text-center text-xs text-adm-muted">Sin miembros registrados</p>
                     ) : (
-                      <ul className="divide-y divide-zinc-100">
+                      <ul>
                         {modalData.members.map(m => (
-                          <li key={m.id} className="flex items-center gap-3 px-4 py-2.5">
-                            <div className="h-7 w-7 rounded-full bg-zinc-100 flex items-center justify-center shrink-0 overflow-hidden">
+                          <li key={m.id} className="flex items-center gap-3 border-t border-adm-line-soft px-4 py-2.5 first:border-t-0">
+                            <div className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-adm-chip text-[10px] font-bold">
                               {m.photoUrl
-                                ? <img src={m.photoUrl} alt={`${m.firstName} ${m.lastName}`} className="h-full w-full object-cover" />
-                                : <span className="text-[10px] font-bold text-zinc-500">{m.firstName[0]}{m.lastName[0]}</span>
-                              }
+                                // eslint-disable-next-line @next/next/no-img-element
+                                ? <img src={m.photoUrl} alt="" className="size-full object-cover" />
+                                : <>{m.firstName[0]}{m.lastName[0]}</>}
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-semibold truncate">{m.firstName} {m.lastName}</p>
-                              <p className="text-[10px] text-zinc-400 truncate">{m.email}</p>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-xs font-semibold">{m.firstName} {m.lastName}</p>
+                              <p className="truncate text-[11px] text-adm-muted">{m.email}</p>
                             </div>
-                            <StatusBadge status={m.isActive ? 'active' : 'inactive'} />
+                            <Pill tone={m.isActive ? 'ok' : 'neutral'}>{m.isActive ? 'Activo' : 'Inactivo'}</Pill>
                           </li>
                         ))}
                       </ul>
                     )}
                   </div>
 
-                  {/* Plans */}
                   {modalData.plans.length > 0 && (
-                    <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden">
-                      <div className="flex items-center justify-between px-4 py-3 bg-zinc-50 border-b border-zinc-100">
-                        <span className="text-xs font-bold uppercase tracking-widest text-zinc-500">Planes ofrecidos</span>
-                        <span className="text-[10px] text-zinc-400">{modalData.plans.length} plan{modalData.plans.length !== 1 ? 'es' : ''}</span>
+                    <div className="overflow-hidden rounded-xl border border-adm-line">
+                      <div className="flex items-center justify-between border-b border-adm-line-soft bg-adm-subtle px-4 py-3">
+                        <span className="text-[13px] font-bold">Planes que ofrece</span>
+                        <span className="text-[11px] text-adm-muted">{modalData.plans.length} plan{modalData.plans.length !== 1 ? 'es' : ''}</span>
                       </div>
-                      <ul className="divide-y divide-zinc-100">
+                      <ul>
                         {modalData.plans.map(p => (
-                          <li key={p.id} className="flex items-center justify-between px-4 py-2.5">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              {p.isFeatured && <Star className="h-3 w-3 text-amber-400 fill-amber-400 shrink-0" />}
-                              <p className="text-xs font-semibold truncate">{p.name}</p>
-                              <span className="text-[10px] text-zinc-400 shrink-0">{p.durationDays}d</span>
+                          <li key={p.id} className="flex items-center justify-between border-t border-adm-line-soft px-4 py-2.5 first:border-t-0">
+                            <div className="flex min-w-0 items-center gap-1.5">
+                              {p.isFeatured && <Star className="size-3 shrink-0 fill-adm-brand text-adm-warn-fg" aria-label="Destacado" />}
+                              <p className="truncate text-xs font-semibold">{p.name}</p>
+                              <span className="shrink-0 text-[11px] text-adm-muted">{p.durationDays}d</span>
                             </div>
-                            <p className="text-xs font-bold shrink-0">{p.currency} {p.price.toLocaleString('es-AR')}</p>
+                            <p className="shrink-0 font-admin-mono text-xs font-bold">{p.currency} {p.price.toLocaleString('es-AR')}</p>
                           </li>
                         ))}
                       </ul>
                     </div>
                   )}
 
-                  {/* Change plan */}
-                  <div className="rounded-xl border border-zinc-200 bg-white overflow-hidden">
+                  <div className="overflow-hidden rounded-xl border border-adm-line">
                     <button
                       type="button"
+                      aria-expanded={showChangePlan}
                       onClick={() => { setShowChangePlan(v => !v); setProration(null); setPlanError(null) }}
-                      className="w-full flex items-center justify-between px-4 py-3 text-xs font-bold uppercase tracking-widest text-zinc-500 hover:bg-zinc-50 transition-colors"
+                      className="flex w-full items-center justify-between px-4 py-3 text-[13px] font-bold transition-colors hover:bg-adm-subtle"
                     >
-                      <div className="flex items-center gap-2">
-                        <ArrowRightLeft className="h-3.5 w-3.5" />
+                      <span className="flex items-center gap-2">
+                        <ArrowRightLeft className="size-3.5" aria-hidden="true" />
                         Cambiar plan de suscripción
-                      </div>
-                      <span className="text-zinc-300">{showChangePlan ? '▲' : '▼'}</span>
+                      </span>
+                      <ChevronRight className={cn('size-4 text-adm-muted transition-transform', showChangePlan && 'rotate-90')} aria-hidden="true" />
                     </button>
 
                     {showChangePlan && (
-                      <div className="border-t border-zinc-100 p-4 space-y-3">
+                      <div className="space-y-3 border-t border-adm-line-soft p-4">
                         {proration ? (
                           <ProratedBreakdown
                             p={proration}
@@ -608,20 +553,23 @@ export function GymTable({ gyms, plans }: { gyms: Gym[]; plans: SubscriptionPlan
                         ) : (
                           <form onSubmit={handleChangePlan} className="space-y-3">
                             {availableSubPlans.length === 0 ? (
-                              <p className="text-xs text-zinc-400">No hay otros planes disponibles.</p>
+                              <p className="text-xs text-adm-muted">No hay otros planes disponibles.</p>
                             ) : (
-                              <div className="space-y-1.5">
+                              <div role="radiogroup" aria-label="Nuevo plan" className="space-y-1.5">
                                 {availableSubPlans.map(p => (
                                   <button
                                     key={p.key}
                                     type="button"
+                                    role="radio"
+                                    aria-checked={selectedPlanKey === p.key}
                                     onClick={() => setSelectedPlanKey(p.key)}
-                                    className={`w-full flex items-center justify-between rounded-xl border-2 px-3 py-2.5 text-left transition-all text-xs ${
-                                      selectedPlanKey === p.key ? 'border-black bg-zinc-50' : 'border-zinc-200 hover:border-zinc-300'
-                                    }`}
+                                    className={cn(
+                                      'flex w-full items-center justify-between rounded-[10px] px-3 py-2.5 text-left text-[13px] transition-colors',
+                                      selectedPlanKey === p.key ? 'border-2 border-adm-ink bg-adm-subtle' : 'border border-adm-line hover:border-adm-ink',
+                                    )}
                                   >
                                     <span className="font-semibold">{p.label ?? p.key}</span>
-                                    <span className="font-bold">{p.currency} {parseFloat(String(p.price)).toLocaleString('es-AR')}</span>
+                                    <span className="font-admin-mono font-bold">{p.currency} {parseFloat(String(p.price)).toLocaleString('es-AR')}</span>
                                   </button>
                                 ))}
                               </div>
@@ -629,31 +577,32 @@ export function GymTable({ gyms, plans }: { gyms: Gym[]; plans: SubscriptionPlan
 
                             {availableSubPlans.length > 0 && (
                               <>
-                                <select
-                                  value={changePlanMethod}
-                                  onChange={e => setChangePlanMethod(e.target.value as typeof changePlanMethod)}
-                                  disabled={isPendingPlan}
-                                  className={inputClass}
-                                >
-                                  <option value="CASH">Efectivo</option>
-                                  <option value="CARD">Tarjeta</option>
-                                  <option value="TRANSFER">Transferencia</option>
-                                  <option value="OTHER">Otro</option>
-                                </select>
-                                <input
-                                  type="text"
-                                  value={changePlanNotes}
-                                  onChange={e => setChangePlanNotes(e.target.value)}
-                                  placeholder="Notas (opcional)"
-                                  disabled={isPendingPlan}
-                                  className={inputClass}
-                                />
-                                {planError && <p className="text-xs text-red-600 font-medium">{planError}</p>}
-                                <button
-                                  type="submit"
-                                  disabled={isPendingPlan || !selectedPlanKey}
-                                  className="w-full rounded-xl bg-black py-2 text-xs font-bold text-white hover:bg-zinc-800 disabled:opacity-50 transition-all"
-                                >
+                                <label className="block">
+                                  <span className={field.label}>Método de pago</span>
+                                  <select
+                                    value={changePlanMethod}
+                                    onChange={e => setChangePlanMethod(e.target.value as typeof changePlanMethod)}
+                                    disabled={isPendingPlan}
+                                    className={field.input}
+                                  >
+                                    <option value="CASH">Efectivo</option>
+                                    <option value="CARD">Tarjeta</option>
+                                    <option value="TRANSFER">Transferencia</option>
+                                    <option value="OTHER">Otro</option>
+                                  </select>
+                                </label>
+                                <label className="block">
+                                  <span className={field.label}>Notas (opcional)</span>
+                                  <input
+                                    type="text"
+                                    value={changePlanNotes}
+                                    onChange={e => setChangePlanNotes(e.target.value)}
+                                    disabled={isPendingPlan}
+                                    className={field.input}
+                                  />
+                                </label>
+                                {planError && <p className={field.error}>{planError}</p>}
+                                <button type="submit" disabled={isPendingPlan || !selectedPlanKey} className={cn(btn.dark, 'w-full min-h-10')}>
                                   {isPendingPlan ? 'Cambiando…' : 'Confirmar cambio de plan'}
                                 </button>
                               </>
@@ -666,14 +615,10 @@ export function GymTable({ gyms, plans }: { gyms: Gym[]; plans: SubscriptionPlan
                 </>
               )}
 
-              {/* CTA */}
-              <Link
-                href={`/admin/gyms/${selected.id}`}
-                className="flex items-center justify-center gap-2 w-full rounded-xl bg-black py-3 text-sm font-bold text-white hover:bg-zinc-800 transition-all"
-              >
-                Ir al gimnasio
-                <ExternalLink className="h-4 w-4" />
-              </Link>
+              <div className="flex gap-2">
+                <Link href={`/admin/gyms/${selected.id}`} className={cn(btn.line, 'min-h-11 flex-1')}>Ver detalle</Link>
+                <Link href={`/gym/${selected.slug}/dashboard`} className={cn(btn.primary, 'flex-1')}>Entrar al panel</Link>
+              </div>
             </div>
           )}
         </DialogContent>

@@ -2,21 +2,26 @@
 
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Camera, Check, CreditCard } from 'lucide-react'
+import Link from 'next/link'
+import { Camera, Check } from 'lucide-react'
 import { createGymAction, uploadGymLogoAction, registerSubscriptionPaymentAction, type CreateGymInput } from '../actions'
 import { createHandlers } from '@/lib/input-validation'
+import { cn } from '@/lib/utils'
+import { btn, field, initials } from '@/components/admin/ui'
 import type { SubscriptionPlan } from './page'
 
-const PLAN_PALETTE = [
-  { color: 'border-zinc-200', activeColor: 'border-black bg-black text-white' },
-  { color: 'border-[#1fad9d]', activeColor: 'border-[#1fad9d] bg-[#1fad9d] text-white' },
-  { color: 'border-[#fffb00]', activeColor: 'border-[#fffb00] bg-[#fffb00] text-black' },
-]
+const METHODS = [
+  { value: 'CASH', label: 'Efectivo' },
+  { value: 'TRANSFER', label: 'Transferencia' },
+  { value: 'CARD', label: 'Tarjeta' },
+  { value: 'OTHER', label: 'Otro' },
+] as const
+
+type Method = (typeof METHODS)[number]['value']
 
 function formatPrice(price: number, currency: string): string {
   if (price === 0) return 'Gratis'
-  const symbol = currency === 'USD' ? '$' : currency
-  return `${symbol}${price}/mes`
+  return `${currency} ${price.toLocaleString('es-AR')}`
 }
 
 function toSlug(name: string) {
@@ -28,17 +33,34 @@ function toSlug(name: string) {
     .replace(/^-|-$/g, '')
 }
 
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
+function Field({ label, htmlFor, error, hint, children, className }: {
+  label: string
+  htmlFor?: string
+  error?: string
+  hint?: string
+  children: React.ReactNode
+  className?: string
+}) {
   return (
-    <div className="space-y-1.5">
-      <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">{label}</label>
+    <div className={cn('min-w-0 flex-1 basis-60', className)}>
+      <label htmlFor={htmlFor} className={field.label}>{label}</label>
       {children}
-      {error && <p className="text-xs text-[#ff0000] font-medium">{error}</p>}
+      {error ? <p className={field.error}>{error}</p> : hint ? <p className={field.hint}>{hint}</p> : null}
     </div>
   )
 }
 
-const inputClass = 'w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all disabled:opacity-50'
+function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-2xl border border-adm-line bg-adm-surface p-6">
+      <h2 className="mb-5 flex items-center gap-3 text-[17px] font-bold">
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-adm-ink text-[13px] font-extrabold text-adm-surface">{n}</span>
+        {title}
+      </h2>
+      {children}
+    </section>
+  )
+}
 
 const MAX_SIZE = 2 * 1024 * 1024
 
@@ -48,10 +70,6 @@ function monthToNote(ym: string) {
   const [y, m] = ym.split('-')
   const name = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('es-AR', { month: 'long' })
   return `Pago mensual ${name} ${y}`
-}
-
-function initials(name: string) {
-  return name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase()
 }
 
 export function CreateGymForm({ plans, onSuccess }: { plans: SubscriptionPlan[]; onSuccess?: () => void }) {
@@ -65,7 +83,7 @@ export function CreateGymForm({ plans, onSuccess }: { plans: SubscriptionPlan[];
   const [slugManual, setSlugManual] = useState(false)
   const [plan, setPlan] = useState(() => plans[0]?.key ?? '')
 
-  const [payMethod, setPayMethod] = useState<'CASH' | 'CARD' | 'TRANSFER' | 'OTHER'>('CASH')
+  const [payMethod, setPayMethod] = useState<Method>('CASH')
   const [payMonth, setPayMonth] = useState(todayYM)
 
   const [logoFile, setLogoFile] = useState<File | null>(null)
@@ -159,211 +177,212 @@ export function CreateGymForm({ plans, onSuccess }: { plans: SubscriptionPlan[];
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8 max-w-3xl">
-
-      {/* Gym info */}
-      <section className="bg-white rounded-2xl border border-zinc-200 p-6 space-y-4">
-        <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-400">Información del gimnasio</h2>
-
-        <Field label="Nombre del gimnasio" error={errors.name}>
-          <input
-            value={name}
-            onChange={e => handleNameChange(e.target.value)}
-            placeholder="Ej. Fitness Club Centro"
-            disabled={isPending}
-            className={inputClass}
-            {...createHandlers('text')}
-          />
-        </Field>
-
-        <Field label="Slug (URL)" error={errors.slug}>
-          <div className="flex items-center">
-            <span className="inline-flex h-10 items-center rounded-l-xl border border-r-0 border-zinc-200 bg-zinc-100 px-3 text-sm text-zinc-500 select-none">
-              /gym/
-            </span>
-            <input
-              value={slug}
-              onChange={e => { setSlug(e.target.value); setSlugManual(true) }}
-              placeholder="fitness-club-centro"
-              disabled={isPending}
-              className="flex-1 h-10 rounded-r-xl border border-zinc-200 bg-zinc-50 px-4 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all"
-              {...createHandlers('slug')}
-            />
-          </div>
-        </Field>
-
-        <Field label="Logo (opcional)" error={logoError ?? undefined}>
-          <div className="flex items-center gap-4">
-            <div className="h-14 w-14 rounded-xl bg-[#fffb00] flex items-center justify-center shrink-0 overflow-hidden">
-              {logoPreview
-                ? <img src={logoPreview} alt="Logo" className="h-full w-full object-cover" />
-                : <span className="text-sm font-black text-black">{initials(name || 'G')}</span>
-              }
-            </div>
-            <div className="space-y-1">
-              <button
-                type="button"
+    <form onSubmit={handleSubmit} className="flex flex-wrap items-start gap-4" noValidate>
+      <div className="flex min-w-0 flex-[2_1_560px] flex-col gap-4">
+        <Step n={1} title="Información del gimnasio">
+          <div className="flex flex-wrap gap-4">
+            <Field label="Nombre" htmlFor="gym-name" error={errors.name}>
+              <input
+                id="gym-name"
+                value={name}
+                onChange={e => handleNameChange(e.target.value)}
+                placeholder="Ej. Fitness Club Centro"
                 disabled={isPending}
-                onClick={() => fileRef.current?.click()}
-                className="flex items-center gap-2 rounded-xl border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-600 hover:border-zinc-300 transition-all disabled:opacity-50"
-              >
-                <Camera className="h-3.5 w-3.5" />
-                {logoFile ? logoFile.name : 'Subir logo'}
+                className={field.input}
+                {...createHandlers('text')}
+              />
+            </Field>
+            <Field label="Slug" htmlFor="gym-slug" error={errors.slug} hint="Se genera desde el nombre. Solo minúsculas y guiones.">
+              <div className="flex overflow-hidden rounded-[10px] border border-adm-line bg-adm-surface focus-within:border-adm-ink">
+                <span className="flex select-none items-center border-r border-adm-line bg-adm-subtle px-2.5 font-admin-mono text-xs text-adm-muted">/gym/</span>
+                <input
+                  id="gym-slug"
+                  value={slug}
+                  onChange={e => { setSlug(e.target.value); setSlugManual(true) }}
+                  placeholder="fitness-club-centro"
+                  disabled={isPending}
+                  className="min-h-[42px] min-w-0 flex-1 bg-transparent px-2.5 font-admin-mono text-sm focus:outline-none"
+                  {...createHandlers('slug')}
+                />
+              </div>
+            </Field>
+          </div>
+
+          <div className="mt-4">
+            <span className={field.label}>Logo (opcional)</span>
+            <div className="flex flex-wrap items-center gap-4 rounded-xl border-[1.5px] border-dashed border-adm-line bg-adm-subtle p-4">
+              <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-[14px] border border-adm-night/15 bg-adm-brand text-lg font-black text-adm-night">
+                {logoPreview
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={logoPreview} alt="Vista previa del logo" className="size-full object-cover" />
+                  : initials(name || 'G')}
+              </div>
+              <div className="min-w-0 flex-[1_1_200px]">
+                <p className="text-sm font-semibold">{logoFile ? logoFile.name : 'Sin logo se usan las iniciales'}</p>
+                <p className="mt-0.5 text-xs text-adm-muted">PNG, JPG, WebP, TIFF… · Máx. 2MB</p>
+                {logoError && <p className={field.error}>{logoError}</p>}
+              </div>
+              <button type="button" disabled={isPending} onClick={() => fileRef.current?.click()} className={btn.line}>
+                <Camera className="size-3.5" aria-hidden="true" />
+                {logoFile ? 'Cambiar logo' : 'Subir logo'}
               </button>
-              <p className="text-xs text-zinc-400">PNG, JPG, WebP, TIFF… · Máx. 2MB</p>
             </div>
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
           </div>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleFileChange}
-          />
-        </Field>
-      </section>
+        </Step>
 
-      {/* Owner */}
-      <section className="bg-white rounded-2xl border border-zinc-200 p-6 space-y-4">
-        <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-400">Dueño del gimnasio</h2>
+        <Step n={2} title="Dueño del gimnasio">
+          <div className="flex flex-wrap gap-4">
+            <Field label="Nombre completo" htmlFor="owner-name" error={errors.ownerName}>
+              <input
+                id="owner-name"
+                value={ownerName}
+                onChange={e => setOwnerName(e.target.value)}
+                placeholder="Juan Pérez"
+                disabled={isPending}
+                className={field.input}
+                {...createHandlers('name')}
+              />
+            </Field>
+            <Field label="Email" htmlFor="owner-email" error={errors.ownerEmail}>
+              <input
+                id="owner-email"
+                type="email"
+                value={ownerEmail}
+                onChange={e => setOwnerEmail(e.target.value)}
+                placeholder="juan@email.com"
+                disabled={isPending}
+                className={field.input}
+                {...createHandlers('email')}
+              />
+            </Field>
+          </div>
+          <p className="mt-4 rounded-[10px] border border-adm-line-soft bg-adm-subtle px-4 py-3 text-[13px] text-adm-muted">
+            Se genera una contraseña temporal y se envía al correo del dueño.
+          </p>
+        </Step>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Nombre completo" error={errors.ownerName}>
-            <input
-              value={ownerName}
-              onChange={e => setOwnerName(e.target.value)}
-              placeholder="Juan Pérez"
-              disabled={isPending}
-              className={inputClass}
-              {...createHandlers('name')}
-            />
-          </Field>
+        <Step n={3} title="Plan de suscripción">
+          {plans.length === 0 ? (
+            <p className="text-sm text-adm-muted">No hay planes activos. Creá uno en <Link href="/admin/plans" className={btn.link}>Planes</Link>.</p>
+          ) : (
+            <div role="radiogroup" aria-label="Plan" className="flex flex-wrap gap-3">
+              {plans.map(p => {
+                const selected = plan === p.key
+                return (
+                  <button
+                    key={p.key}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setPlan(p.key)}
+                    className={cn(
+                      'flex min-w-0 flex-1 basis-52 flex-col gap-1.5 rounded-xl bg-adm-surface p-4 text-left transition-colors',
+                      selected ? 'border-2 border-adm-ink bg-[#fffde0] p-[15px] dark:bg-[#24230f]' : 'border border-adm-line hover:border-adm-ink',
+                    )}
+                  >
+                    <span className="font-admin-mono text-[11px] font-bold tracking-[0.08em] text-adm-muted">{p.key}</span>
+                    <span className="text-lg font-extrabold">{p.label}</span>
+                    <span className="font-admin-mono text-[15px] font-bold">
+                      {formatPrice(p.price, p.currency)}
+                      {p.price > 0 && <span className="text-xs font-medium text-adm-muted"> / mes</span>}
+                    </span>
+                    <span className="text-[13px] text-adm-muted">
+                      {p.maxMembers !== null ? `Hasta ${p.maxMembers} miembros` : 'Miembros ilimitados'}
+                    </span>
+                    {p.features.length > 0 && (
+                      <ul className="mt-1.5 flex flex-col gap-1">
+                        {p.features.map(f => (
+                          <li key={f} className="flex items-start gap-1.5 text-xs">
+                            <Check className="mt-0.5 size-3.5 shrink-0 text-adm-ok-fg" aria-hidden="true" />
+                            <span>{f}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </Step>
 
-          <Field label="Email" error={errors.ownerEmail}>
-            <input
-              type="email"
-              value={ownerEmail}
-              onChange={e => setOwnerEmail(e.target.value)}
-              placeholder="juan@email.com"
-              disabled={isPending}
-              className={inputClass}
-              {...createHandlers('email')}
-            />
-          </Field>
+        {isPaidPlan && selectedPlanObj && (
+          <Step n={4} title="Pago inicial">
+            <span className={field.label} id="pay-method-label">Método de pago</span>
+            <div role="radiogroup" aria-labelledby="pay-method-label" className="flex flex-wrap gap-2">
+              {METHODS.map(m => (
+                <button
+                  key={m.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={payMethod === m.value}
+                  onClick={() => setPayMethod(m.value)}
+                  disabled={isPending}
+                  className={cn(
+                    'min-h-10 rounded-lg border px-3.5 text-[13px] font-semibold transition-colors',
+                    payMethod === m.value
+                      ? 'border-adm-ink bg-adm-ink text-adm-surface'
+                      : 'border-adm-line bg-adm-surface hover:border-adm-ink',
+                  )}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-4">
+              <Field label="Mes que cubre" htmlFor="pay-month" hint={monthToNote(payMonth)}>
+                <input
+                  id="pay-month"
+                  type="month"
+                  value={payMonth}
+                  onChange={e => setPayMonth(e.target.value)}
+                  disabled={isPending}
+                  className={field.input}
+                />
+              </Field>
+            </div>
+          </Step>
+        )}
+      </div>
+
+      <aside aria-label="Resumen" className="flex min-w-0 flex-[1_1_300px] flex-col gap-1 rounded-2xl border border-adm-line bg-adm-surface p-6">
+        <h2 className="mb-2.5 text-[15px] font-bold">Resumen</h2>
+        {([
+          ['Gimnasio', name || '—'],
+          ['Plan', selectedPlanObj?.label ?? '—'],
+          ['Límite', selectedPlanObj ? (selectedPlanObj.maxMembers !== null ? `Hasta ${selectedPlanObj.maxMembers} miembros` : 'Ilimitado') : '—'],
+          ...(isPaidPlan ? [['Método', METHODS.find(m => m.value === payMethod)?.label ?? '—']] : []),
+        ] as [string, string][]).map(([k, v]) => (
+          <div key={k} className="flex justify-between gap-3 border-b border-adm-line-soft py-2.5 text-sm">
+            <span className="text-adm-muted">{k}</span>
+            <span className="truncate font-semibold">{v}</span>
+          </div>
+        ))}
+        <div className="flex items-baseline justify-between gap-3 pb-2 pt-4">
+          <span className="font-bold">Total a cobrar hoy</span>
+          <span className="font-admin-mono text-2xl font-bold">
+            {selectedPlanObj ? formatPrice(isPaidPlan ? selectedPlanObj.price : 0, selectedPlanObj.currency) : '—'}
+          </span>
         </div>
 
-        <p className="text-xs text-zinc-400 bg-zinc-50 rounded-xl px-4 py-3 border border-zinc-200">
-          Se generará una contraseña temporal automáticamente y se enviará al correo del dueño.
-        </p>
-      </section>
-
-      {/* Plan comparison */}
-      <section className="bg-white rounded-2xl border border-zinc-200 p-6 space-y-4">
-        <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-400">Plan de suscripción</h2>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {plans.map((p, i) => {
-            const selected = plan === p.key
-            const palette = PLAN_PALETTE[i % PLAN_PALETTE.length]
-            return (
-              <button
-                key={p.key}
-                type="button"
-                onClick={() => setPlan(p.key)}
-                className={`rounded-2xl border-2 p-4 text-left transition-all ${
-                  selected ? palette.activeColor : `${palette.color} hover:shadow-sm`
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <p className="font-black text-base">{p.label}</p>
-                  <p className="text-sm font-bold">{formatPrice(p.price, p.currency)}</p>
-                </div>
-                {p.maxMembers !== null && (
-                  <p className="text-xs mb-3 opacity-60">Hasta {p.maxMembers} miembros</p>
-                )}
-                {p.maxMembers === null && (
-                  <p className="text-xs mb-3 opacity-60">Miembros ilimitados</p>
-                )}
-                <ul className="space-y-1.5">
-                  {p.features.map(f => (
-                    <li key={f} className="flex items-center gap-2 text-xs">
-                      <Check className="h-3.5 w-3.5 shrink-0" />
-                      <span>{f}</span>
-                    </li>
-                  ))}
-                </ul>
-              </button>
-            )
-          })}
-        </div>
-      </section>
-
-      {/* Payment — only for paid plans */}
-      {isPaidPlan && selectedPlanObj && (
-        <section className="bg-white rounded-2xl border border-zinc-200 p-6 space-y-4">
-          <div className="flex items-center gap-2">
-            <CreditCard className="h-4 w-4 text-zinc-400" />
-            <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-400">Pago inicial</h2>
+        {serverError && (
+          <div role="alert" className="my-2 rounded-[10px] border border-adm-bad-line bg-adm-bad-bg px-3.5 py-3 text-[13px] font-medium text-adm-bad-fg">
+            {serverError}
           </div>
+        )}
 
-          <div className="rounded-xl bg-zinc-50 border border-zinc-200 px-4 py-3 flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Monto a cobrar</span>
-            <span className="text-sm font-bold">
-              {selectedPlanObj.currency} {selectedPlanObj.price.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-            </span>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Método de pago</label>
-            <select
-              value={payMethod}
-              onChange={e => setPayMethod(e.target.value as typeof payMethod)}
-              disabled={isPending}
-              className={inputClass}
-            >
-              <option value="CASH">Efectivo</option>
-              <option value="CARD">Tarjeta</option>
-              <option value="TRANSFER">Transferencia</option>
-              <option value="OTHER">Otro</option>
-            </select>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Mes</label>
-            <input
-              type="month"
-              value={payMonth}
-              onChange={e => setPayMonth(e.target.value)}
-              disabled={isPending}
-              className={inputClass}
-            />
-            <p className="text-xs text-zinc-400">{monthToNote(payMonth)}</p>
-          </div>
-        </section>
-      )}
-
-      {serverError && (
-        <div className="rounded-xl bg-[#ff0000]/8 border border-[#ff0000]/20 px-4 py-3 text-sm text-[#cc0000] font-medium">
-          {serverError}
-        </div>
-      )}
-
-      <div className="flex items-center gap-3">
-        <button
-          type="submit"
-          disabled={isPending}
-          className="flex items-center gap-2 rounded-xl bg-black px-6 py-2.5 text-sm font-bold text-white hover:bg-zinc-800 disabled:opacity-50 transition-all"
-        >
+        <button type="submit" disabled={isPending || !plan} className={cn(btn.primary, 'min-h-12 text-[15px] font-extrabold')}>
           {isPending ? 'Creando…' : 'Crear gimnasio'}
         </button>
         <button
           type="button"
-          onClick={() => router.push('/admin/gyms')}
-          className="rounded-xl border border-zinc-200 px-6 py-2.5 text-sm font-semibold text-zinc-600 hover:border-zinc-300 transition-all"
+          onClick={() => (onSuccess ? onSuccess() : router.push('/admin/gyms'))}
+          className={cn(btn.line, 'mt-2 min-h-11 text-sm')}
         >
           Cancelar
         </button>
-      </div>
+      </aside>
     </form>
   )
 }

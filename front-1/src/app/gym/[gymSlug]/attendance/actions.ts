@@ -13,10 +13,10 @@ export async function checkInAction(
   gymSlug: string,
   memberId: string,
   groupId?: string,
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; visitsRemaining?: number | null }> {
   if (!memberId.trim()) return { error: 'ID de miembro requerido' }
   const token = await getToken()
-  const result = await apiFetchWithError('/attendance/checkin', token, {
+  const result = await apiFetchWithError<{ visitsRemaining: number | null }>('/attendance/checkin', token, {
     method: 'POST',
     body: JSON.stringify({ memberId, ...(groupId ? { groupId } : {}) }),
     headers: { 'x-gym-slug': gymSlug },
@@ -31,7 +31,7 @@ export async function checkInAction(
     return { error: msg }
   }
   updateTag(`attendance-${gymSlug}`)
-  return {}
+  return { visitsRemaining: result.data.visitsRemaining }
 }
 
 export async function checkOutAction(

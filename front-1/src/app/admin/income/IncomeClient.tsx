@@ -1,377 +1,490 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { CreditCard, CheckCircle2, AlertTriangle, Ban, ChevronDown, ChevronUp, Receipt } from 'lucide-react'
+import { Plus, Search, Download, ChevronLeft, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
+import { cn } from '@/lib/utils'
 import { registerSubscriptionPaymentAction } from '../gyms/actions'
-import type { Gym } from '@/types'
-
-interface SubscriptionPlan {
-  id: string
-  key: string
-  label: string
-  price: number
-  currency: string
-}
-
-interface SubscriptionInfo {
-  subscriptionPlan: string
-  subscriptionStatus: 'ACTIVE' | 'GRACE' | 'SUSPENDED'
-  subscriptionExpiresAt: string | null
-}
-
-interface GymRevenue {
-  amount: number
-  currency: string
-}
-
-interface BillingRecord {
-  id: string
-  amount: string
-  currency: string
-  method?: string
-  notes?: string | null
-  periodStart?: string | null
-  periodEnd?: string | null
-  createdAt: string
-}
-
-interface GymWithSubscription extends Gym {
-  subscription?: SubscriptionInfo | null
-  dailyRevenue?: GymRevenue | null
-  monthlyRevenue?: GymRevenue | null
-  billing: BillingRecord[]
-}
+import {
+  METHOD_LABELS,
+  daysUntil,
+  dedupeBilling,
+  fmtAmount,
+  fmtMoney,
+  planPrice,
+  type GymWithBilling,
+  type Money,
+  type SubscriptionPlanPrice,
+} from '@/lib/admin-billing'
+import { EmptyState, GymMark, Meter, PageHeader, Panel, Pill, Stat, btn, chip, field, td, th, type Tone } from '@/components/admin/ui'
 
 const METHODS = [
   { value: 'CASH', label: 'Efectivo' },
-  { value: 'CARD', label: 'Tarjeta' },
   { value: 'TRANSFER', label: 'Transferencia' },
+  { value: 'CARD', label: 'Tarjeta' },
   { value: 'OTHER', label: 'Otro' },
 ] as const
 
-function StatusBadge({ status }: { status: SubscriptionInfo['subscriptionStatus'] }) {
-  if (status === 'ACTIVE') return (
-    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold bg-[#1fad9d]/15 text-[#0e7a70] border border-[#1fad9d]/30">
-      <CheckCircle2 className="h-3 w-3" /> Activa
-    </span>
-  )
-  if (status === 'GRACE') return (
-    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-      <AlertTriangle className="h-3 w-3" /> Prórroga
-    </span>
-  )
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold bg-red-50 text-red-600 border border-red-200">
-      <Ban className="h-3 w-3" /> Suspendida
-    </span>
-  )
-}
+type Method = (typeof METHODS)[number]['value']
+type Period = 'month' | 'prev' | 'all'
 
-function fmt(iso: string) {
-  return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
-}
+const TX_PAGE = 15
 
-const METHOD_LABELS: Record<string, string> = {
-  CASH: 'Efectivo',
-  CARD: 'Tarjeta',
-  TRANSFER: 'Transferencia',
-  OTHER: 'Otro',
+interface Stats {
+  monthly: Money | null
+  monthDelta: number | null
+  daily: Money | null
+  dailyCount: number
+  dueSoon: Money | null
+  dueSoonCount: number
+  overdue: Money | null
+  overdueCount: number
 }
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-function GymPayRow({
-  gym,
+function fmtShort(iso: string) {
+  return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })
+}
+
+function monthToNote(ym: string) {
+  const [y, m] = ym.split('-')
+  const name = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('es-AR', { month: 'long' })
+  return `Pago mensual ${name} ${y}`
+}
+
+function PaymentDialog({
+  gyms,
   subPlans,
+  initialGymId,
+  open,
+  onClose,
 }: {
-  gym: GymWithSubscription
-  subPlans: SubscriptionPlan[]
+  gyms: GymWithBilling[]
+  subPlans: SubscriptionPlanPrice[]
+  initialGymId: string | null
+  open: boolean
+  onClose: () => void
 }) {
   const router = useRouter()
-  const [showForm, setShowForm] = useState(false)
-  const [showTx, setShowTx] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const [gymId, setGymId] = useState(initialGymId ?? '')
+  const [method, setMethod] = useState<Method>('CASH')
+  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7))
 
-  const [method, setMethod] = useState<'CASH' | 'CARD' | 'TRANSFER' | 'OTHER'>('CASH')
-  const todayYM = new Date().toISOString().slice(0, 7)
-  const [selectedMonth, setSelectedMonth] = useState(todayYM)
-
-  const matchedPlan = gym.subscription
-    ? subPlans.find(p => p.key.toUpperCase() === gym.subscription!.subscriptionPlan?.toUpperCase())
-    : null
-  const planAmount = matchedPlan ? parseFloat(String(matchedPlan.price)) : null
-  const planCurrency = matchedPlan?.currency ?? 'USD'
-
-  function monthToNote(ym: string) {
-    const [y, m] = ym.split('-')
-    const name = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('es-AR', { month: 'long' })
-    return `Pago mensual ${name} ${y}`
-  }
+  const gym = gyms.find(g => g.id === gymId)
+  const price = gym ? planPrice(subPlans, gym.subscription?.subscriptionPlan ?? gym.subscriptionPlan) : null
 
   function handlePay(e: React.FormEvent) {
     e.preventDefault()
-        if (!planAmount || planAmount <= 0) {
+    if (!gym) return
+    if (!price) {
       toast.error('No se puede registrar un pago de $0. Revisá el precio del plan de suscripción.')
       return
     }
-
     startTransition(async () => {
       const res = await registerSubscriptionPaymentAction(gym.id, {
-        amount: planAmount,
-        currency: planCurrency as 'USD' | 'ARS' | 'EUR',
+        amount: price.amount,
+        currency: price.currency as 'USD' | 'ARS' | 'EUR',
         method,
-        notes: monthToNote(selectedMonth),
+        notes: monthToNote(month),
       })
       if (res.error) {
         toast.error(res.error)
       } else {
         toast.success('Pago registrado y suscripción renovada.')
-        setShowForm(false)
+        onClose()
         router.refresh()
       }
     })
   }
 
   return (
-    <div className={`rounded-2xl border bg-white overflow-hidden ${gym.subscription?.subscriptionStatus === 'SUSPENDED' ? 'border-red-200' : gym.subscription?.subscriptionStatus === 'GRACE' ? 'border-amber-200' : 'border-zinc-200'}`}>
-      {/* Gym header row */}
-      <div className="flex items-center justify-between px-5 pt-4 pb-3 gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="h-9 w-9 rounded-xl bg-[#fffb00] flex items-center justify-center shrink-0 overflow-hidden">
-            {gym.logoUrl
-              ? <img src={gym.logoUrl} alt={gym.name} className="h-full w-full object-cover" />
-              : <span className="text-xs font-black text-black">{gym.name.slice(0, 2).toUpperCase()}</span>
-            }
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="admin-surface sm:max-w-md" showCloseButton>
+        <DialogTitle className="text-lg font-extrabold">Registrar pago</DialogTitle>
+        <DialogDescription>Renueva la suscripción del gimnasio por el período elegido.</DialogDescription>
+        <form onSubmit={handlePay} className="mt-2 flex flex-col gap-4">
+          <label className="block">
+            <span className={field.label}>Gimnasio</span>
+            <select value={gymId} onChange={e => setGymId(e.target.value)} disabled={isPending} className={field.input} required>
+              <option value="" disabled>Elegí un gimnasio</option>
+              {gyms.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+            </select>
+          </label>
+          <div className="flex items-center justify-between rounded-[10px] border border-adm-line bg-adm-subtle px-4 py-3">
+            <span className="text-[13px] font-semibold text-adm-muted">Monto a cobrar</span>
+            <span className="font-admin-mono text-base font-bold">{gym ? fmtMoney(price, { decimals: true }) : '—'}</span>
           </div>
-          <div className="min-w-0">
-            <p className="font-bold text-sm truncate">{gym.name}</p>
-            <p className="text-xs text-zinc-400">{gym.slug}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {gym.subscription && <StatusBadge status={gym.subscription.subscriptionStatus} />}
-          {gym.subscription?.subscriptionExpiresAt && (
-            <span className="text-xs text-zinc-400 hidden sm:block">
-              Vence {fmt(gym.subscription.subscriptionExpiresAt)}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Stats + action row */}
-      <div className="flex items-center justify-between px-5 pb-4 gap-3 border-t border-zinc-50">
-        <div className="flex items-center gap-4 pt-3">
-          {/* Plan price */}
-          {planAmount && (
-            <div className="flex flex-col">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Plan</span>
-              <span className="text-sm font-bold text-zinc-700">
-                {planCurrency} {planAmount.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-              </span>
-            </div>
-          )}
-          {/* Daily revenue */}
-          <div className="flex flex-col">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Hoy</span>
-            <span className="text-sm font-bold text-zinc-700">
-              {gym.dailyRevenue
-                ? `${gym.dailyRevenue.currency} ${gym.dailyRevenue.amount.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
-                : <span className="text-zinc-300">—</span>
-              }
-            </span>
-          </div>
-          {/* Monthly revenue */}
-          <div className="flex flex-col">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Este mes</span>
-            <span className="text-sm font-bold text-[#0e7a70]">
-              {gym.monthlyRevenue
-                ? `${gym.monthlyRevenue.currency} ${gym.monthlyRevenue.amount.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
-                : <span className="text-zinc-300">—</span>
-              }
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => setShowTx(v => !v)}
-            className="flex items-center gap-1.5 rounded-xl border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:border-zinc-400 transition-all"
-          >
-            <Receipt className="h-3.5 w-3.5" />
-            {gym.billing.length}
-            {showTx ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowForm(v => !v)}
-            className="flex items-center gap-1.5 rounded-xl bg-black px-3 py-1.5 text-xs font-bold text-white hover:bg-zinc-800 transition-all"
-          >
-            <CreditCard className="h-3.5 w-3.5" />
-            Registrar pago
-            {showForm ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          </button>
-        </div>
-      </div>
-
-      {/* Transactions list */}
-      {showTx && (
-        <div className="border-t border-zinc-100 bg-zinc-50/50">
-          {gym.billing.length === 0 ? (
-            <p className="px-5 py-4 text-xs text-zinc-400">Sin transacciones</p>
-          ) : (
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-zinc-100">
-                  <th className="text-left px-5 py-2 font-bold uppercase tracking-widest text-zinc-400">Fecha</th>
-                  <th className="text-left px-5 py-2 font-bold uppercase tracking-widest text-zinc-400">Monto</th>
-                  <th className="text-left px-5 py-2 font-bold uppercase tracking-widest text-zinc-400 hidden sm:table-cell">Método</th>
-                  <th className="text-left px-5 py-2 font-bold uppercase tracking-widest text-zinc-400 hidden md:table-cell">Nota</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100">
-                {[...gym.billing].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map(tx => (
-                  <tr key={tx.id} className="hover:bg-zinc-100/50">
-                    <td className="px-5 py-2.5 text-zinc-500 whitespace-nowrap">{fmtDate(tx.createdAt)}</td>
-                    <td className="px-5 py-2.5 font-bold text-zinc-800 whitespace-nowrap">
-                      {tx.currency} {parseFloat(tx.amount).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-5 py-2.5 text-zinc-500 hidden sm:table-cell">
-                      {tx.method ? (METHOD_LABELS[tx.method] ?? tx.method) : '—'}
-                    </td>
-                    <td className="px-5 py-2.5 text-zinc-400 hidden md:table-cell max-w-[200px] truncate">
-                      {tx.notes ?? '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
-
-      {/* Payment form */}
-      {showForm && (
-        <form onSubmit={handlePay} className="border-t border-zinc-100 px-5 py-4 space-y-4 bg-zinc-50/50">
-          {/* Amount */}
-          <div className="rounded-xl bg-white border border-zinc-200 px-4 py-3 flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Monto a cobrar</span>
-            <span className="text-sm font-bold">
-              {planAmount != null
-                ? `${planCurrency} ${planAmount.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
-                : <span className="text-zinc-400">—</span>
-              }
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            {/* Method */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Método</label>
-              <select
-                value={method}
-                onChange={e => setMethod(e.target.value as typeof method)}
-                disabled={isPending}
-                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black transition-all disabled:opacity-50"
-              >
-                {METHODS.map(m => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Month */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Mes</label>
-              <input
-                type="month"
-                value={selectedMonth}
-                onChange={e => setSelectedMonth(e.target.value)}
-                disabled={isPending}
-                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black transition-all disabled:opacity-50"
-              />
+          <div>
+            <span className={field.label} id="pd-method">Método de pago</span>
+            <div role="radiogroup" aria-labelledby="pd-method" className="flex flex-wrap gap-2">
+              {METHODS.map(m => (
+                <button
+                  key={m.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={method === m.value}
+                  onClick={() => setMethod(m.value)}
+                  disabled={isPending}
+                  className={cn(
+                    'min-h-10 rounded-lg border px-3.5 text-[13px] font-semibold transition-colors',
+                    method === m.value ? 'border-adm-ink bg-adm-ink text-adm-surface' : 'border-adm-line bg-adm-surface hover:border-adm-ink',
+                  )}
+                >
+                  {m.label}
+                </button>
+              ))}
             </div>
           </div>
-
-          <p className="text-xs text-zinc-400">{monthToNote(selectedMonth)}</p>
-
-
+          <label className="block">
+            <span className={field.label}>Mes</span>
+            <input type="month" value={month} onChange={e => setMonth(e.target.value)} disabled={isPending} className={field.input} />
+            <span className={field.hint}>{monthToNote(month)}</span>
+          </label>
           <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={isPending}
-              className="rounded-xl bg-black px-5 py-2 text-sm font-bold text-white hover:bg-zinc-800 disabled:opacity-50 transition-all"
-            >
+            <button type="submit" disabled={isPending || !gym} className={cn(btn.dark, 'min-h-11 flex-1')}>
               {isPending ? 'Registrando…' : 'Confirmar pago'}
             </button>
-            <button
-              type="button"
-              onClick={() => setShowForm(false)}
-              className="rounded-xl border border-zinc-200 px-4 py-2 text-sm font-semibold text-zinc-600 hover:border-zinc-300 transition-all"
-            >
-              Cancelar
-            </button>
+            <button type="button" onClick={onClose} className={cn(btn.line, 'min-h-11')}>Cancelar</button>
           </div>
         </form>
-      )}
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
 export function IncomeClient({
   gyms,
   subPlans,
+  stats,
+  monthName,
+  prevMonthName,
 }: {
-  gyms: GymWithSubscription[]
-  subPlans: SubscriptionPlan[]
+  gyms: GymWithBilling[]
+  subPlans: SubscriptionPlanPrice[]
+  stats: Stats
+  monthName: string
+  prevMonthName: string
 }) {
-  const [filter, setFilter] = useState<'all' | 'ACTIVE' | 'GRACE' | 'SUSPENDED'>('all')
+  const [payFor, setPayFor] = useState<{ open: boolean; gymId: string | null; key: number }>({ open: false, gymId: null, key: 0 })
+  const openPay = (gymId: string | null) => setPayFor(p => ({ open: true, gymId, key: p.key + 1 }))
 
-  const filtered = filter === 'all'
-    ? gyms
-    : gyms.filter(g => g.subscription?.subscriptionStatus === filter)
+  const [period, setPeriod] = useState<Period>('month')
+  const [query, setQuery] = useState('')
+  const [page, setPage] = useState(1)
 
-  const FILTERS = [
-    { value: 'all', label: 'Todos' },
-    { value: 'ACTIVE', label: 'Activos' },
-    { value: 'GRACE', label: 'Prórroga' },
-    { value: 'SUSPENDED', label: 'Suspendidos' },
-  ] as const
+  const planLabel = (key: string | undefined | null) =>
+    subPlans.find(p => p.key.toUpperCase() === key?.toUpperCase())?.label ?? key ?? '—'
+
+  // Upcoming / overdue collections
+  const due = useMemo(() => {
+    return gyms
+      .filter(g => g.subscription?.subscriptionExpiresAt)
+      .map(g => {
+        const s = g.subscription!
+        const days = daysUntil(s.subscriptionExpiresAt!)
+        const late = s.subscriptionStatus !== 'ACTIVE'
+        const tone: Tone = late ? 'bad' : days <= 7 ? 'warn' : 'neutral'
+        const when = late
+          ? s.subscriptionStatus === 'GRACE' ? 'Vencido · prórroga' : 'Suspendido'
+          : days === 0 ? 'Vence hoy' : `En ${days} día${days !== 1 ? 's' : ''}`
+        return { gym: g, days, late, tone, when, price: planPrice(subPlans, s.subscriptionPlan) }
+      })
+      .filter(d => d.late || d.days <= 30)
+      .sort((a, b) => (a.late === b.late ? a.days - b.days : a.late ? -1 : 1))
+  }, [gyms, subPlans])
+
+  // All transactions, flattened
+  const transactions = useMemo(() => {
+    return gyms
+      .flatMap(g => g.billing.map(b => ({ ...b, gym: g })))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  }, [gyms])
+
+  const now = new Date()
+  const range: Record<Period, [Date, Date] | null> = {
+    month: [new Date(now.getFullYear(), now.getMonth(), 1), now],
+    prev: [new Date(now.getFullYear(), now.getMonth() - 1, 1), new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999)],
+    all: null,
+  }
+  const r = range[period]
+  const q = query.trim().toLowerCase()
+  const filteredTx = transactions.filter(t => {
+    if (r) {
+      const d = new Date(t.createdAt)
+      if (d < r[0] || d > r[1]) return false
+    }
+    return !q || t.gym.name.toLowerCase().includes(q) || (t.notes ?? '').toLowerCase().includes(q)
+  })
+  const totalPages = Math.max(1, Math.ceil(filteredTx.length / TX_PAGE))
+  const currentPage = Math.min(page, totalPages)
+  const pageTx = filteredTx.slice((currentPage - 1) * TX_PAGE, currentPage * TX_PAGE)
+
+  // Revenue by method for the selected period (deduped per gym)
+  const byMethod = (() => {
+    const totals: Record<string, Record<string, number>> = {}
+    for (const g of gyms) {
+      const recs = dedupeBilling(g.billing.filter(b => {
+        if (!r) return true
+        const d = new Date(b.createdAt)
+        return d >= r[0] && d <= r[1]
+      }))
+      for (const b of recs) {
+        const m = b.method ?? 'OTHER'
+        totals[b.currency] ??= {}
+        totals[b.currency][m] = (totals[b.currency][m] ?? 0) + (parseFloat(b.amount) || 0)
+      }
+    }
+    const [currency, perMethod] = Object.entries(totals).sort(
+      (a, b) => Object.values(b[1]).reduce((x, y) => x + y, 0) - Object.values(a[1]).reduce((x, y) => x + y, 0),
+    )[0] ?? ['', {}]
+    const total = Object.values(perMethod).reduce((x, y) => x + y, 0)
+    return {
+      currency,
+      total,
+      rows: Object.entries(perMethod)
+        .map(([m, amount]) => ({ method: m, amount, pct: total ? (amount / total) * 100 : 0 }))
+        .sort((a, b) => b.amount - a.amount),
+    }
+  })()
+
+  const periodTotal = (() => {
+    const byCur: Record<string, number> = {}
+    for (const t of filteredTx) byCur[t.currency] = (byCur[t.currency] ?? 0) + (parseFloat(t.amount) || 0)
+    return Object.entries(byCur).sort((a, b) => b[1] - a[1])[0]
+  })()
+
+  function exportCsv() {
+    const header = ['Fecha', 'Gimnasio', 'Plan', 'Periodo desde', 'Periodo hasta', 'Metodo', 'Nota', 'Moneda', 'Monto']
+    const esc = (v: string) => `"${v.replace(/"/g, '""')}"`
+    const lines = filteredTx.map(t => [
+      fmtDate(t.createdAt),
+      t.gym.name,
+      planLabel(t.gym.subscription?.subscriptionPlan ?? t.gym.subscriptionPlan),
+      t.periodStart ? fmtDate(t.periodStart) : '',
+      t.periodEnd ? fmtDate(t.periodEnd) : '',
+      t.method ? (METHOD_LABELS[t.method] ?? t.method) : '',
+      t.notes ?? '',
+      t.currency,
+      String(parseFloat(t.amount)),
+    ].map(esc).join(','))
+    const blob = new Blob(['﻿' + [header.map(esc).join(','), ...lines].join('\n')], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `ingresos-${period}-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const PERIODS: { key: Period; label: string }[] = [
+    { key: 'month', label: 'Este mes' },
+    { key: 'prev', label: 'Mes anterior' },
+    { key: 'all', label: 'Todo' },
+  ]
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h2 className="text-sm font-bold uppercase tracking-widest text-zinc-400">Gimnasios</h2>
-        <div className="flex gap-1">
-          {FILTERS.map(f => (
-            <button
-              key={f.value}
-              type="button"
-              onClick={() => setFilter(f.value)}
-              className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-                filter === f.value
-                  ? 'border-black bg-black text-white'
-                  : 'border-zinc-200 text-zinc-500 hover:border-zinc-300'
-              }`}
-            >
-              {f.label}
+    <>
+      <PageHeader
+        eyebrow="Control de suscripciones y pagos de gimnasios"
+        title="Ingresos"
+        actions={
+          <>
+            <button type="button" onClick={exportCsv} disabled={filteredTx.length === 0} className={cn(btn.line, 'min-h-11 text-sm')}>
+              <Download className="size-4" aria-hidden="true" />
+              Exportar CSV
             </button>
-          ))}
+            <button type="button" onClick={() => openPay(null)} className={btn.primary}>
+              <Plus className="size-4" strokeWidth={2.4} aria-hidden="true" />
+              Registrar pago
+            </button>
+          </>
+        }
+      />
+
+      <section aria-label="Indicadores" className="flex flex-wrap gap-3">
+        <div className="flex-[1.4_1_260px] rounded-2xl bg-adm-night p-5 text-white">
+          <div className="text-[13px] font-semibold capitalize text-[#a3a39d]">Cobrado en {monthName}</div>
+          <div className="mt-2.5 font-admin-mono text-[38px] font-bold leading-tight tracking-tight">
+            {stats.monthly && <span className="mr-1.5 text-base font-medium text-[#a3a39d]">{stats.monthly.currency}</span>}
+            {stats.monthly ? fmtAmount(stats.monthly.amount) : '—'}
+          </div>
+          {stats.monthDelta !== null && (
+            <div className={cn('mt-2 text-[13px] font-semibold', stats.monthDelta >= 0 ? 'text-adm-brand' : 'text-[#ff8a80]')}>
+              {stats.monthDelta >= 0 ? '+' : ''}{stats.monthDelta.toLocaleString('es-AR', { maximumFractionDigits: 1 })}% vs. mismo período de {prevMonthName}
+            </div>
+          )}
         </div>
+        <Stat
+          label="Cobrado hoy"
+          unit={stats.daily?.currency}
+          value={stats.daily ? fmtAmount(stats.daily.amount) : '—'}
+          hint={`${stats.dailyCount} pago${stats.dailyCount !== 1 ? 's' : ''}`}
+        />
+        <Stat
+          label="Por cobrar · 7 días"
+          unit={stats.dueSoon?.currency}
+          value={stats.dueSoon ? fmtAmount(stats.dueSoon.amount) : '—'}
+          hint={`${stats.dueSoonCount} gimnasio${stats.dueSoonCount !== 1 ? 's' : ''}`}
+          hintTone={stats.dueSoonCount > 0 ? 'warn' : 'neutral'}
+        />
+        <Stat
+          label="Vencido"
+          unit={stats.overdue?.currency}
+          value={stats.overdue ? fmtAmount(stats.overdue.amount) : '—'}
+          hint={`${stats.overdueCount} en prórroga o suspendido${stats.overdueCount !== 1 ? 's' : ''}`}
+          hintTone={stats.overdueCount > 0 ? 'bad' : 'neutral'}
+        />
+      </section>
+
+      <div className="flex flex-wrap gap-3">
+        <Panel
+          title="Próximos cobros"
+          id="due-h"
+          action={<span className="text-[13px] text-adm-muted">Próximos 30 días y vencidos</span>}
+          className="min-w-0 flex-[1.6_1_420px]"
+        >
+          {due.length === 0 ? (
+            <EmptyState>No hay cobros pendientes en los próximos 30 días.</EmptyState>
+          ) : (
+            <ul className="max-h-[420px] overflow-y-auto">
+              {due.map(d => (
+                <li key={d.gym.id} className="flex flex-wrap items-center gap-3 border-t border-adm-line-soft px-5 py-3 first:border-t-0">
+                  <GymMark name={d.gym.name} logoUrl={d.gym.logoUrl} />
+                  <div className="min-w-0 flex-[1_1_160px]">
+                    <p className="truncate text-sm font-bold">{d.gym.name}</p>
+                    <p className="text-xs text-adm-muted">
+                      {planLabel(d.gym.subscription?.subscriptionPlan)} · vence {fmtShort(d.gym.subscription!.subscriptionExpiresAt!)}
+                    </p>
+                  </div>
+                  <Pill tone={d.tone}>{d.when}</Pill>
+                  <span className="min-w-24 text-right font-admin-mono text-sm font-bold">{fmtMoney(d.price)}</span>
+                  <button type="button" onClick={() => openPay(d.gym.id)} className={btn.dark}>Registrar</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+
+        <Panel
+          title={`Por método · ${PERIODS.find(p => p.key === period)!.label.toLowerCase()}`}
+          id="met-h"
+          className="min-w-0 flex-[1_1_280px]"
+          bodyClassName="flex flex-col gap-4 p-5"
+        >
+          {byMethod.rows.length === 0 ? (
+            <p className="text-sm text-adm-muted">Sin pagos en el período.</p>
+          ) : (
+            byMethod.rows.map(m => (
+              <div key={m.method} className="flex flex-col gap-1.5">
+                <div className="flex justify-between gap-2 text-[13px]">
+                  <span className="font-semibold">{METHOD_LABELS[m.method] ?? m.method}</span>
+                  <span className="font-admin-mono text-adm-muted">{fmtAmount(m.amount)} · {Math.round(m.pct)}%</span>
+                </div>
+                <Meter value={m.pct} className="h-2.5" />
+              </div>
+            ))
+          )}
+          {byMethod.total > 0 && (
+            <p className="mt-auto border-t border-adm-line-soft pt-3 text-[13px] text-adm-muted">
+              Total <strong className="font-admin-mono text-adm-ink">{byMethod.currency} {fmtAmount(byMethod.total)}</strong>
+            </p>
+          )}
+        </Panel>
       </div>
 
-      {filtered.length === 0 ? (
-        <p className="text-sm text-zinc-400 py-8 text-center">Sin resultados</p>
-      ) : (
-        <div className="space-y-3">
-          {filtered.map(g => (
-            <GymPayRow key={g.id} gym={g} subPlans={subPlans} />
-          ))}
+      <Panel
+        title="Transacciones"
+        id="tx-h"
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <div role="group" aria-label="Período" className="flex flex-wrap gap-1.5">
+              {PERIODS.map(p => (
+                <button key={p.key} type="button" aria-pressed={period === p.key} onClick={() => { setPeriod(p.key); setPage(1) }} className={chip(period === p.key)}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <label className="relative flex w-60 max-w-full items-center">
+              <span className="sr-only">Buscar transacción</span>
+              <Search className="pointer-events-none absolute left-3 size-4 text-adm-muted" aria-hidden="true" />
+              <input
+                type="search"
+                value={query}
+                onChange={e => { setQuery(e.target.value); setPage(1) }}
+                placeholder="Gimnasio o nota"
+                className={cn(field.input, 'min-h-10 pl-9')}
+              />
+            </label>
+          </div>
+        }
+      >
+        {pageTx.length === 0 ? (
+          <EmptyState>Sin transacciones en el período.</EmptyState>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[820px] border-collapse text-sm">
+              <thead>
+                <tr>
+                  <th scope="col" className={cn(th, 'pl-5')}>Fecha</th>
+                  <th scope="col" className={th}>Gimnasio</th>
+                  <th scope="col" className={th}>Plan</th>
+                  <th scope="col" className={th}>Período</th>
+                  <th scope="col" className={th}>Método</th>
+                  <th scope="col" className={th}>Nota</th>
+                  <th scope="col" className={cn(th, 'pr-5 text-right')}>Monto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageTx.map(t => (
+                  <tr key={t.id} className="hover:bg-adm-subtle">
+                    <td className={cn(td, 'pl-5 font-admin-mono text-[13px]')}>{fmtDate(t.createdAt)}</td>
+                    <td className={cn(td, 'font-bold')}>{t.gym.name}</td>
+                    <td className={td}>{planLabel(t.gym.subscription?.subscriptionPlan ?? t.gym.subscriptionPlan)}</td>
+                    <td className={cn(td, 'text-[13px] text-adm-muted')}>
+                      {t.periodStart && t.periodEnd ? `${fmtShort(t.periodStart)} → ${fmtShort(t.periodEnd)}` : '—'}
+                    </td>
+                    <td className={td}><Pill>{t.method ? (METHOD_LABELS[t.method] ?? t.method) : '—'}</Pill></td>
+                    <td className={cn(td, 'max-w-[220px] truncate text-adm-muted')}>{t.notes ?? '—'}</td>
+                    <td className={cn(td, 'pr-5 text-right font-admin-mono font-bold')}>{fmtMoney({ amount: parseFloat(t.amount), currency: t.currency }, { decimals: true })}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-adm-line-soft px-5 py-3.5 text-[13px] text-adm-muted">
+          <span>
+            {pageTx.length} de {filteredTx.length} transacciones
+            {periodTotal && <> · Total <strong className="font-admin-mono text-adm-ink">{periodTotal[0]} {fmtAmount(periodTotal[1])}</strong></>}
+          </span>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1.5">
+              <button type="button" onClick={() => setPage(currentPage - 1)} disabled={currentPage <= 1} className={btn.line}>
+                <ChevronLeft className="size-4" aria-hidden="true" /> Anterior
+              </button>
+              <span className="px-2 font-admin-mono">{currentPage} / {totalPages}</span>
+              <button type="button" onClick={() => setPage(currentPage + 1)} disabled={currentPage >= totalPages} className={btn.line}>
+                Siguiente <ChevronRight className="size-4" aria-hidden="true" />
+              </button>
+            </div>
+          )}
         </div>
-      )}
-    </div>
+      </Panel>
+
+      <PaymentDialog
+        key={payFor.key}
+        gyms={gyms}
+        subPlans={subPlans}
+        initialGymId={payFor.gymId}
+        open={payFor.open}
+        onClose={() => setPayFor(p => ({ ...p, open: false }))}
+      />
+    </>
   )
 }

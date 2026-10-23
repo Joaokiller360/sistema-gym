@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from 'react'
 import { Mail, Check } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { btn, field } from '@/components/admin/ui'
 import { resendGymWelcomeEmailAction } from '../actions'
 
 export function ResendGymWelcomeButton({ gymId }: { gymId: string }) {
@@ -24,30 +26,18 @@ export function ResendGymWelcomeButton({ gymId }: { gymId: string }) {
   }
 
   return (
-    <div className="space-y-1">
+    <div className="flex flex-col">
       <button
         type="button"
         onClick={handleClick}
         disabled={isPending || sent}
-        className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-all disabled:opacity-60 ${
-          sent
-            ? 'border-[#1fad9d]/30 bg-[#1fad9d]/8 text-[#1fad9d]'
-            : 'border-zinc-200 text-zinc-600 hover:border-zinc-300'
-        }`}
+        aria-live="polite"
+        className={cn(btn.line, 'min-h-11 text-sm', sent && 'border-adm-ok-line bg-adm-ok-bg text-adm-ok-fg disabled:opacity-100')}
       >
-        {sent ? (
-          <>
-            <Check className="h-4 w-4" />
-            Correo enviado
-          </>
-        ) : (
-          <>
-            <Mail className="h-4 w-4" />
-            {isPending ? 'Enviando…' : 'Reenviar correo de bienvenida'}
-          </>
-        )}
+        {sent ? <Check className="size-4" aria-hidden="true" /> : <Mail className="size-4" aria-hidden="true" />}
+        {sent ? 'Correo enviado' : isPending ? 'Enviando…' : 'Reenviar bienvenida'}
       </button>
-      {error && <p className="text-xs text-[#ff0000] font-medium">{error}</p>}
+      {error && <p className={field.error}>{error}</p>}
     </div>
   )
 }

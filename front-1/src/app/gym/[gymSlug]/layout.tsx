@@ -72,12 +72,12 @@ export default async function GymLayout({ children, params }: Props) {
     <>
       {/* Full-width top banner */}
       {isTrial && (
-        <div className="fixed top-0 left-0 right-0 z-50 h-8 bg-gradient-to-r from-amber-500 to-orange-500 flex items-center justify-center gap-1.5 px-4">
-          <span className="text-xs font-semibold text-white/90 tracking-wide">Prueba gratuita</span>
+        <div className="fixed inset-x-0 top-0 z-50 flex h-8 items-center justify-center gap-1.5 border-b border-adm-warn-line bg-adm-warn-bg px-4 font-admin text-adm-warn-fg">
+          <span className="text-xs font-semibold tracking-wide">Prueba gratuita</span>
           {trialDaysLeft !== null && (
             <>
-              <span className="text-white/50 text-xs">·</span>
-              <span className="text-xs font-bold text-white">
+              <span className="text-xs opacity-60">·</span>
+              <span className="font-admin-mono text-xs font-bold">
                 {trialDaysLeft === 0 ? 'último día' : `${trialDaysLeft} día${trialDaysLeft !== 1 ? 's' : ''} restante${trialDaysLeft !== 1 ? 's' : ''}`}
               </span>
             </>
@@ -85,10 +85,10 @@ export default async function GymLayout({ children, params }: Props) {
         </div>
       )}
       {!isTrial && (gym.demoEnabled ?? false) && (
-        <div className="fixed top-0 left-0 right-0 z-50 h-8 bg-gradient-to-r from-violet-600 to-indigo-600 flex items-center justify-center gap-1.5 px-4">
-          <span className="text-xs font-semibold text-white/90 tracking-wide">Demo habilitada</span>
-          <span className="text-white/50 text-xs">·</span>
-          <span className="text-xs text-white/75">Datos de ejemplo activos</span>
+        <div className="fixed inset-x-0 top-0 z-50 flex h-8 items-center justify-center gap-1.5 border-b border-adm-info-line bg-adm-info-bg px-4 font-admin text-adm-info-fg">
+          <span className="text-xs font-semibold tracking-wide">Demo habilitada</span>
+          <span className="text-xs opacity-60">·</span>
+          <span className="text-xs">Datos de ejemplo activos</span>
         </div>
       )}
 

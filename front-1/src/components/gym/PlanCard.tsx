@@ -64,7 +64,11 @@ export function PlanCard({ plan, gymSlug, onToggleActive, onDelete }: PlanCardPr
                 <span className="text-3xl font-black tracking-tight">
                   {plan.price.toLocaleString('es-AR', { style: 'currency', currency: plan.currency })}
                 </span>
-                <span className="text-sm text-muted-foreground ml-1">/ {plan.durationDays} días</span>
+                <span className="text-sm text-muted-foreground ml-1">
+                  {plan.visitLimit != null
+                    ? `/ ${plan.visitLimit} días · vigencia ${plan.durationDays} días`
+                    : `/ ${plan.durationDays} días`}
+                </span>
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0 mt-1">
@@ -104,9 +108,11 @@ export function PlanCard({ plan, gymSlug, onToggleActive, onDelete }: PlanCardPr
         <div className="p-5 space-y-3">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Zap className="h-4 w-4 text-[#1fad9d]" />
-            {plan.daysPerWeek === null
-              ? 'Acceso ilimitado'
-              : `${plan.daysPerWeek} veces por semana`}
+            {plan.visitLimit != null
+              ? `${plan.visitLimit} días de entrenamiento`
+              : plan.daysPerWeek === null
+                ? 'Acceso ilimitado'
+                : `${plan.daysPerWeek} veces por semana`}
           </div>
 
           {plan.storeEnabled && (

@@ -5,9 +5,11 @@ import { Eye, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { updateAdminProfileAction, changeAdminPasswordAction } from './actions'
 import { createHandlers } from '@/lib/input-validation'
+import { cn } from '@/lib/utils'
+import { btn, field } from '@/components/admin/ui'
 
-const inputClass = 'w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all disabled:opacity-50'
-const labelClass = 'text-xs font-bold uppercase tracking-widest text-zinc-400 block mb-1.5'
+const inputClass = field.input
+const labelClass = field.label
 
 export function ProfileInfoForm({ defaultName, defaultEmail }: { defaultName: string; defaultEmail: string }) {
   const [name, setName] = useState(defaultName)
@@ -30,9 +32,10 @@ export function ProfileInfoForm({ defaultName, defaultEmail }: { defaultName: st
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className={labelClass}>Nombre</label>
+        <label htmlFor="pf-name" className={labelClass}>Nombre</label>
         <input
           type="text"
+          id="pf-name"
           value={name}
           onChange={e => setName(e.target.value)}
           required
@@ -42,9 +45,10 @@ export function ProfileInfoForm({ defaultName, defaultEmail }: { defaultName: st
         />
       </div>
       <div>
-        <label className={labelClass}>Correo electrónico</label>
+        <label htmlFor="pf-email" className={labelClass}>Correo electrónico</label>
         <input
           type="email"
+          id="pf-email"
           value={email}
           onChange={e => setEmail(e.target.value)}
           required
@@ -57,7 +61,7 @@ export function ProfileInfoForm({ defaultName, defaultEmail }: { defaultName: st
         <button
           type="submit"
           disabled={loading}
-          className="rounded-xl bg-black px-6 py-2.5 text-sm font-bold text-white hover:bg-zinc-800 disabled:opacity-50 transition-all"
+          className={cn(btn.dark, 'min-h-11 px-5 text-sm')}
         >
           {loading ? 'Guardando…' : 'Guardar cambios'}
         </button>
@@ -99,10 +103,11 @@ export function AdminChangePasswordForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className={labelClass}>Contraseña actual</label>
+        <label htmlFor="pf-current" className={labelClass}>Contraseña actual</label>
         <div className="relative">
           <input
             type={showCurrent ? 'text' : 'password'}
+            id="pf-current"
             value={current}
             onChange={e => setCurrent(e.target.value)}
             required
@@ -111,16 +116,17 @@ export function AdminChangePasswordForm() {
             className={inputClass + ' pr-11'}
             {...createHandlers('password')}
           />
-          <button type="button" onClick={() => setShowCurrent(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700">
+          <button type="button" onClick={() => setShowCurrent(v => !v)} aria-label={showCurrent ? 'Ocultar contraseña' : 'Mostrar contraseña'} className="absolute right-1 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-lg text-adm-muted hover:text-adm-ink">
             {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
       </div>
       <div>
-        <label className={labelClass}>Nueva contraseña</label>
+        <label htmlFor="pf-new" className={labelClass}>Nueva contraseña</label>
         <div className="relative">
           <input
             type={showNext ? 'text' : 'password'}
+            id="pf-new"
             value={next}
             onChange={e => setNext(e.target.value)}
             required
@@ -129,15 +135,16 @@ export function AdminChangePasswordForm() {
             className={inputClass + ' pr-11'}
             {...createHandlers('password')}
           />
-          <button type="button" onClick={() => setShowNext(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700">
+          <button type="button" onClick={() => setShowNext(v => !v)} aria-label={showNext ? 'Ocultar contraseña' : 'Mostrar contraseña'} className="absolute right-1 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-lg text-adm-muted hover:text-adm-ink">
             {showNext ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
       </div>
       <div>
-        <label className={labelClass}>Confirmar contraseña</label>
+        <label htmlFor="pf-confirm" className={labelClass}>Confirmar contraseña</label>
         <input
           type="password"
+          id="pf-confirm"
           value={confirm}
           onChange={e => setConfirm(e.target.value)}
           required
@@ -147,13 +154,13 @@ export function AdminChangePasswordForm() {
           {...createHandlers('password')}
         />
       </div>
-      {error && <p className="text-xs text-[#ff0000] font-medium">{error}</p>}
-      {success && <p className="text-xs text-[#1fad9d] font-medium">Contraseña actualizada correctamente</p>}
+      {error && <p role="alert" className={field.error}>{error}</p>}
+      {success && <p role="status" className="text-xs font-semibold text-adm-ok-fg">Contraseña actualizada correctamente</p>}
       <div className="pt-1">
         <button
           type="submit"
           disabled={loading}
-          className="rounded-xl bg-black px-6 py-2.5 text-sm font-bold text-white hover:bg-zinc-800 disabled:opacity-50 transition-all"
+          className={cn(btn.dark, 'min-h-11 px-5 text-sm')}
         >
           {loading ? 'Guardando…' : 'Cambiar contraseña'}
         </button>

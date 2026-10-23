@@ -1,9 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState, useTransition, type RefObject } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { useTransition } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
   Users,
@@ -20,17 +19,19 @@ import {
   LogOut,
   Menu,
   X,
-  Dumbbell,
   ChevronLeft,
   Moon,
   Sun,
   ShoppingCart,
   LifeBuoy,
+  QrCode,
+  Search,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logoutAction } from '@/lib/logout'
 import { useTheme } from '@/components/providers/ThemeProvider'
+import { GymMark, initials } from '@/components/admin/ui'
 
 type NavItem = { label: string; icon: LucideIcon; path: string }
 type NavGroup = { label: string; items: NavItem[]; storeItem?: NavItem }
@@ -48,6 +49,7 @@ const BASE_NAV_GROUPS: NavGroup[] = [
   {
     label: 'Operaciones',
     items: [
+      { label: 'Escanear QR', icon: QrCode, path: 'attendance/scan' },
       { label: 'Asistencia', icon: CheckSquare, path: 'attendance' },
       { label: 'Entrenadores', icon: UserCheck, path: 'trainers' },
       { label: 'Clases', icon: Calendar, path: 'classes' },
@@ -66,6 +68,14 @@ const BASE_NAV_GROUPS: NavGroup[] = [
     ],
   },
 ]
+
+const ROLE_LABEL: Record<string, string> = {
+  SUPER_ADMIN: 'Super admin',
+  GYM_OWNER: 'Dueño',
+  GYM_ADMIN: 'Administrador',
+  TRAINER: 'Entrenador',
+  RECEPTIONIST: 'Recepción',
+}
 
 interface GymSidebarProps {
   gymSlug: string
@@ -93,9 +103,7 @@ function NavContent({
   isPending,
   onLogout,
   storeEnabled,
-  isTrial,
-  trialDaysLeft,
-  gymDemoEnabled,
+  searchRef,
 }: {
   gymSlug: string
   gymName: string
@@ -108,145 +116,162 @@ function NavContent({
   isPending: boolean
   onLogout: () => void
   storeEnabled?: boolean
-  isTrial?: boolean
-  trialDaysLeft?: number | null
-  gymDemoEnabled?: boolean
+  searchRef?: RefObject<HTMLInputElement | null>
 }) {
+  const { theme, toggle } = useTheme()
+  const router = useRouter()
   const base = `/gym/${gymSlug}`
-  const emailInitial = userEmail?.[0]?.toUpperCase() ?? '?'
+
+  function handleSearch(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const q = String(new FormData(e.currentTarget).get('q') ?? '').trim()
+    router.push(q ? `${base}/members?q=${encodeURIComponent(q)}` : `${base}/members`)
+    onClose?.()
+  }
 
   return (
-    <div className="flex flex-col h-full bg-[#080808] border-r border-white/[0.06]">
-      {/* Header */}
-      <div className="px-4 py-4 border-b border-white/[0.06]">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0">
-            {gymLogo ? (
-              <div className="w-9 h-9 rounded-xl shrink-0 overflow-hidden ring-1 ring-white/10">
-                <img src={gymLogo} alt={gymName} className="w-full h-full object-cover" />
-              </div>
-            ) : (
-              <div className="flex items-center justify-center w-9 h-9 rounded-xl shrink-0 bg-[#fffb00] shadow-[0_0_16px_rgba(255,251,0,0.28)]">
-                <Dumbbell className="h-4 w-4 text-black" />
-              </div>
-            )}
-            <div className="min-w-0">
-              <p className="font-semibold text-white text-sm tracking-tight truncate leading-tight">{gymName}</p>
-              {gymPlan ? (
-                <span className="inline-flex items-center mt-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#fffb00]/10 text-[#fffb00] ring-1 ring-[#fffb00]/25">
-                  {gymPlan}
-                </span>
-              ) : (
-                <p className="text-[11px] text-white/30 mt-0.5 tracking-wide">Panel de gestión</p>
-              )}
-            </div>
+    <div className="adm-night flex h-full flex-col bg-adm-night px-3.5 pb-4 pt-5 font-admin text-white">
+      <div className="flex items-center justify-between gap-2 px-2 pb-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <GymMark name={gymName} logoUrl={gymLogo} />
+          <div className="min-w-0 leading-tight">
+            <p className="truncate text-[17px] font-extrabold tracking-tight [font-stretch:112%]">{gymName}</p>
+            <p className="mt-0.5 truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-[#85857f]">
+              {gymPlan ?? 'Panel de gestión'}
+            </p>
           </div>
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="flex items-center justify-center w-7 h-7 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-all shrink-0 ml-2"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
         </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            aria-label="Cerrar menú"
+            className="flex size-9 shrink-0 items-center justify-center rounded-lg text-[#a3a39d] hover:bg-[#1c1c1e] hover:text-white"
+          >
+            <X className="size-5" />
+          </button>
+        )}
       </div>
 
-      {/* Super admin back button */}
       {userRole === 'SUPER_ADMIN' && (
-        <div className="px-3 pt-3">
-          <Link
-            href="/admin/dashboard"
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-[#fffb00] hover:bg-white/5 transition-all"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" />
-            Volver al admin
-          </Link>
-        </div>
+        <Link
+          href="/admin/dashboard"
+          className="mx-0.5 mb-[18px] flex min-h-10 items-center gap-2 rounded-lg border border-[#2a2a2c] bg-[#141416] px-3 text-[13px] font-semibold text-adm-brand hover:border-[#3a3a3d]"
+        >
+          <ChevronLeft className="size-4" aria-hidden="true" />
+          Volver al admin
+        </Link>
       )}
 
-      {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-2.5 py-3 space-y-4 scrollbar-thin">
+      <form role="search" onSubmit={handleSearch} className="mx-0.5 mb-[18px]">
+        <label className="flex min-h-10 items-center gap-2.5 rounded-lg border border-[#2a2a2c] bg-[#141416] px-3 text-[13px] text-[#a3a39d] focus-within:border-[#85857f]">
+          <Search className="size-4 shrink-0" aria-hidden="true" />
+          <span className="sr-only">Buscar miembro</span>
+          <input
+            ref={searchRef}
+            name="q"
+            type="search"
+            autoComplete="off"
+            placeholder="Buscar miembro…"
+            className="min-w-0 flex-1 bg-transparent text-white placeholder:text-[#a3a39d] focus:outline-none [&::-webkit-search-cancel-button]:hidden"
+          />
+          {searchRef && (
+            <kbd className="hidden rounded bg-[#232326] px-1.5 py-0.5 font-admin-mono text-[11px] text-[#a3a39d] lg:inline">⌘K</kbd>
+          )}
+        </label>
+      </form>
+
+      <nav aria-label="Principal" className="flex flex-1 flex-col gap-[18px] overflow-y-auto">
         {BASE_NAV_GROUPS.map((group) => {
           const items = group.storeItem && storeEnabled
             ? [group.items[0], group.storeItem, ...group.items.slice(1)]
             : group.items
           return (
-            <div key={group.label}>
-              <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/25">
-                {group.label}
-              </p>
-              <div className="space-y-0.5">
-                {items.map(({ label, icon: Icon, path }) => {
-                  const href = `${base}/${path}`
-                  const active = pathname === href || pathname.startsWith(href + '/')
-                  return (
-                    <Link
-                      key={path}
-                      href={href}
-                      onClick={onClose}
-                      className={cn(
-                        'group flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150',
-                        active
-                          ? 'bg-[#fffb00] text-black shadow-[0_2px_14px_rgba(255,251,0,0.22)] font-semibold'
-                          : 'text-white/50 hover:bg-white/[0.07] hover:text-white/90',
-                      )}
-                    >
-                      <Icon className={cn(
-                        'h-4 w-4 shrink-0 transition-colors duration-150',
-                        active ? 'text-black' : 'text-white/30 group-hover:text-white/70',
-                      )} />
-                      {label}
-                    </Link>
-                  )
-                })}
-              </div>
+            <div key={group.label} className="flex flex-col gap-0.5">
+              <p className="px-3 pb-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-[#85857f]">{group.label}</p>
+              {items.map(({ label, icon: Icon, path }) => {
+                const href = `${base}/${path}`
+                // A nested item (e.g. attendance/scan) wins over its parent (attendance).
+                const nestedMatch = items.some(o => o.path.startsWith(path + '/') && pathname.startsWith(`${base}/${o.path}`))
+                const active = pathname === href || (pathname.startsWith(href + '/') && !nestedMatch)
+                return (
+                  <Link
+                    key={path}
+                    href={href}
+                    onClick={onClose}
+                    aria-current={active ? 'page' : undefined}
+                    className={cn(
+                      'flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm transition-colors',
+                      active
+                        ? 'bg-adm-brand font-bold text-adm-night'
+                        : 'font-medium text-[#a3a39d] hover:bg-[#1c1c1e] hover:text-white',
+                    )}
+                  >
+                    <Icon className="size-[18px] shrink-0" aria-hidden="true" />
+                    <span className="flex-1">{label}</span>
+                  </Link>
+                )
+              })}
             </div>
           )
         })}
       </nav>
 
-      {/* Footer */}
-      <div className="border-t border-white/[0.06] px-2.5 py-3 space-y-0.5">
-        <div className="flex items-center gap-2.5 px-3 py-2 mb-1">
-          <div className="w-6 h-6 rounded-full bg-white/10 ring-1 ring-white/10 flex items-center justify-center shrink-0">
-            <span className="text-[10px] font-bold text-white/50">{emailInitial}</span>
-          </div>
-          <p className="text-[11px] text-white/30 truncate">{userEmail}</p>
+      <div className="mt-5 flex items-center gap-2.5 rounded-[10px] border border-[#232326] bg-[#141416] p-3">
+        <div className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-[#2a2a2c] text-xs font-extrabold text-white">
+          {initials(userEmail.split('@')[0].replace(/[._-]+/g, ' ')) || '?'}
         </div>
-        <ThemeToggleButton />
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold">{ROLE_LABEL[userRole ?? ''] ?? 'Mi cuenta'}</p>
+          <p className="truncate text-xs text-[#85857f]">{userEmail}</p>
+        </div>
         <button
+          type="button"
+          onClick={toggle}
+          aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+          className="flex size-8 items-center justify-center rounded-lg text-[#a3a39d] hover:bg-[#232326] hover:text-white"
+        >
+          {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
+        </button>
+        <button
+          type="button"
           onClick={onLogout}
           disabled={isPending}
-          className="group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium text-white/40 hover:bg-white/[0.07] hover:text-white/80 transition-all duration-150 disabled:opacity-30"
+          aria-label="Cerrar sesión"
+          title={isPending ? 'Saliendo…' : 'Cerrar sesión'}
+          className="flex size-8 items-center justify-center rounded-lg text-[#a3a39d] hover:bg-[#232326] hover:text-white disabled:opacity-40"
         >
-          <LogOut className="h-4 w-4 shrink-0 text-white/25 group-hover:text-white/60 transition-colors duration-150" />
-          {isPending ? 'Saliendo…' : 'Cerrar sesión'}
+          <LogOut className="size-4" />
         </button>
       </div>
     </div>
   )
 }
 
-function ThemeToggleButton() {
-  const { theme, toggle } = useTheme()
-  return (
-    <button
-      onClick={toggle}
-      className="group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium text-white/40 hover:bg-white/[0.07] hover:text-white/80 transition-all duration-150"
-    >
-      {theme === 'dark'
-        ? <Sun className="h-4 w-4 shrink-0 text-white/25 group-hover:text-white/60 transition-colors duration-150" />
-        : <Moon className="h-4 w-4 shrink-0 text-white/25 group-hover:text-white/60 transition-colors duration-150" />}
-      {theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
-    </button>
-  )
-}
-
-export function GymSidebar({ gymSlug, gymName, gymLogo, gymPlan, gymSubscriptionStatus, gymTrialEndsAt, gymDemoEnabled, hasBanner, userEmail, userRole, storeEnabled }: GymSidebarProps) {
+export function GymSidebar({ gymSlug, gymName, gymLogo, gymPlan, hasBanner, userEmail, userRole, storeEnabled }: GymSidebarProps) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  // ⌘K / Ctrl+K focuses the member search (opens the drawer on small screens).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'k' || !(e.metaKey || e.ctrlKey)) return
+      e.preventDefault()
+      const input = searchRef.current
+      if (input && input.offsetParent !== null) input.focus()
+      else setMobileOpen(true)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  useEffect(() => {
+    if (!mobileOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMobileOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [mobileOpen])
 
   function handleLogout() {
     startTransition(async () => {
@@ -254,81 +279,39 @@ export function GymSidebar({ gymSlug, gymName, gymLogo, gymPlan, gymSubscription
     })
   }
 
-  const isTrial = gymSubscriptionStatus === 'TRIAL'
-  const trialDaysLeft = isTrial && gymTrialEndsAt
-    ? Math.max(0, Math.ceil((new Date(gymTrialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
-    : null
+  const shared = { gymSlug, gymName, gymLogo, gymPlan, userEmail, userRole, pathname, isPending, onLogout: handleLogout, storeEnabled }
 
   return (
     <>
-      {/* Desktop sidebar */}
-      <aside className="hidden lg:flex w-64 flex-col shrink-0 h-screen sticky top-0">
-        <NavContent
-          gymSlug={gymSlug}
-          gymName={gymName}
-          gymLogo={gymLogo}
-          gymPlan={gymPlan}
-          userEmail={userEmail}
-          userRole={userRole}
-          pathname={pathname}
-          isPending={isPending}
-          onLogout={handleLogout}
-          storeEnabled={storeEnabled}
-          isTrial={isTrial}
-          trialDaysLeft={trialDaysLeft}
-          gymDemoEnabled={gymDemoEnabled}
-        />
+      <aside className="sticky top-0 hidden h-full w-[248px] shrink-0 lg:flex lg:flex-col">
+        <NavContent {...shared} searchRef={searchRef} />
       </aside>
 
-      {/* Mobile header */}
-      <div className={cn('fixed left-0 right-0 z-40 lg:hidden', hasBanner ? 'top-8' : 'top-0')}>
-        {/* Top bar */}
-        <div className="h-14 bg-black/85 backdrop-blur-md flex items-center justify-between px-4 border-b border-white/8 shadow-lg shadow-black/20">
-          <div className="flex items-center gap-2.5">
-            {gymLogo ? (
-              <div className="w-8 h-8 rounded-lg shrink-0 overflow-hidden ring-1 ring-white/10">
-                <img src={gymLogo} alt={gymName} className="w-full h-full object-cover" />
-              </div>
-            ) : (
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg shrink-0 bg-[#fffb00] shadow-[0_0_12px_rgba(255,251,0,0.35)]">
-                <Dumbbell className="h-4 w-4 text-black" />
-              </div>
-            )}
-            <span className="font-semibold text-white text-sm tracking-tight truncate max-w-[160px]">
-              {gymName}
-            </span>
-          </div>
-          <button
-            onClick={() => setMobileOpen(true)}
-            className="flex items-center justify-center w-8 h-8 rounded-lg text-white/60 hover:text-white hover:bg-white/10 active:bg-white/15 transition-all duration-150"
-            aria-label="Abrir menú"
-          >
-            <Menu className="h-4.5 w-4.5" />
-          </button>
+      <div
+        className={cn(
+          'adm-night fixed inset-x-0 z-40 flex h-14 items-center justify-between border-b border-white/10 bg-adm-night px-4 font-admin lg:hidden',
+          hasBanner ? 'top-8' : 'top-0',
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-2.5">
+          <GymMark name={gymName} logoUrl={gymLogo} />
+          <span className="truncate text-sm font-extrabold text-white">{gymName}</span>
         </div>
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="flex size-10 shrink-0 items-center justify-center rounded-lg text-white/70 hover:text-white"
+          aria-label="Abrir menú"
+          aria-expanded={mobileOpen}
+        >
+          <Menu className="size-5" />
+        </button>
       </div>
 
-      {/* Mobile overlay */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setMobileOpen(false)}
-          />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
           <div className="absolute left-0 top-0 h-full w-72 shadow-2xl">
-            <NavContent
-              gymSlug={gymSlug}
-              gymName={gymName}
-              gymLogo={gymLogo}
-              gymPlan={gymPlan}
-              userEmail={userEmail}
-              userRole={userRole}
-              pathname={pathname}
-              onClose={() => setMobileOpen(false)}
-              isPending={isPending}
-              onLogout={handleLogout}
-              storeEnabled={storeEnabled}
-            />
+            <NavContent {...shared} onClose={() => setMobileOpen(false)} />
           </div>
         </div>
       )}

@@ -4,13 +4,23 @@ import { Resend } from 'resend';
 import { PrismaService } from '../prisma/prisma.service';
 import { calculateProration } from '../common/utils/proration.util';
 import { startOfDayUTC, endOfDayUTC } from '../common/utils/timezone.util';
+import { WalletPassService } from '../wallet/wallet-pass.service';
 
 @Injectable()
 export class MembershipsService {
   private readonly logger = new Logger(MembershipsService.name);
   private readonly resend = new Resend(process.env.RESEND_API_KEY);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly passes: WalletPassService,
+  ) {}
+
+  /** Refresh the member's Wallet pass after a membership change (best-effort, not awaited). */
+  private syncPass<T extends { memberId: string; gymId: string }>(m: T): T {
+    void this.passes.sync(m.gymId, m.memberId);
+    return m;
+  }
 
   async findAll(gymId: string, query: any) {
     const { status, memberId, planId, branchId, endsAfter, endsBefore } = query;
@@ -65,10 +75,23 @@ export class MembershipsService {
   }
 
   async create(gymId: string, data: any) {
-    return this.prisma.membership.create({
-      data: { ...data, gymId },
+    const plan = await this.prisma.plan.findFirst({
+      where: { id: data.planId, gymId },
+      select: { visitLimit: true },
+    });
+    if (!plan) throw new NotFoundException('Plan no encontrado');
+
+    const { periods = 1, ...rest } = data;
+    const membership = await this.prisma.membership.create({
+      data: {
+        ...rest,
+        gymId,
+        visitsTotal: plan.visitLimit != null ? plan.visitLimit * periods : null,
+        visitsUsed: 0,
+      },
       include: { member: true, plan: true },
     });
+    return this.syncPass(membership);
   }
 
   async changePlan(membershipId: string, gymId: string | undefined, data: {
@@ -122,6 +145,8 @@ export class MembershipsService {
           startDate: now,
           endDate: newEndDate,
           status: 'ACTIVE',
+          visitsTotal: newPlan.visitLimit,
+          visitsUsed: 0,
           notes: data.notes ?? `Cambio desde "${current.plan.name}". Crédito aplicado: $${proration.creditApplied/100}`,
         },
         include: { plan: true, member: true },
@@ -148,6 +173,7 @@ export class MembershipsService {
       return { newMembership, payment };
     });
 
+    this.syncPass(result.newMembership);
     return {
       proration,
       membership: result.newMembership,
@@ -158,15 +184,15 @@ export class MembershipsService {
 
   async suspend(id: string, gymId: string) {
     await this.assertExists(id, gymId);
-    return this.prisma.membership.update({ where: { id }, data: { status: 'SUSPENDED' } });
+    return this.syncPass(await this.prisma.membership.update({ where: { id }, data: { status: 'SUSPENDED' } }));
   }
 
   async freeze(id: string, gymId: string) {
     await this.assertExists(id, gymId);
-    return this.prisma.membership.update({
+    return this.syncPass(await this.prisma.membership.update({
       where: { id },
       data: { status: 'FROZEN', frozenAt: new Date() },
-    });
+    }));
   }
 
   async unfreeze(id: string, gymId: string) {
@@ -177,7 +203,7 @@ export class MembershipsService {
     const newEndDate = new Date(m.endDate);
     newEndDate.setDate(newEndDate.getDate() + frozenDays);
 
-    return this.prisma.membership.update({
+    return this.syncPass(await this.prisma.membership.update({
       where: { id },
       data: {
         status: 'ACTIVE',
@@ -185,13 +211,13 @@ export class MembershipsService {
         frozenDays: { increment: frozenDays },
         endDate: newEndDate,
       },
-    });
+    }));
   }
 
   async cancel(id: string, gymId: string) {
     const m = await this.prisma.membership.findFirst({ where: { id, gymId } });
     if (!m) throw new NotFoundException('Miembresía no encontrada');
-    return this.prisma.membership.update({ where: { id }, data: { status: 'CANCELLED' } });
+    return this.syncPass(await this.prisma.membership.update({ where: { id }, data: { status: 'CANCELLED' } }));
   }
 
   // ── Missed-days helpers ───────────────────────────────────

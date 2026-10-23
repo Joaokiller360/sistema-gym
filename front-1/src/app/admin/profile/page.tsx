@@ -1,49 +1,37 @@
+import { AdminPage, PageHeader, Pill, initials } from '@/components/admin/ui'
 import { getAdminProfileAction } from './actions'
 import { ProfileInfoForm, AdminChangePasswordForm } from './ProfileForm'
-import { UserCircle, Lock } from 'lucide-react'
 
 export default async function AdminProfilePage() {
   const profile = await getAdminProfileAction()
+  const name = profile?.name ?? ''
+  const email = profile?.email ?? ''
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Mi perfil</h1>
-        <p className="text-muted-foreground text-sm mt-1">Nombre, correo y contraseña de tu cuenta</p>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        {/* Info */}
-        <div className="rounded-2xl border border-zinc-200 bg-white p-6 space-y-5">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
-              <UserCircle className="h-4 w-4 text-zinc-500" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold">Información personal</h2>
-              <p className="text-xs text-zinc-400">Nombre y correo electrónico</p>
-            </div>
+    <AdminPage>
+      <PageHeader
+        media={
+          <div className="flex size-[72px] shrink-0 items-center justify-center rounded-full bg-adm-ink text-2xl font-extrabold text-adm-surface">
+            {initials(name || email || 'SA')}
           </div>
-          <ProfileInfoForm
-            defaultName={profile?.name ?? ''}
-            defaultEmail={profile?.email ?? ''}
-          />
-        </div>
+        }
+        title={name || 'Mi perfil'}
+        meta={<><span>{email}</span><Pill tone="ok">Super Admin</Pill></>}
+      />
 
-        {/* Password */}
-        <div className="rounded-2xl border border-zinc-200 bg-white p-6 space-y-5">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0">
-              <Lock className="h-4 w-4 text-zinc-500" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold">Seguridad</h2>
-              <p className="text-xs text-zinc-400">Cambiar contraseña</p>
-            </div>
-          </div>
+      <div className="flex flex-wrap items-start gap-4">
+        <section aria-labelledby="info-h" className="min-w-0 flex-[1_1_380px] rounded-2xl border border-adm-line bg-adm-surface p-6">
+          <h2 id="info-h" className="text-[17px] font-bold">Información personal</h2>
+          <p className="mb-5 mt-0.5 text-[13px] text-adm-muted">Nombre y correo con los que entrás al panel.</p>
+          <ProfileInfoForm defaultName={name} defaultEmail={email} />
+        </section>
+
+        <section aria-labelledby="sec-h" className="min-w-0 flex-[1_1_380px] rounded-2xl border border-adm-line bg-adm-surface p-6">
+          <h2 id="sec-h" className="text-[17px] font-bold">Seguridad</h2>
+          <p className="mb-5 mt-0.5 text-[13px] text-adm-muted">Cambiá tu contraseña. Mínimo 6 caracteres.</p>
           <AdminChangePasswordForm />
-        </div>
+        </section>
       </div>
-    </div>
+    </AdminPage>
   )
 }

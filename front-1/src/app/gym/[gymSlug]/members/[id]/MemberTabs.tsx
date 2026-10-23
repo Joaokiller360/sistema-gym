@@ -152,12 +152,46 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
               </div>
             </div>
 
-            <div>
-              <span className="text-3xl font-black text-[#1fad9d]">
-                {daysLeft(activeMembership.endDate)}
-              </span>
-              <span className="text-sm text-muted-foreground ml-1">días restantes</span>
-            </div>
+            {activeMembership.visitsTotal != null ? (
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                  <div>
+                    <span className="text-3xl font-black text-[#0e7a70]">
+                      {Math.max(0, activeMembership.visitsTotal - activeMembership.visitsUsed)}
+                    </span>
+                    <span className="text-sm text-muted-foreground ml-1">
+                      de {activeMembership.visitsTotal} días de entreno restantes
+                    </span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    Vence en {daysLeft(activeMembership.endDate)} días
+                  </span>
+                </div>
+                <div
+                  className="h-2 rounded-full bg-zinc-200 overflow-hidden"
+                  role="progressbar"
+                  aria-label="Días de entreno usados"
+                  aria-valuemin={0}
+                  aria-valuemax={activeMembership.visitsTotal}
+                  aria-valuenow={activeMembership.visitsUsed}
+                >
+                  <div
+                    className="h-full rounded-full bg-[#1fad9d]"
+                    style={{ width: `${Math.min(100, (activeMembership.visitsUsed / activeMembership.visitsTotal) * 100)}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {activeMembership.visitsUsed} usados · cada día que entrena descuenta uno
+                </p>
+              </div>
+            ) : (
+              <div>
+                <span className="text-3xl font-black text-[#1fad9d]">
+                  {daysLeft(activeMembership.endDate)}
+                </span>
+                <span className="text-sm text-muted-foreground ml-1">días restantes</span>
+              </div>
+            )}
 
             {activeMembership.plan && (
               <p className="text-sm text-muted-foreground">
@@ -166,9 +200,11 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
                   currency: activeMembership.plan.currency,
                 })}{' '}
                 / {activeMembership.plan.durationDays} días
-                {activeMembership.plan.daysPerWeek !== null
-                  ? ` · ${activeMembership.plan.daysPerWeek} veces/semana`
-                  : ' · Acceso ilimitado'}
+                {activeMembership.visitsTotal != null
+                  ? ` · ${activeMembership.visitsTotal} días de entreno`
+                  : activeMembership.plan.daysPerWeek !== null
+                    ? ` · ${activeMembership.plan.daysPerWeek} veces/semana`
+                    : ' · Acceso ilimitado'}
               </p>
             )}
           </div>
@@ -203,6 +239,7 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
                     <p className="font-semibold">{m.plan?.name ?? 'Plan'}</p>
                     <p className="text-xs text-muted-foreground">
                       {formatDate(m.startDate)} → {formatDate(m.endDate)}
+                      {m.visitsTotal != null && ` · ${m.visitsUsed}/${m.visitsTotal} días usados`}
                     </p>
                   </div>
                   <StatusBadge status={m.status as MembershipStatus} />

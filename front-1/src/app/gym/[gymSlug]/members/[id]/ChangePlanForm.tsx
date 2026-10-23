@@ -1,5 +1,6 @@
 'use client'
 
+import { planAccessSummary } from '@/lib/plans'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowRightLeft, CheckCircle2, X } from 'lucide-react'
@@ -151,7 +152,7 @@ export function ChangePlanForm({
                   <div>
                     <p className="text-sm font-semibold">{p.name}</p>
                     <p className="text-xs text-zinc-400">
-                      {p.durationDays} días{p.daysPerWeek ? ` · ${p.daysPerWeek}x/sem` : ''}
+                      {planAccessSummary(p)}
                     </p>
                   </div>
                   <span className="text-sm font-bold shrink-0 ml-3">

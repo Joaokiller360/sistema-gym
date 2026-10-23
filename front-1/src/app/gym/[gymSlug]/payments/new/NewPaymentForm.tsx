@@ -1,5 +1,6 @@
 'use client'
 
+import { planAccessSummary } from '@/lib/plans'
 import { useState, useTransition, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, CheckCircle2, ChevronRight, Star } from 'lucide-react'
@@ -94,6 +95,7 @@ export function NewPaymentForm({
         planId: selectedPlan.id,
         startDate,
         durationDays: selectedPlan.durationDays * months,
+        periods: months,
         amount: totalAmount,
         currency: selectedPlan.currency,
         method,
@@ -219,7 +221,7 @@ export function NewPaymentForm({
                   <p className="text-sm font-semibold">{selectedPlan.name}</p>
                   {selectedPlan.isFeatured && <Star className="h-3 w-3 text-[#fffb00] fill-[#fffb00]" />}
                 </div>
-                <p className="text-xs text-zinc-400 mt-0.5">{selectedPlan.durationDays} días{selectedPlan.daysPerWeek ? ` · ${selectedPlan.daysPerWeek}x/sem` : ''}</p>
+                <p className="text-xs text-zinc-400 mt-0.5">{planAccessSummary(selectedPlan)}</p>
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-sm font-bold">{selectedPlan.currency} {Number(selectedPlan.price).toLocaleString('es-AR')}</span>
@@ -242,7 +244,7 @@ export function NewPaymentForm({
                         <p className="text-sm font-semibold">{p.name}</p>
                         {p.isFeatured && <Star className="h-3 w-3 text-[#fffb00] fill-[#fffb00]" />}
                       </div>
-                      <p className="text-xs text-zinc-400 mt-0.5">{p.durationDays} días{p.daysPerWeek ? ` · ${p.daysPerWeek}x/sem` : ''}</p>
+                      <p className="text-xs text-zinc-400 mt-0.5">{planAccessSummary(p)}</p>
                       {p.benefits?.length > 0 && (
                         <p className="text-xs text-zinc-400 truncate max-w-[200px]">{p.benefits.slice(0, 2).join(' · ')}</p>
                       )}
@@ -297,7 +299,7 @@ export function NewPaymentForm({
                   >
                     +
                   </button>
-                  <span className="text-xs text-zinc-400">{selectedPlan.durationDays * months} días en total</span>
+                  <span className="text-xs text-zinc-400">{planAccessSummary(selectedPlan, months)}</span>
                 </div>
               </div>
 

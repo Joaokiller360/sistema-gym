@@ -44,6 +44,7 @@ export interface Gym {
   timezone: string;
   subscriptionPlan: string;
   subscriptionStatus: string;
+  subscriptionExpiresAt?: string | null;
   trialEndsAt: string | null;
   demoEnabled: boolean;
   storeEnabled: boolean;
@@ -92,6 +93,8 @@ export interface Plan {
   currency: string;
   durationDays: number;
   daysPerWeek: number | null;
+  /** Gym days included; null = unlimited for durationDays */
+  visitLimit: number | null;
   benefits: string[];
   isActive: boolean;
   isFeatured: boolean;
@@ -123,6 +126,9 @@ export interface Membership {
   status: MembershipStatus;
   frozenAt: string | null;
   frozenDays: number;
+  /** Snapshot of plan.visitLimit; one visit consumed per gym day attended */
+  visitsTotal: number | null;
+  visitsUsed: number;
   notes: string | null;
   gymId: string;
   memberId: string;

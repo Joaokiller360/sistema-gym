@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { CreditCard, AlertTriangle, Ban, CheckCircle2, ChevronDown, ChevronUp, Trash2, ArrowRightLeft, X } from 'lucide-react'
+import { Plus, Trash2, ArrowRightLeft, X } from 'lucide-react'
 import { registerSubscriptionPaymentAction, deleteSubscriptionPaymentAction, changeGymPlanAction, type SubscriptionInfo, type BillingRecord, type PaymentInput, type ProratedResult } from '../actions'
 import {
   AlertDialog,
@@ -15,34 +15,30 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog'
+import { cn } from '@/lib/utils'
+import { EmptyState, Panel, Pill, btn, field, td, th, type Tone } from '@/components/admin/ui'
 
-const inputClass = 'w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all disabled:opacity-50'
-const selectClass = inputClass
-
-function StatusBadgeSubscription({ status }: { status: SubscriptionInfo['subscriptionStatus'] }) {
-  if (status === 'ACTIVE') return (
-    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-[#1fad9d]/15 text-[#0e7a70] border border-[#1fad9d]/30">
-      <CheckCircle2 className="h-3 w-3" /> Activa
-    </span>
-  )
-  if (status === 'GRACE') return (
-    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-      <AlertTriangle className="h-3 w-3" /> Prórroga
-    </span>
-  )
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-red-50 text-red-600 border border-red-200">
-      <Ban className="h-3 w-3" /> Suspendida
-    </span>
-  )
+const STATUS: Record<SubscriptionInfo['subscriptionStatus'], { label: string; tone: Tone }> = {
+  ACTIVE: { label: 'Activa', tone: 'ok' },
+  GRACE: { label: 'Prórroga', tone: 'warn' },
+  SUSPENDED: { label: 'Suspendida', tone: 'bad' },
 }
+
+const METHODS = [
+  { value: 'CASH', label: 'Efectivo' },
+  { value: 'TRANSFER', label: 'Transferencia' },
+  { value: 'CARD', label: 'Tarjeta' },
+  { value: 'OTHER', label: 'Otro' },
+] as const
+
+type Method = (typeof METHODS)[number]['value']
 
 function fmt(iso: string) {
   return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 function fmtMethod(m: string) {
-  return { CASH: 'Efectivo', CARD: 'Tarjeta', TRANSFER: 'Transferencia', OTHER: 'Otro' }[m] ?? m
+  return METHODS.find(x => x.value === m)?.label ?? m
 }
 
 interface SubscriptionPlan {
@@ -57,34 +53,53 @@ function fmtMoney(n: number, currency = 'USD') {
   return `${currency} ${n.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
 }
 
+function MethodPicker({ value, onChange, disabled }: { value: Method; onChange: (m: Method) => void; disabled?: boolean }) {
+  return (
+    <div role="radiogroup" aria-label="Método de pago" className="flex flex-wrap gap-2">
+      {METHODS.map(m => (
+        <button
+          key={m.value}
+          type="button"
+          role="radio"
+          aria-checked={value === m.value}
+          disabled={disabled}
+          onClick={() => onChange(m.value)}
+          className={cn(
+            'min-h-10 rounded-lg border px-3.5 text-[13px] font-semibold transition-colors',
+            value === m.value ? 'border-adm-ink bg-adm-ink text-adm-surface' : 'border-adm-line bg-adm-surface hover:border-adm-ink',
+          )}
+        >
+          {m.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function ProratedBreakdown({ p, currency, onDone }: { p: ProratedResult; currency: string; onDone: () => void }) {
   return (
-    <div className="space-y-3">
-      <div className="rounded-xl bg-[#1fad9d]/8 border border-[#1fad9d]/20 p-4 space-y-2">
-        <p className="text-xs font-bold uppercase tracking-widest text-[#0e7a70]">Detalle de prorrateo</p>
-        <div className="space-y-1">
-          {([
-            ['Días consumidos', `${p.daysConsumed} días`],
-            ['Días restantes', `${p.daysRemaining} días`],
-            ['Tarifa diaria', fmtMoney(p.dailyRate, currency)],
-            ['Crédito a favor', fmtMoney(p.creditAmount/100, currency)],
-            ['Precio nuevo plan', fmtMoney(p.newPlanPrice/100, currency)],
-            ['Crédito aplicado', `- ${fmtMoney(p.creditApplied/100, currency)}`],
-          ] as const).map(([label, value]) => (
-            <div key={label} className="flex justify-between text-sm">
-              <span className="text-zinc-500">{label}</span>
-              <span className="font-medium">{value}</span>
-            </div>
-          ))}
-        </div>
-        <div className="border-t border-[#1fad9d]/20 pt-2 flex justify-between font-black text-base">
-          <span>Total cobrado</span>
-          <span className="text-[#0e7a70]">{fmtMoney(p.amountDue/100, currency)}</span>
-        </div>
+    <div className="space-y-3 rounded-xl border border-adm-ok-line bg-adm-ok-bg p-4">
+      <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-adm-ok-fg">Detalle de prorrateo</p>
+      <div className="space-y-1">
+        {([
+          ['Días consumidos', `${p.daysConsumed} días`],
+          ['Días restantes', `${p.daysRemaining} días`],
+          ['Tarifa diaria', fmtMoney(p.dailyRate, currency)],
+          ['Crédito a favor', fmtMoney(p.creditAmount / 100, currency)],
+          ['Precio nuevo plan', fmtMoney(p.newPlanPrice / 100, currency)],
+          ['Crédito aplicado', `- ${fmtMoney(p.creditApplied / 100, currency)}`],
+        ] as const).map(([label, value]) => (
+          <div key={label} className="flex justify-between text-sm">
+            <span className="text-adm-muted">{label}</span>
+            <span className="font-medium">{value}</span>
+          </div>
+        ))}
       </div>
-      <button type="button" onClick={onDone} className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-black transition-colors">
-        <CheckCircle2 className="h-3.5 w-3.5 text-[#1fad9d]" /> Listo
-      </button>
+      <div className="flex justify-between border-t border-adm-ok-line pt-2 text-base font-black">
+        <span>Total cobrado</span>
+        <span className="font-admin-mono text-adm-ok-fg">{fmtMoney(p.amountDue / 100, currency)}</span>
+      </div>
+      <button type="button" onClick={onDone} className={btn.line}>Listo</button>
     </div>
   )
 }
@@ -107,22 +122,21 @@ export function SubscriptionSection({
   subPlans: SubscriptionPlan[]
 }) {
   const router = useRouter()
-  const [showForm, setShowForm] = useState(false)
-  const [showHistory, setShowHistory] = useState(false)
+  const [mode, setMode] = useState<'idle' | 'pay' | 'change'>('idle')
   const [isPending, startTransition] = useTransition()
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [isPendingDelete, startDeleteTransition] = useTransition()
-  const [showChangePlan, setShowChangePlan] = useState(false)
   const [selectedPlanKey, setSelectedPlanKey] = useState('')
-  const [changePlanMethod, setChangePlanMethod] = useState<'CASH' | 'CARD' | 'TRANSFER' | 'OTHER'>('CASH')
+  const [changePlanMethod, setChangePlanMethod] = useState<Method>('CASH')
   const [changePlanNotes, setChangePlanNotes] = useState('')
   const [changePlanProration, setChangePlanProration] = useState<ProratedResult | null>(null)
   const [isPendingChangePlan, startChangePlanTransition] = useTransition()
 
   const availableSubPlans = subPlans.filter(p => p.key.toUpperCase() !== subscription.subscriptionPlan?.toUpperCase())
+  const currentPlan = subPlans.find(p => p.key.toUpperCase() === subscription.subscriptionPlan?.toUpperCase())
 
-  const [method, setMethod] = useState<'CASH' | 'CARD' | 'TRANSFER' | 'OTHER'>('CASH')
+  const [method, setMethod] = useState<Method>('CASH')
 
   const todayYM = new Date().toISOString().slice(0, 7)
   const [selectedMonth, setSelectedMonth] = useState(todayYM)
@@ -166,7 +180,7 @@ export function SubscriptionSection({
         toast.error(res.error)
       } else {
         toast.success('Pago registrado y suscripción renovada.')
-        setShowForm(false)
+        setMode('idle')
         router.refresh()
       }
     })
@@ -193,264 +207,210 @@ export function SubscriptionSection({
 
   const isWarning = subscription.subscriptionStatus === 'GRACE'
   const isSuspended = subscription.subscriptionStatus === 'SUSPENDED'
+  const status = STATUS[subscription.subscriptionStatus]
+  const lastPeriod = [...billing].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
 
   return (
-    <div className="space-y-4">
-      {/* Status card */}
-      <div className={`rounded-2xl border bg-white overflow-hidden ${isSuspended ? 'border-red-200' : isWarning ? 'border-amber-200' : 'border-zinc-200'}`}>
-        <div className={`px-5 py-3 border-b flex items-center justify-between ${isSuspended ? 'bg-red-50 border-red-100' : isWarning ? 'bg-amber-50 border-amber-100' : 'bg-zinc-50 border-zinc-100'}`}>
-          <div className="flex items-center gap-2">
-            <CreditCard className="h-4 w-4 text-zinc-400" />
-            <span className="text-sm font-semibold">Suscripción</span>
+    <div className="flex flex-col gap-4">
+      <Panel
+        title="Suscripción"
+        id="sub-h"
+        action={status && <Pill tone={status.tone}>{status.label}</Pill>}
+        className={cn(isSuspended && 'border-adm-bad-line', isWarning && 'border-adm-warn-line')}
+      >
+        <div className="flex flex-wrap gap-6 p-5">
+          <dl className="min-w-0 flex-[1_1_260px] text-sm">
+            {([
+              ['Plan', currentPlan?.label ?? subscription.subscriptionPlan],
+              ...(lastPeriod ? [['Período actual', `${fmt(lastPeriod.periodStart)} → ${fmt(lastPeriod.periodEnd)}`]] : []),
+              ...(subscription.subscriptionExpiresAt ? [[
+                'Vence',
+                `${fmt(subscription.subscriptionExpiresAt)}${subscription.daysUntilExpiry !== null && subscription.daysUntilExpiry > 0 ? ` · ${subscription.daysUntilExpiry} días` : ''}`,
+              ]] : []),
+              ...(isWarning && subscription.subscriptionGraceEndsAt ? [['Prórroga hasta', fmt(subscription.subscriptionGraceEndsAt)]] : []),
+              ['Precio', planAmount != null ? fmtMoney(planAmount, planCurrency) : '—'],
+            ] as [string, string][]).map(([k, v]) => (
+              <div key={k} className="flex justify-between gap-3 border-b border-adm-line-soft py-2.5 last:border-b-0">
+                <dt className="text-adm-muted">{k}</dt>
+                <dd className={cn('text-right font-semibold', k === 'Vence' && isSuspended && 'text-adm-bad-fg', k === 'Vence' && isWarning && 'text-adm-warn-fg')}>{v}</dd>
+              </div>
+            ))}
+          </dl>
+          <div className="flex min-w-0 flex-[1_1_220px] flex-col gap-2">
+            <button type="button" onClick={() => setMode(mode === 'pay' ? 'idle' : 'pay')} aria-expanded={mode === 'pay'} className={cn(btn.dark, 'min-h-11')}>
+              <Plus className="size-4" strokeWidth={2.4} aria-hidden="true" />
+              Registrar pago
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode(mode === 'change' ? 'idle' : 'change'); setChangePlanProration(null) }}
+              aria-expanded={mode === 'change'}
+              className={cn(btn.line, 'min-h-11')}
+            >
+              <ArrowRightLeft className="size-4" aria-hidden="true" />
+              Cambiar plan (con prorrateo)
+            </button>
           </div>
-          <StatusBadgeSubscription status={subscription.subscriptionStatus} />
         </div>
 
-        <div className="divide-y divide-zinc-100">
-          <div className="flex items-center justify-between px-5 py-3 text-sm">
-            <span className="text-zinc-500">Plan</span>
-            <span className="font-semibold">{subscription.subscriptionPlan}</span>
-          </div>
-          {subscription.subscriptionExpiresAt && (
-            <div className="flex items-center justify-between px-5 py-3 text-sm">
-              <span className="text-zinc-500">Vence</span>
-              <span className={`font-semibold ${isSuspended ? 'text-red-600' : isWarning ? 'text-amber-600' : ''}`}>
-                {fmt(subscription.subscriptionExpiresAt)}
-                {subscription.daysUntilExpiry !== null && subscription.daysUntilExpiry > 0 && (
-                  <span className="ml-1.5 text-xs text-zinc-400">({subscription.daysUntilExpiry}d restantes)</span>
-                )}
-              </span>
-            </div>
-          )}
-          {isWarning && subscription.subscriptionGraceEndsAt && (
-            <div className="flex items-center justify-between px-5 py-3 text-sm">
-              <span className="text-zinc-500">Prórroga hasta</span>
-              <span className="font-semibold text-amber-600">{fmt(subscription.subscriptionGraceEndsAt)}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Warning banners */}
         {isWarning && (
-          <div className="mx-4 mb-4 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-700 font-medium">
-            El plan venció. El gym tiene acceso en prórroga hasta el {subscription.subscriptionGraceEndsAt ? fmt(subscription.subscriptionGraceEndsAt) : '—'}. Registrá un pago para renovar.
+          <div className="mx-5 mb-5 rounded-[10px] border border-adm-warn-line bg-adm-warn-bg px-4 py-3 text-[13px] font-medium text-adm-warn-fg">
+            El plan venció. El gimnasio tiene acceso en prórroga hasta el {subscription.subscriptionGraceEndsAt ? fmt(subscription.subscriptionGraceEndsAt) : '—'}. Registrá un pago para renovar.
           </div>
         )}
         {isSuspended && (
-          <div className="mx-4 mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-xs text-red-600 font-medium">
-            Suscripción suspendida. El gym no tiene acceso al sistema. Registrá un pago para reactivar.
+          <div className="mx-5 mb-5 rounded-[10px] border border-adm-bad-line bg-adm-bad-bg px-4 py-3 text-[13px] font-medium text-adm-bad-fg">
+            Suscripción suspendida. El gimnasio no tiene acceso al sistema. Registrá un pago para reactivar.
           </div>
         )}
-      </div>
 
-      {/* Payment form */}
-      {showForm ? (
-        <form onSubmit={handlePay} className="rounded-2xl border-2 border-zinc-200 bg-white p-5 space-y-4">
-          <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">Registrar pago</p>
-
-          {/* Auto amount display */}
-          <div className="rounded-xl bg-zinc-50 border border-zinc-200 px-4 py-3 flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Monto a cobrar</span>
-            <span className="text-sm font-bold">
-              {planAmount != null
-                ? `${planCurrency} ${planAmount.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
-                : <span className="text-zinc-400">—</span>
-              }
-            </span>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Método de pago</label>
-            <select value={method} onChange={e => setMethod(e.target.value as typeof method)} disabled={isPending} className={selectClass}>
-              <option value="CASH">Efectivo</option>
-              <option value="CARD">Tarjeta</option>
-              <option value="TRANSFER">Transferencia</option>
-              <option value="OTHER">Otro</option>
-            </select>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Mes</label>
-            <input
-              type="month"
-              value={selectedMonth}
-              onChange={e => setSelectedMonth(e.target.value)}
-              disabled={isPending}
-              className={inputClass}
-            />
-            <p className="text-xs text-zinc-400">{monthToNote(selectedMonth)}</p>
-          </div>
-
-
-          <div className="flex gap-3">
-            <button type="submit" disabled={isPending} className="rounded-xl bg-black px-5 py-2 text-sm font-bold text-white hover:bg-zinc-800 disabled:opacity-50 transition-all">
-              {isPending ? 'Registrando…' : 'Confirmar pago'}
-            </button>
-            <button type="button" onClick={() => setShowForm(false)} className="rounded-xl border border-zinc-200 px-4 py-2 text-sm font-semibold text-zinc-600 hover:border-zinc-300 transition-all">
-              Cancelar
-            </button>
-          </div>
-        </form>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setShowForm(true)}
-          className="flex items-center gap-2 rounded-xl bg-black px-4 py-2.5 text-sm font-bold text-white hover:bg-zinc-800 transition-all"
-        >
-          <CreditCard className="h-4 w-4" />
-          Registrar pago
-        </button>
-      )}
-
-      {/* Change plan */}
-      {changePlanProration ? (
-        <ProratedBreakdown
-          p={changePlanProration}
-          currency={subPlans.find(p => p.key.toUpperCase() === selectedPlanKey.toUpperCase())?.currency ?? 'USD'}
-          onDone={() => { setChangePlanProration(null); setShowChangePlan(false); setSelectedPlanKey('') }}
-        />
-      ) : showChangePlan ? (
-        <form onSubmit={handleChangePlan} className="rounded-2xl border-2 border-zinc-200 bg-white p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">Cambiar plan de suscripción</p>
-            <button type="button" onClick={() => setShowChangePlan(false)} className="text-zinc-400 hover:text-zinc-700">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          <div className="space-y-2">
-            {availableSubPlans.length === 0 ? (
-              <p className="text-sm text-zinc-400">No hay otros planes disponibles.</p>
-            ) : availableSubPlans.map(p => (
-              <button
-                key={p.key}
-                type="button"
-                onClick={() => setSelectedPlanKey(p.key)}
-                className={`w-full flex items-center justify-between rounded-xl border-2 px-4 py-3 text-left transition-all ${
-                  selectedPlanKey === p.key ? 'border-black bg-zinc-50' : 'border-zinc-200 hover:border-zinc-300'
-                }`}
-              >
-                <span className="text-sm font-semibold">{p.label ?? p.key}</span>
-                <span className="text-sm font-bold">{p.currency} {parseFloat(String(p.price)).toLocaleString('es-AR')}</span>
-              </button>
-            ))}
-          </div>
-
-          {availableSubPlans.length > 0 && (
-            <>
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Método</label>
-                <select
-                  value={changePlanMethod}
-                  onChange={e => setChangePlanMethod(e.target.value as typeof changePlanMethod)}
-                  disabled={isPendingChangePlan}
-                  className={inputClass}
-                >
-                  <option value="CASH">Efectivo</option>
-                  <option value="CARD">Tarjeta</option>
-                  <option value="TRANSFER">Transferencia</option>
-                  <option value="OTHER">Otro</option>
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Notas (opcional)</label>
-                <input
-                  type="text"
-                  value={changePlanNotes}
-                  onChange={e => setChangePlanNotes(e.target.value)}
-                  placeholder="Ej. Upgrade manual a Pro"
-                  disabled={isPendingChangePlan}
-                  className={inputClass}
-                />
-              </div>
-              <div className="flex gap-3">
-                <button type="submit" disabled={isPendingChangePlan || !selectedPlanKey} className="rounded-xl bg-black px-5 py-2 text-sm font-bold text-white hover:bg-zinc-800 disabled:opacity-50 transition-all">
-                  {isPendingChangePlan ? 'Cambiando…' : 'Confirmar cambio'}
-                </button>
-                <button type="button" onClick={() => setShowChangePlan(false)} className="rounded-xl border border-zinc-200 px-4 py-2 text-sm font-semibold text-zinc-600 hover:border-zinc-300 transition-all">
-                  Cancelar
-                </button>
-              </div>
-            </>
-          )}
-        </form>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setShowChangePlan(true)}
-          className="flex items-center gap-2 rounded-xl border border-dashed border-zinc-300 px-4 py-2.5 text-sm font-semibold text-zinc-500 hover:border-black hover:text-black transition-all w-full justify-center"
-        >
-          <ArrowRightLeft className="h-4 w-4" />
-          Cambiar plan de suscripción
-        </button>
-      )}
-
-      {/* Billing history */}
-      {billing.length > 0 && (
-        <div className="rounded-2xl border border-zinc-200 bg-white overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setShowHistory(v => !v)}
-            className="w-full flex items-center justify-between px-5 py-3.5 text-sm font-semibold hover:bg-zinc-50 transition-colors"
-          >
-            Historial de pagos ({billing.length})
-            {showHistory ? <ChevronUp className="h-4 w-4 text-zinc-400" /> : <ChevronDown className="h-4 w-4 text-zinc-400" />}
-          </button>
-
-          {showHistory && (
-            <div className="border-t border-zinc-100">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-zinc-50 border-b border-zinc-100">
-                    <th className="text-left px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-zinc-500">Fecha</th>
-                    <th className="text-left px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-zinc-500">Monto</th>
-                    <th className="text-left px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-zinc-500 hidden md:table-cell">Método</th>
-                    <th className="text-left px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-zinc-500 hidden lg:table-cell">Período</th>
-                    <th className="text-left px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-zinc-500 hidden lg:table-cell">Notas</th>
-                    <th className="px-3 py-2.5 w-10" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-100">
-                  {billing.map(b => (
-                    <tr key={b.id} className={`hover:bg-zinc-50 transition-colors ${deletingId === b.id ? 'opacity-50' : ''}`}>
-                      <td className="px-5 py-3 text-zinc-500">{fmt(b.createdAt)}</td>
-                      <td className="px-5 py-3 font-semibold">{b.currency} {parseFloat(b.amount).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
-                      <td className="px-5 py-3 text-zinc-500 hidden md:table-cell">{fmtMethod(b.method)}</td>
-                      <td className="px-5 py-3 text-zinc-500 hidden lg:table-cell">{fmt(b.periodStart)} → {fmt(b.periodEnd)}</td>
-                      <td className="px-5 py-3 text-zinc-400 hidden lg:table-cell">{b.notes ?? '—'}</td>
-                      <td className="px-3 py-3">
-                        <button
-                          type="button"
-                          onClick={() => setConfirmDeleteId(b.id)}
-                          disabled={isPendingDelete}
-                          className="p-1.5 rounded-lg text-zinc-300 hover:text-[#ff0000] hover:bg-red-50 transition-colors disabled:opacity-40"
-                          title="Eliminar pago"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {mode === 'pay' && (
+          <form onSubmit={handlePay} className="flex flex-col gap-4 border-t border-adm-line-soft bg-adm-subtle p-5">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-bold">Registrar pago</p>
+              <button type="button" onClick={() => setMode('idle')} aria-label="Cerrar" className={btn.icon}><X className="size-4" /></button>
             </div>
-          )}
-        </div>
-      )}
+            <div className="flex items-center justify-between rounded-[10px] border border-adm-line bg-adm-surface px-4 py-3">
+              <span className="text-[13px] font-semibold text-adm-muted">Monto a cobrar</span>
+              <span className="font-admin-mono text-base font-bold">{planAmount != null ? fmtMoney(planAmount, planCurrency) : '—'}</span>
+            </div>
+            <div>
+              <span className={field.label}>Método de pago</span>
+              <MethodPicker value={method} onChange={setMethod} disabled={isPending} />
+            </div>
+            <label className="block max-w-xs">
+              <span className={field.label}>Mes</span>
+              <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} disabled={isPending} className={field.input} />
+              <span className={field.hint}>{monthToNote(selectedMonth)}</span>
+            </label>
+            <div className="flex gap-2">
+              <button type="submit" disabled={isPending} className={cn(btn.dark, 'min-h-10')}>
+                {isPending ? 'Registrando…' : 'Confirmar pago'}
+              </button>
+              <button type="button" onClick={() => setMode('idle')} className={cn(btn.line, 'min-h-10')}>Cancelar</button>
+            </div>
+          </form>
+        )}
+
+        {mode === 'change' && (
+          <div className="border-t border-adm-line-soft bg-adm-subtle p-5">
+            {changePlanProration ? (
+              <ProratedBreakdown
+                p={changePlanProration}
+                currency={subPlans.find(p => p.key.toUpperCase() === selectedPlanKey.toUpperCase())?.currency ?? 'USD'}
+                onDone={() => { setChangePlanProration(null); setMode('idle'); setSelectedPlanKey('') }}
+              />
+            ) : (
+              <form onSubmit={handleChangePlan} className="flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-bold">Cambiar plan de suscripción</p>
+                  <button type="button" onClick={() => setMode('idle')} aria-label="Cerrar" className={btn.icon}><X className="size-4" /></button>
+                </div>
+                {availableSubPlans.length === 0 ? (
+                  <p className="text-sm text-adm-muted">No hay otros planes disponibles.</p>
+                ) : (
+                  <>
+                    <div role="radiogroup" aria-label="Nuevo plan" className="flex flex-wrap gap-2">
+                      {availableSubPlans.map(p => (
+                        <button
+                          key={p.key}
+                          type="button"
+                          role="radio"
+                          aria-checked={selectedPlanKey === p.key}
+                          onClick={() => setSelectedPlanKey(p.key)}
+                          className={cn(
+                            'flex min-w-0 flex-1 basis-44 flex-col items-start gap-1 rounded-xl bg-adm-surface p-3.5 text-left transition-colors',
+                            selectedPlanKey === p.key ? 'border-2 border-adm-ink p-[13px]' : 'border border-adm-line hover:border-adm-ink',
+                          )}
+                        >
+                          <span className="text-sm font-bold">{p.label ?? p.key}</span>
+                          <span className="font-admin-mono text-[13px]">{p.currency} {parseFloat(String(p.price)).toLocaleString('es-AR')}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div>
+                      <span className={field.label}>Método de pago</span>
+                      <MethodPicker value={changePlanMethod} onChange={setChangePlanMethod} disabled={isPendingChangePlan} />
+                    </div>
+                    <label className="block">
+                      <span className={field.label}>Notas (opcional)</span>
+                      <input
+                        type="text"
+                        value={changePlanNotes}
+                        onChange={e => setChangePlanNotes(e.target.value)}
+                        placeholder="Ej. Upgrade manual a Pro"
+                        disabled={isPendingChangePlan}
+                        className={field.input}
+                      />
+                    </label>
+                    <div className="flex gap-2">
+                      <button type="submit" disabled={isPendingChangePlan || !selectedPlanKey} className={cn(btn.dark, 'min-h-10')}>
+                        {isPendingChangePlan ? 'Cambiando…' : 'Confirmar cambio'}
+                      </button>
+                      <button type="button" onClick={() => setMode('idle')} className={cn(btn.line, 'min-h-10')}>Cancelar</button>
+                    </div>
+                  </>
+                )}
+              </form>
+            )}
+          </div>
+        )}
+      </Panel>
+
+      <Panel title="Pagos de suscripción" id="bill-h" action={<span className="text-[13px] text-adm-muted">{billing.length} registro{billing.length !== 1 ? 's' : ''}</span>}>
+        {billing.length === 0 ? (
+          <EmptyState>Sin pagos registrados.</EmptyState>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] border-collapse text-sm">
+              <thead>
+                <tr>
+                  <th scope="col" className={cn(th, 'pl-5')}>Fecha</th>
+                  <th scope="col" className={th}>Período</th>
+                  <th scope="col" className={th}>Método</th>
+                  <th scope="col" className={th}>Notas</th>
+                  <th scope="col" className={cn(th, 'text-right')}>Monto</th>
+                  <th scope="col" className={cn(th, 'pr-5')}><span className="sr-only">Acciones</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {billing.map(b => (
+                  <tr key={b.id} className={cn('hover:bg-adm-subtle', deletingId === b.id && 'opacity-50')}>
+                    <td className={cn(td, 'pl-5 font-admin-mono text-[13px]')}>{fmt(b.createdAt)}</td>
+                    <td className={cn(td, 'text-[13px] text-adm-muted')}>{fmt(b.periodStart)} → {fmt(b.periodEnd)}</td>
+                    <td className={td}>{fmtMethod(b.method)}</td>
+                    <td className={cn(td, 'max-w-[220px] truncate text-adm-muted')}>{b.notes ?? '—'}</td>
+                    <td className={cn(td, 'text-right font-admin-mono font-bold')}>{fmtMoney(parseFloat(b.amount), b.currency)}</td>
+                    <td className={cn(td, 'pr-5 text-right')}>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteId(b.id)}
+                        disabled={isPendingDelete}
+                        aria-label={`Eliminar pago del ${fmt(b.createdAt)}`}
+                        className={cn(btn.icon, 'hover:bg-adm-bad-bg hover:text-adm-bad-fg')}
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
+
       <AlertDialog open={!!confirmDeleteId} onOpenChange={open => { if (!open) setConfirmDeleteId(null) }}>
-        <AlertDialogContent>
+        <AlertDialogContent className="admin-surface">
           <AlertDialogHeader>
             <AlertDialogTitle>Eliminar pago</AlertDialogTitle>
             <AlertDialogDescription>
-              ¿Estás seguro de que querés eliminar este pago? Esta acción no se puede deshacer.
+              ¿Seguro que querés eliminar este pago? El estado de la suscripción se recalcula. No se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDeleteBilling}
-              className="bg-[#ff0000] hover:bg-red-700 text-white"
-            >
+            <AlertDialogAction onClick={confirmDeleteBilling} className="bg-[#e5484d] text-white hover:brightness-95">
               Eliminar
             </AlertDialogAction>
           </AlertDialogFooter>

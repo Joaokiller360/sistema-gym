@@ -1,13 +1,36 @@
 import { cookies } from 'next/headers'
 import Link from 'next/link'
-import { Building2, Users, ChevronRight, TrendingUp, DollarSign, LifeBuoy, CreditCard, Settings, ArrowUpRight, AlertTriangle, ArrowUp, Minus, ArrowDown, Bell, Circle, Clock, CheckCircle2 } from 'lucide-react'
-import { KpiCard } from '@/components/shared/KpiCard'
-import { StatusBadge } from '@/components/shared/StatusBadge'
+import { Building2, Plus } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
-import { Gym } from '@/types'
-import { NewsSection } from '@/app/gym/[gymSlug]/dashboard/NewsSection'
-import { TutorialsSection } from '@/app/gym/[gymSlug]/dashboard/TutorialsSection'
-import { DemoRequestsSection, type DemoRequest } from './DemoRequestsSection'
+import {
+  daysUntil,
+  fmtAmount,
+  fmtCompact,
+  mainCurrency,
+  monthlySeries,
+  recordsBetween,
+  revenueBetween,
+  type SubscriptionPlanPrice,
+  loadGymsWithBilling,
+} from '@/lib/admin-billing'
+import {
+  AdminPage,
+  EmptyState,
+  GymMark,
+  Meter,
+  PageHeader,
+  Panel,
+  PanelLink,
+  PersonMark,
+  Pill,
+  SectionLabel,
+  Stat,
+  btn,
+  td,
+  th,
+  type Tone,
+} from '@/components/admin/ui'
+import type { AccessRequest, DemoRequest } from '../acceso/RequestsInbox'
 
 interface DashboardStats {
   totalGyms: number
@@ -16,345 +39,367 @@ interface DashboardStats {
   totalMembers: number
 }
 
-interface GymListResponse {
-  data: Gym[]
-  total: number
-}
-
 interface CountResponse {
   total?: number
   data?: unknown[]
 }
 
-interface BillingRecord {
-  amount: string
-  currency: string
-  periodStart: string | null
-  periodEnd: string | null
-  createdAt: string
-}
-
 interface SupportTicket {
   id: string
   title: string
-  description: string
   status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED'
   priority: 'URGENT' | 'HIGH' | 'NORMAL' | 'LOW' | 'NOTIFICATION'
-  category: string
   gymName?: string | null
   createdAt: string
 }
 
-function startOfDay(d: Date) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()) }
-function endOfDay(d: Date) { return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999) }
-function startOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth(), 1) }
+type ListResponse<T> = T[] | { data: T[] }
+const list = <T,>(raw: ListResponse<T> | null): T[] => (raw ? (Array.isArray(raw) ? raw : raw.data ?? []) : [])
 
-function fmtRevenue(amount: number, currency: string) {
-  return `${currency} ${amount.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
+const TICKET_STATUS: Record<SupportTicket['status'], { label: string; tone: Tone }> = {
+  OPEN: { label: 'Abierto', tone: 'warn' },
+  IN_PROGRESS: { label: 'En proceso', tone: 'info' },
+  RESOLVED: { label: 'Resuelto', tone: 'ok' },
+  CLOSED: { label: 'Cerrado', tone: 'neutral' },
 }
 
-function gymBillingRevenue(records: BillingRecord[], from: Date, to: Date): { amount: number; currency: string } | null {
-  const filtered = records.filter(b => {
-    const d = new Date(b.createdAt)
-    return d >= from && d <= to
-  })
-  if (filtered.length === 0) return null
-
-  const byCurrency: Record<string, number> = {}
-  for (const b of filtered) {
-    const amt = parseFloat(b.amount)
-    if (!isNaN(amt)) {
-      byCurrency[b.currency] = (byCurrency[b.currency] ?? 0) + amt
-    }
-  }
-  const entries = Object.entries(byCurrency)
-  if (entries.length === 0) return null
-  const [currency, amount] = entries.sort((a, b) => b[1] - a[1])[0]
-  if (amount <= 0) return null
-  return { currency, amount }
+const TICKET_PRIORITY: Record<SupportTicket['priority'], { label: string; tone: Tone }> = {
+  URGENT: { label: 'Urgente', tone: 'bad' },
+  HIGH: { label: 'Alta', tone: 'high' },
+  NORMAL: { label: 'Normal', tone: 'neutral' },
+  LOW: { label: 'Baja', tone: 'neutral' },
+  NOTIFICATION: { label: 'Notificación', tone: 'ok' },
 }
 
-function sumBilling(perGym: BillingRecord[][], from: Date, to: Date): { amount: number; currency: string } | null {
-  const byCurrency: Record<string, number> = {}
-  for (const records of perGym) {
-    const rev = gymBillingRevenue(records, from, to)
-    if (!rev) continue
-    byCurrency[rev.currency] = (byCurrency[rev.currency] ?? 0) + rev.amount
-  }
-  const entries = Object.entries(byCurrency)
-  if (entries.length === 0) return null
-  const [currency, amount] = entries.sort((a, b) => b[1] - a[1])[0]
-  if (amount <= 0) return null
-  return { amount, currency }
+const SUB_LABEL = { ACTIVE: 'Activa', GRACE: 'Prórroga', SUSPENDED: 'Suspendida' } as const
+const SUB_TONE: Record<keyof typeof SUB_LABEL, Tone> = { ACTIVE: 'ok', GRACE: 'warn', SUSPENDED: 'bad' }
+
+function timeAgo(iso: string, now: Date) {
+  const mins = Math.round((now.getTime() - new Date(iso).getTime()) / 60_000)
+  if (mins < 60) return `hace ${Math.max(1, mins)} min`
+  const hours = Math.round(mins / 60)
+  if (hours < 24) return `hace ${hours} h`
+  const days = Math.round(hours / 24)
+  return days === 1 ? 'ayer' : `hace ${days} días`
 }
 
-function initials(name: string) {
-  return name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase()
+function AttentionCard({
+  href,
+  count,
+  label,
+  tag,
+  tone,
+}: {
+  href: string
+  count: number
+  label: string
+  tag: string
+  tone: Tone
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex min-h-11 flex-1 basis-48 flex-col gap-1.5 rounded-xl border border-adm-line bg-adm-surface px-4.5 py-4 transition-colors hover:border-adm-ink"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-admin-mono text-[28px] font-bold leading-none">{count}</span>
+        {count > 0 && <Pill tone={tone}>{tag}</Pill>}
+      </div>
+      <span className="text-sm font-semibold">{label}</span>
+    </Link>
+  )
 }
-
-const resolveLogoUrl = (url: string | null | undefined): string | null =>
-  url ? url.replace(/^https?:\/\/[^/]+/, '') : null
 
 export default async function AdminDashboardPage() {
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value ?? ''
-
   const now = new Date()
-  const dayStart = startOfDay(now)
-  const dayEnd = endOfDay(now)
-  const monthStart = startOfMonth(now)
 
-  const [stats, gymsRaw, ticketsRaw, demoRequestsRaw] = await Promise.all([
+  const [stats, gyms, subPlans, ticketsRaw, demosRaw, accessRaw] = await Promise.all([
     apiFetch<DashboardStats>(`/admin/dashboard`, token),
-    apiFetch<GymListResponse | Gym[]>(`/admin/gyms?limit=5`, token),
-    apiFetch<SupportTicket[] | { data: SupportTicket[] }>(`/support/tickets?all=true`, token, { silent: true }),
-    apiFetch<DemoRequest[] | { data: DemoRequest[] }>(`/admin/demo-requests?limit=100`, token, { silent: true }),
+    loadGymsWithBilling(token),
+    apiFetch<SubscriptionPlanPrice[]>(`/admin/subscription-plans`, token, { silent: true }),
+    apiFetch<ListResponse<SupportTicket>>(`/support/tickets?all=true`, token, { silent: true }),
+    apiFetch<ListResponse<DemoRequest>>(`/admin/demo-requests?limit=100`, token, { silent: true }),
+    apiFetch<ListResponse<AccessRequest>>(`/access-requests/admin?limit=100`, token, { silent: true }),
   ])
 
-  const recentGyms: Gym[] = (gymsRaw
-    ? (Array.isArray(gymsRaw) ? gymsRaw : gymsRaw.data).slice(0, 5)
-    : []
-  ).map(g => ({ ...g, logoUrl: resolveLogoUrl(g.logoUrl) }))
+  const tickets = list(ticketsRaw).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  const demos = list(demosRaw).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  const access = list(accessRaw)
 
-  const recentBilling = await Promise.all(
-    recentGyms.map(g => apiFetch<BillingRecord[]>(`/admin/gyms/${g.id}/billing-history`, token).then(r => r ?? []))
-  )
+  const openTickets = tickets.filter((t) => t.status === 'OPEN' || t.status === 'IN_PROGRESS')
+  const urgentOpen = openTickets.filter((t) => t.priority === 'URGENT').length
+  const pendingAccess = access.filter((r) => r.status === 'PENDING').length
+  const pendingDemos = demos.filter((d) => d.status === 'PENDING')
+  const expiringSoon = gyms.filter((g) => {
+    const s = g.subscription
+    if (!s?.subscriptionExpiresAt || s.subscriptionStatus !== 'ACTIVE') return false
+    const d = daysUntil(s.subscriptionExpiresAt, now)
+    return d >= 0 && d <= 7
+  }).length
 
-  const dailyRevenue = sumBilling(recentBilling, dayStart, dayEnd)
-  const monthlyRevenue = sumBilling(recentBilling, monthStart, dayEnd)
+  // Revenue
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const prevSameDay = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate(), 23, 59, 59, 999)
+  const daily = revenueBetween(gyms, dayStart, now)
+  const dailyCount = gyms.reduce((n, g) => n + recordsBetween(g, dayStart, now).length, 0)
+  const monthly = revenueBetween(gyms, monthStart, now)
+  const prevMonthly = revenueBetween(gyms, prevStart, prevSameDay)
+  const monthDelta =
+    monthly && prevMonthly && prevMonthly.currency === monthly.currency && prevMonthly.amount > 0
+      ? ((monthly.amount - prevMonthly.amount) / prevMonthly.amount) * 100
+      : null
+  const prevMonthName = prevStart.toLocaleDateString('es-AR', { month: 'long' })
 
-  const counts = await Promise.all(
-    recentGyms.map(async (g) => {
-      const membersRes = await apiFetch<CountResponse | unknown[]>(`/members?gymId=${g.id}&limit=1`, token)
-      const members = Array.isArray(membersRes) ? membersRes.length : (membersRes as CountResponse)?.total ?? 0
-      return { gymId: g.id, members }
-    })
-  )
+  const currency = mainCurrency(gyms)
+  const series = monthlySeries(gyms, 12, currency, now)
+  const seriesMax = Math.max(1, ...series.map((p) => p.amount))
 
-  const countMap = Object.fromEntries(counts.map(c => [c.gymId, c]))
+  // Plans
+  const planCounts = new Map<string, number>()
+  for (const g of gyms) {
+    const key = (g.subscription?.subscriptionPlan ?? g.subscriptionPlan ?? '').toUpperCase()
+    if (key) planCounts.set(key, (planCounts.get(key) ?? 0) + 1)
+  }
+  const planRows = [...planCounts.entries()]
+    .map(([key, count]) => ({
+      key,
+      count,
+      label: subPlans?.find((p) => p.key.toUpperCase() === key)?.label ?? key,
+    }))
+    .sort((a, b) => b.count - a.count)
+  const graceCount = gyms.filter((g) => g.subscription?.subscriptionStatus === 'GRACE').length
+  const suspendedCount = gyms.filter((g) => g.subscription?.subscriptionStatus === 'SUSPENDED').length
 
-  const tickets: SupportTicket[] = ticketsRaw
-    ? (Array.isArray(ticketsRaw) ? ticketsRaw : ticketsRaw.data)
-    : []
-
-  const demoRequests: DemoRequest[] = demoRequestsRaw
-    ? (Array.isArray(demoRequestsRaw) ? demoRequestsRaw : demoRequestsRaw.data)
-    : []
-
-  const latestTickets = tickets
+  // Recent gyms
+  const recentGyms = [...gyms]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 5)
-  const openTickets = tickets.filter(t => t.status === 'OPEN' || t.status === 'IN_PROGRESS').length
+  const memberCounts = await Promise.all(
+    recentGyms.map(async (g) => {
+      const res = await apiFetch<CountResponse | unknown[]>(`/members?gymId=${g.id}&limit=1`, token, { silent: true })
+      return Array.isArray(res) ? res.length : (res as CountResponse | null)?.total ?? null
+    }),
+  )
+
+  const totalGyms = stats?.totalGyms ?? gyms.length
+  const activeGyms = stats?.activeGyms ?? gyms.filter((g) => g.isActive).length
+  const dateLabel = now.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
-    <div className="p-8 space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground text-sm mt-1">Vista global</p>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <KpiCard title="Gimnasios activos" value={stats?.activeGyms ?? '—'} icon={Building2} />
-        <KpiCard title="Total gimnasios" value={stats?.totalGyms ?? '—'} icon={Building2} />
-        <KpiCard title="Miembros totales" value={stats?.totalMembers ?? '—'} icon={Users} />
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="rounded-2xl border border-zinc-200 bg-white p-6 space-y-1">
-          <div className="flex items-center gap-2 text-zinc-400 text-xs font-bold uppercase tracking-widest mb-3">
-            <TrendingUp className="h-4 w-4" />
-            Ingreso de hoy
-          </div>
-          <p className="text-3xl font-black tracking-tight">
-            {dailyRevenue ? fmtRevenue(dailyRevenue.amount, dailyRevenue.currency) : '—'}
-          </p>
-          <p className="text-xs text-zinc-400">
-            {now.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-zinc-200 bg-white p-6 space-y-1">
-          <div className="flex items-center gap-2 text-zinc-400 text-xs font-bold uppercase tracking-widest mb-3">
-            <DollarSign className="h-4 w-4" />
-            Ingreso del mes
-          </div>
-          <p className="text-3xl font-black tracking-tight">
-            {monthlyRevenue ? fmtRevenue(monthlyRevenue.amount, monthlyRevenue.currency) : '—'}
-          </p>
-          <p className="text-xs text-zinc-400">
-            {now.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}
-          </p>
-        </div>
-      </div>
-
-      {/* Quick access */}
-      <div className="space-y-3">
-        <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-400">Accesos rápidos</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {([
-            { href: '/admin/gyms', icon: Building2, label: 'Gimnasios', desc: `${stats?.totalGyms ?? 0} registrados` },
-            { href: '/admin/income', icon: DollarSign, label: 'Ingresos', desc: 'Facturación' },
-            { href: '/admin/support', icon: LifeBuoy, label: 'Soporte', desc: openTickets > 0 ? `${openTickets} abierto${openTickets !== 1 ? 's' : ''}` : 'Sin pendientes' },
-            { href: '/admin/plans', icon: CreditCard, label: 'Planes', desc: 'Suscripciones' },
-            { href: '/admin/settings', icon: Settings, label: 'Configuración', desc: 'Ajustes globales' },
-          ] as const).map(({ href, icon: Icon, label, desc }) => (
-            <Link
-              key={href}
-              href={href}
-              className="group rounded-2xl border border-zinc-200 bg-white p-4 hover:border-zinc-300 hover:shadow-sm transition-all space-y-3"
-            >
-              <div className="flex items-center justify-between">
-                <div className="h-9 w-9 rounded-xl bg-zinc-100 flex items-center justify-center group-hover:bg-[#fffb00] transition-colors">
-                  <Icon className="h-4 w-4 text-zinc-600 group-hover:text-black transition-colors" />
-                </div>
-                <ArrowUpRight className="h-3.5 w-3.5 text-zinc-300 group-hover:text-zinc-500 transition-colors" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-zinc-800">{label}</p>
-                <p className="text-xs text-zinc-400 mt-0.5">{desc}</p>
-              </div>
+    <AdminPage>
+      <PageHeader
+        eyebrow={<span className="capitalize">{dateLabel}</span>}
+        title="Panel de control"
+        actions={
+          <>
+            <Link href="/admin/income" className={btn.line}>
+              Ver ingresos
             </Link>
-          ))}
-        </div>
-      </div>
-
-      {/* Latest support tickets */}
-      {latestTickets.length > 0 && (
-        <div className="rounded-2xl border border-zinc-200 bg-white overflow-hidden">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100">
-            <div className="flex items-center gap-2">
-              <LifeBuoy className="h-4 w-4 text-zinc-400" />
-              <h2 className="font-semibold text-sm">Últimos tickets de soporte</h2>
-              {openTickets > 0 && (
-                <span className="rounded-full bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 leading-none">{openTickets}</span>
-              )}
-            </div>
-            <Link href="/admin/support" className="text-xs font-semibold text-[#1fad9d] hover:text-[#0e7a70] transition-colors flex items-center gap-1">
-              Ver todos <ChevronRight className="h-3.5 w-3.5" />
+            <Link href="/admin/gyms/new" className={btn.primary}>
+              <Plus className="size-4" strokeWidth={2.4} aria-hidden="true" />
+              Nuevo gimnasio
             </Link>
-          </div>
-          <ul className="divide-y divide-zinc-100">
-            {latestTickets.map(t => {
-              const priorityConfig = {
-                URGENT: { color: 'bg-red-50 text-red-600 border-red-200', icon: <AlertTriangle className="h-3 w-3" />, label: 'Urgente' },
-                HIGH: { color: 'bg-orange-50 text-orange-600 border-orange-200', icon: <ArrowUp className="h-3 w-3" />, label: 'Alta' },
-                NORMAL: { color: 'bg-blue-50 text-blue-600 border-blue-200', icon: <Minus className="h-3 w-3" />, label: 'Normal' },
-                LOW: { color: 'bg-zinc-50 text-zinc-500 border-zinc-200', icon: <ArrowDown className="h-3 w-3" />, label: 'Baja' },
-                NOTIFICATION: { color: 'bg-[#1fad9d]/10 text-[#0e7a70] border-[#1fad9d]/30', icon: <Bell className="h-3 w-3" />, label: 'Notif.' },
-              }[t.priority]
-              const statusConfig = {
-                OPEN: { color: 'bg-amber-50 text-amber-600 border-amber-200', icon: <Circle className="h-3 w-3" />, label: 'Abierto' },
-                IN_PROGRESS: { color: 'bg-blue-50 text-blue-600 border-blue-200', icon: <Clock className="h-3 w-3" />, label: 'En proceso' },
-                RESOLVED: { color: 'bg-[#1fad9d]/10 text-[#0e7a70] border-[#1fad9d]/30', icon: <CheckCircle2 className="h-3 w-3" />, label: 'Resuelto' },
-                CLOSED: { color: 'bg-zinc-50 text-zinc-400 border-zinc-200', icon: <CheckCircle2 className="h-3 w-3" />, label: 'Cerrado' },
-              }[t.status]
+          </>
+        }
+      />
+
+      <section aria-labelledby="attn-h" className="flex flex-col gap-2.5">
+        <SectionLabel id="attn-h">Requiere atención</SectionLabel>
+        <div className="flex flex-wrap gap-3">
+          <AttentionCard
+            href="/admin/support"
+            count={openTickets.length}
+            label="Tickets de soporte abiertos"
+            tag={urgentOpen > 0 ? `${urgentOpen} urgente${urgentOpen !== 1 ? 's' : ''}` : 'Abiertos'}
+            tone={urgentOpen > 0 ? 'bad' : 'warn'}
+          />
+          <AttentionCard href="/admin/acceso" count={pendingAccess} label="Solicitudes de acceso" tag="Pendientes" tone="warn" />
+          <AttentionCard href="/admin/acceso" count={pendingDemos.length} label="Demos solicitadas" tag="Sin contactar" tone="neutral" />
+          <AttentionCard href="/admin/income" count={expiringSoon} label="Suscripciones por vencer" tag="≤ 7 días" tone="high" />
+        </div>
+      </section>
+
+      <section aria-label="Indicadores" className="flex flex-wrap gap-3">
+        <Stat label="Gimnasios activos" value={activeGyms}>
+          <span className="-mt-1 block font-admin-mono text-[15px] text-adm-muted">de {totalGyms}</span>
+          <Meter value={totalGyms ? (activeGyms / totalGyms) * 100 : 0} className="mt-3" />
+        </Stat>
+        <Stat label="Miembros totales" value={stats ? fmtAmount(stats.totalMembers) : '—'} hint={stats ? `${fmtAmount(stats.totalUsers)} usuarios en la plataforma` : undefined} />
+        <Stat
+          label="Ingreso de hoy"
+          unit={daily?.currency}
+          value={daily ? fmtAmount(daily.amount) : '—'}
+          hint={`${dailyCount} pago${dailyCount !== 1 ? 's' : ''} registrado${dailyCount !== 1 ? 's' : ''}`}
+        />
+        <Stat
+          label="Ingreso del mes"
+          unit={monthly?.currency}
+          value={monthly ? fmtCompact(monthly.amount) : '—'}
+          hint={monthDelta !== null ? `${monthDelta >= 0 ? '+' : ''}${monthDelta.toLocaleString('es-AR', { maximumFractionDigits: 1 })}% vs. mismo período de ${prevMonthName}` : undefined}
+          hintTone={monthDelta !== null && monthDelta < 0 ? 'bad' : 'ok'}
+        />
+      </section>
+
+      <div className="flex flex-wrap gap-3">
+        <section aria-labelledby="rev-h" className="min-w-0 flex-[2_1_480px] rounded-2xl border border-adm-line bg-adm-night p-6 text-white">
+          <h2 id="rev-h" className="text-[15px] font-bold">Ingresos por mes</h2>
+          <p className="mt-1 text-[13px] text-[#a3a39d]">Últimos 12 meses · {currency}</p>
+          <div className="mt-7 flex h-[200px] items-end gap-2 border-b border-[#2a2a2c]" role="img" aria-label={`Ingresos de los últimos 12 meses en ${currency}`}>
+            {series.map((p, i) => {
+              const current = i === series.length - 1
               return (
-                <li key={t.id} className="flex items-center gap-4 px-6 py-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${statusConfig.color}`}>
-                        {statusConfig.icon}{statusConfig.label}
-                      </span>
-                      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${priorityConfig.color}`}>
-                        {priorityConfig.icon}{priorityConfig.label}
-                      </span>
-                      {t.gymName && (
-                        <span className="text-[10px] text-zinc-400 bg-zinc-50 border border-zinc-200 rounded-full px-2 py-0.5">{t.gymName}</span>
-                      )}
-                    </div>
-                    <p className="text-sm font-semibold text-zinc-700 truncate">{t.title}</p>
-                  </div>
-                  <p className="text-xs text-zinc-400 shrink-0">{new Date(t.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}</p>
-                </li>
+                <div key={p.key} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1.5" title={`${p.label}: ${currency} ${fmtAmount(p.amount)}`}>
+                  {current && p.amount > 0 && (
+                    <span className="font-admin-mono text-[11px] font-bold text-adm-brand">{fmtCompact(p.amount)}</span>
+                  )}
+                  <div
+                    className={current ? 'w-full max-w-9 rounded-t bg-adm-brand' : 'w-full max-w-9 rounded-t bg-[#3a3a3d]'}
+                    style={{ height: `${Math.max(p.amount > 0 ? 2 : 0, (p.amount / seriesMax) * 88)}%` }}
+                  />
+                </div>
               )
             })}
-          </ul>
-        </div>
-      )}
-
-      {/* Demo requests */}
-      <DemoRequestsSection requests={demoRequests} />
-
-      {/* News & Tutorials — managed here, visible in gym dashboards */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <NewsSection canManage={true} />
-        <TutorialsSection canManage={true} />
-      </div>
-
-      {/* Recent gyms table */}
-      <div className="rounded-2xl border border-zinc-200 bg-white overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100">
-          <h2 className="font-semibold text-sm">Gimnasios recientes</h2>
-          <Link
-            href="/admin/gyms"
-            className="text-xs font-semibold text-[#1fad9d] hover:text-[#0e7a70] transition-colors flex items-center gap-1"
-          >
-            Ver todos
-            <ChevronRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-
-        {recentGyms.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-sm text-zinc-400">
-            <Building2 className="h-10 w-10 mb-3 opacity-20" />
-            Sin gimnasios registrados
           </div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-zinc-50 border-b border-zinc-100">
-                <th className="text-left px-5 py-3 font-semibold text-xs uppercase tracking-wider text-zinc-500">Gimnasio</th>
-                <th className="text-left px-5 py-3 font-semibold text-xs uppercase tracking-wider text-zinc-500 hidden md:table-cell">Miembros</th>
-                <th className="text-left px-5 py-3 font-semibold text-xs uppercase tracking-wider text-zinc-500">Estado</th>
-                <th className="px-5 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100">
-              {recentGyms.map(g => (
-                <tr key={g.id} className="hover:bg-zinc-50 transition-colors">
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-xl bg-[#fffb00] flex items-center justify-center shrink-0 overflow-hidden">
-                        {g.logoUrl
-                          ? <img src={g.logoUrl} alt={g.name} className="h-full w-full object-cover" />
-                          : <span className="text-xs font-black text-black">{initials(g.name)}</span>
-                        }
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-bold truncate">{g.name}</p>
-                        <p className="text-xs text-zinc-400">{g.slug}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3.5 hidden md:table-cell">
-                    <span className="font-medium">{countMap[g.id]?.members ?? '—'}</span>
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <StatusBadge status={g.isActive ? 'active' : 'inactive'} />
-                  </td>
-                  <td className="px-5 py-3.5">
-                    <div className="flex items-center justify-end gap-2">
-                      <Link
-                        href={`/gym/${g.slug}/dashboard`}
-                        className="inline-flex items-center gap-1 rounded-lg bg-black px-3 py-1.5 text-xs font-semibold text-white hover:bg-zinc-800 transition-all"
-                      >
-                        Entrar
-                      </Link>
-                      <Link
-                        href={`/admin/gyms/${g.id}`}
-                        className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:border-zinc-300 hover:text-black transition-all"
-                      >
-                        Ver más
-                        <ChevronRight className="h-3 w-3" />
-                      </Link>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+          <div className="mt-2 flex gap-2" aria-hidden="true">
+            {series.map((p) => (
+              <div key={p.key} className="min-w-0 flex-1 text-center text-[11px] text-[#a3a39d]">{p.label}</div>
+            ))}
+          </div>
+        </section>
+
+        <Panel
+          title="Gimnasios por plan"
+          id="plan-h"
+          action={<PanelLink href="/admin/plans">Planes</PanelLink>}
+          className="min-w-0 flex-[1_1_280px]"
+          bodyClassName="flex flex-col gap-4 p-5"
+        >
+          {planRows.length === 0 ? (
+            <p className="text-sm text-adm-muted">Sin datos de suscripción.</p>
+          ) : (
+            planRows.map((p) => (
+              <div key={p.key} className="flex flex-col gap-1.5">
+                <div className="flex justify-between text-[13px]">
+                  <span className="font-semibold">{p.label}</span>
+                  <span className="font-admin-mono">{p.count}</span>
+                </div>
+                <Meter value={(p.count / gyms.length) * 100} className="h-2.5" />
+              </div>
+            ))
+          )}
+          <div className="mt-auto flex flex-col gap-2 border-t border-adm-line-soft pt-4 text-[13px]">
+            <div className="flex justify-between"><span className="text-adm-muted">En prórroga</span><span className="font-admin-mono font-bold text-adm-warn-fg">{graceCount}</span></div>
+            <div className="flex justify-between"><span className="text-adm-muted">Suspendidos</span><span className="font-admin-mono font-bold text-adm-bad-fg">{suspendedCount}</span></div>
+          </div>
+        </Panel>
       </div>
-    </div>
+
+      <div className="flex flex-wrap gap-3">
+        <Panel title="Últimos tickets" id="tk-h" action={<PanelLink href="/admin/support">Ver todos</PanelLink>} className="min-w-0 flex-[1_1_380px]">
+          {tickets.length === 0 ? (
+            <EmptyState>Sin tickets de soporte.</EmptyState>
+          ) : (
+            <ul>
+              {tickets.slice(0, 5).map((t) => (
+                <li key={t.id} className="flex items-center gap-3 border-t border-adm-line-soft px-5 py-3.5 first:border-t-0">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                    <p className="truncate text-sm font-semibold">{t.title}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Pill tone={TICKET_STATUS[t.status].tone}>{TICKET_STATUS[t.status].label}</Pill>
+                      <Pill tone={TICKET_PRIORITY[t.priority].tone}>{TICKET_PRIORITY[t.priority].label}</Pill>
+                      {t.gymName && <Pill className="font-medium">{t.gymName}</Pill>}
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-xs text-adm-muted">
+                    {new Date(t.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+
+        <Panel title="Demos sin contactar" id="demo-h" action={<PanelLink href="/admin/acceso">Ver todas</PanelLink>} className="min-w-0 flex-[1_1_380px]">
+          {pendingDemos.length === 0 ? (
+            <EmptyState>No hay demos pendientes.</EmptyState>
+          ) : (
+            <ul>
+              {pendingDemos.slice(0, 5).map((d) => (
+                <li key={d.id} className="flex items-center gap-3 border-t border-adm-line-soft px-5 py-3.5 first:border-t-0">
+                  <PersonMark name={d.name} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">{d.name}</p>
+                    <p className="mt-0.5 truncate text-xs text-adm-muted">
+                      {d.gymName} · {d.planLabel} · {timeAgo(d.createdAt, now)}
+                    </p>
+                  </div>
+                  <Link href="/admin/acceso?tab=demo" className={btn.line}>Contactar</Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+      </div>
+
+      <Panel title="Gimnasios recientes" id="gy-h" action={<PanelLink href="/admin/gyms">Ver todos</PanelLink>}>
+        {recentGyms.length === 0 ? (
+          <EmptyState icon={<Building2 className="size-10" />}>Sin gimnasios registrados</EmptyState>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] border-collapse text-sm">
+              <thead>
+                <tr>
+                  <th scope="col" className={`${th} pl-5`}>Gimnasio</th>
+                  <th scope="col" className={th}>Plan</th>
+                  <th scope="col" className={th}>Miembros</th>
+                  <th scope="col" className={th}>Suscripción</th>
+                  <th scope="col" className={`${th} pr-5`}><span className="sr-only">Acciones</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentGyms.map((g, i) => {
+                  const status = g.subscription?.subscriptionStatus
+                  const planKey = g.subscription?.subscriptionPlan ?? g.subscriptionPlan
+                  return (
+                    <tr key={g.id} className="hover:bg-adm-subtle">
+                      <td className={`${td} pl-5`}>
+                        <div className="flex items-center gap-3">
+                          <GymMark name={g.name} logoUrl={g.logoUrl} />
+                          <div className="min-w-0">
+                            <p className="truncate font-bold">{g.name}</p>
+                            <p className="font-admin-mono text-xs text-adm-muted">/{g.slug}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className={td}>{subPlans?.find((p) => p.key.toUpperCase() === planKey?.toUpperCase())?.label ?? planKey ?? '—'}</td>
+                      <td className={`${td} font-admin-mono`}>{memberCounts[i] ?? '—'}</td>
+                      <td className={td}>
+                        {!g.isActive ? (
+                          <Pill>Inactivo</Pill>
+                        ) : status ? (
+                          <Pill tone={SUB_TONE[status]}>{SUB_LABEL[status]}</Pill>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                      <td className={`${td} pr-5`}>
+                        <div className="flex justify-end gap-2">
+                          <Link href={`/gym/${g.slug}/dashboard`} className={btn.dark}>Entrar</Link>
+                          <Link href={`/admin/gyms/${g.id}`} className={btn.line}>Detalle</Link>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
+    </AdminPage>
   )
 }

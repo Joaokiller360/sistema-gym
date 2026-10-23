@@ -1,13 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useTransition } from 'react'
 import {
   LayoutDashboard,
   Building2,
-  Settings,
+  SlidersHorizontal,
   LogOut,
   Dumbbell,
   CreditCard,
@@ -16,30 +15,82 @@ import {
   X,
   Moon,
   Sun,
-  UserCircle,
   LifeBuoy,
   CalendarClock,
   Mail,
+  type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logoutAction } from '@/lib/logout'
 import { useTheme } from '@/components/providers/ThemeProvider'
 
-const NAV = [
-  { label: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
-  { label: 'Gimnasios', href: '/admin/gyms', icon: Building2 },
-  { label: 'Ingresos', href: '/admin/income', icon: TrendingUp },
-  { label: 'Planes', href: '/admin/plans', icon: CreditCard },
-  { label: 'Solicitudes', href: '/admin/acceso', icon: CalendarClock },
-  { label: 'Comunicaciones', href: '/admin/comunicaciones', icon: Mail },
-  { label: 'Configuración', href: '/admin/settings', icon: Settings },
-  { label: 'Mi perfil', href: '/admin/profile', icon: UserCircle },
-  { label: 'Soporte', href: '/admin/support', icon: LifeBuoy },
+export interface AdminNavCounts {
+  gyms?: number
+  requests?: number
+  tickets?: number
+}
+
+interface NavItem {
+  label: string
+  href: string
+  icon: LucideIcon
+  count?: keyof AdminNavCounts
+  countTone?: 'muted' | 'brand' | 'alert'
+}
+
+const NAV: { group: string; items: NavItem[] }[] = [
+  {
+    group: 'Operación',
+    items: [
+      { label: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
+      { label: 'Gimnasios', href: '/admin/gyms', icon: Building2, count: 'gyms', countTone: 'muted' },
+      { label: 'Solicitudes', href: '/admin/acceso', icon: CalendarClock, count: 'requests', countTone: 'brand' },
+    ],
+  },
+  {
+    group: 'Negocio',
+    items: [
+      { label: 'Ingresos', href: '/admin/income', icon: TrendingUp },
+      { label: 'Planes', href: '/admin/plans', icon: CreditCard },
+    ],
+  },
+  {
+    group: 'Comunidad',
+    items: [
+      { label: 'Comunicaciones', href: '/admin/comunicaciones', icon: Mail },
+      { label: 'Soporte', href: '/admin/support', icon: LifeBuoy, count: 'tickets', countTone: 'alert' },
+    ],
+  },
+  {
+    group: 'Plataforma',
+    items: [{ label: 'Configuración', href: '/admin/settings', icon: SlidersHorizontal }],
+  },
 ]
 
 interface AdminSidebarProps {
   user: { email: string }
   saasName?: string
+  counts?: AdminNavCounts
+}
+
+function CountBadge({ value, tone, active }: { value: number; tone: NavItem['countTone']; active: boolean }) {
+  if (tone === 'muted') {
+    return <span className={cn('font-admin-mono text-xs', active ? 'text-adm-night' : 'text-[#85857f]')}>{value}</span>
+  }
+  return (
+    <span
+      className={cn(
+        'inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-extrabold',
+        active
+          ? 'bg-adm-night text-adm-brand'
+          : tone === 'brand'
+            ? 'bg-adm-brand text-adm-night'
+            : 'bg-[#e5484d] text-white',
+      )}
+    >
+      {value}
+    </span>
+  )
 }
 
 function NavContent({
@@ -48,97 +99,125 @@ function NavContent({
   onClose,
   isPending,
   onLogout,
-  saasName = 'GymOS',
+  saasName,
+  counts,
 }: {
   user: { email: string }
   pathname: string
   onClose?: () => void
   isPending: boolean
   onLogout: () => void
-  saasName?: string
+  saasName: string
+  counts: AdminNavCounts
 }) {
+  const { theme, toggle } = useTheme()
+  const profileActive = pathname.startsWith('/admin/profile')
+
   return (
-    <div className="flex flex-col h-full bg-black">
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 py-5 border-b border-white/10">
+    <div className="adm-night flex h-full flex-col bg-adm-night px-3.5 pb-4 pt-5 text-white">
+      <div className="flex items-center justify-between gap-2 px-2 pb-5">
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-[#fffb00] shrink-0">
-            <Dumbbell className="h-4 w-4 text-black" />
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-adm-brand">
+            <Dumbbell className="size-[18px] text-adm-night" aria-hidden="true" />
           </div>
-          <div className="leading-none">
-            <p className="font-bold text-white">{saasName}</p>
-            <p className="text-xs text-white/40 mt-0.5">Super Admin</p>
+          <div className="leading-tight">
+            <p className="text-[17px] font-extrabold tracking-tight [font-stretch:112%]">{saasName}</p>
+            <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#85857f]">Super Admin</p>
           </div>
         </div>
         {onClose && (
-          <button onClick={onClose} className="text-white/60 hover:text-white ml-2">
-            <X className="h-5 w-5" />
+          <button
+            onClick={onClose}
+            aria-label="Cerrar menú"
+            className="flex size-9 items-center justify-center rounded-lg text-[#a3a39d] hover:bg-[#1c1c1e] hover:text-white"
+          >
+            <X className="size-5" />
           </button>
         )}
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5">
-        <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-widest text-white/30">
-          Navegación
-        </p>
-        {NAV.map(({ label, href, icon: Icon }) => {
-          const active = pathname === href || pathname.startsWith(href + '/')
-          return (
-            <Link
-              key={href}
-              href={href}
-              onClick={onClose}
-              className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
-                active
-                  ? 'bg-[#fffb00] text-black'
-                  : 'text-white/60 hover:bg-white/5 hover:text-white',
-              )}
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              {label}
-            </Link>
-          )
-        })}
+      <nav aria-label="Principal" className="flex flex-1 flex-col gap-[18px] overflow-y-auto">
+        {NAV.map(({ group, items }) => (
+          <div key={group} className="flex flex-col gap-0.5">
+            <p className="px-3 pb-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-[#85857f]">{group}</p>
+            {items.map(({ label, href, icon: Icon, count, countTone }) => {
+              const active = pathname === href || pathname.startsWith(href + '/')
+              const value = count ? counts[count] : undefined
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={onClose}
+                  aria-current={active ? 'page' : undefined}
+                  className={cn(
+                    'flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm transition-colors',
+                    active
+                      ? 'bg-adm-brand font-bold text-adm-night'
+                      : 'font-medium text-[#a3a39d] hover:bg-[#1c1c1e] hover:text-white',
+                  )}
+                >
+                  <Icon className="size-[18px] shrink-0" aria-hidden="true" />
+                  <span className="flex-1">{label}</span>
+                  {value !== undefined && value > 0 && <CountBadge value={value} tone={countTone} active={active} />}
+                </Link>
+              )
+            })}
+          </div>
+        ))}
       </nav>
 
-      {/* Footer */}
-      <div className="border-t border-white/10 px-3 py-4 space-y-1">
-        <div className="px-3 py-1.5">
-          <p className="text-xs text-white/40 truncate">{user.email}</p>
+      <div className="mt-5 flex items-center gap-2.5 rounded-[10px] border border-[#232326] bg-[#141416] p-3">
+        <div
+          className={cn(
+            'flex size-[34px] shrink-0 items-center justify-center rounded-full text-xs font-extrabold',
+            profileActive ? 'bg-adm-brand text-adm-night' : 'bg-[#2a2a2c] text-white',
+          )}
+        >
+          SA
         </div>
-        <ThemeToggleButton />
+        <Link
+          href="/admin/profile"
+          onClick={onClose}
+          aria-current={profileActive ? 'page' : undefined}
+          className="min-w-0 flex-1"
+        >
+          <p className="text-[13px] font-semibold">Mi perfil</p>
+          <p className="truncate text-xs text-[#85857f]">{user.email}</p>
+        </Link>
         <button
+          type="button"
+          onClick={toggle}
+          aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+          className="flex size-8 items-center justify-center rounded-lg text-[#a3a39d] hover:bg-[#232326] hover:text-white"
+        >
+          {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
+        </button>
+        <button
+          type="button"
           onClick={onLogout}
           disabled={isPending}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-white/60 hover:bg-white/5 hover:text-white transition-all disabled:opacity-40"
+          aria-label="Cerrar sesión"
+          title={isPending ? 'Saliendo…' : 'Cerrar sesión'}
+          className="flex size-8 items-center justify-center rounded-lg text-[#a3a39d] hover:bg-[#232326] hover:text-white disabled:opacity-40"
         >
-          <LogOut className="h-4 w-4 shrink-0" />
-          {isPending ? 'Saliendo…' : 'Cerrar sesión'}
+          <LogOut className="size-4" />
         </button>
       </div>
     </div>
   )
 }
 
-function ThemeToggleButton() {
-  const { theme, toggle } = useTheme()
-  return (
-    <button
-      onClick={toggle}
-      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-white/60 hover:bg-white/5 hover:text-white transition-all"
-    >
-      {theme === 'dark' ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
-      {theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
-    </button>
-  )
-}
-
-export function AdminSidebar({ user, saasName = 'GymOS' }: AdminSidebarProps) {
+export function AdminSidebar({ user, saasName = 'GymOS', counts = {} }: AdminSidebarProps) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
+
+  useEffect(() => {
+    if (!mobileOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMobileOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [mobileOpen])
 
   function handleLogout() {
     startTransition(async () => {
@@ -146,52 +225,36 @@ export function AdminSidebar({ user, saasName = 'GymOS' }: AdminSidebarProps) {
     })
   }
 
+  const shared = { user, pathname, isPending, onLogout: handleLogout, saasName, counts }
+
   return (
     <>
-      {/* Desktop sidebar */}
-      <aside className="hidden lg:flex w-64 flex-col shrink-0 h-screen sticky top-0">
-        <NavContent
-          user={user}
-          pathname={pathname}
-          isPending={isPending}
-          onLogout={handleLogout}
-          saasName={saasName}
-        />
+      <aside className="sticky top-0 hidden h-screen w-[248px] shrink-0 lg:flex lg:flex-col">
+        <NavContent {...shared} />
       </aside>
 
-      {/* Mobile top bar */}
-      <div className="fixed top-0 left-0 right-0 z-40 h-14 bg-black flex items-center justify-between px-4 lg:hidden border-b border-white/10">
+      <div className="adm-night fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-white/10 bg-adm-night px-4 lg:hidden">
         <div className="flex items-center gap-2">
-          <div className="flex items-center justify-center w-7 h-7 rounded-md bg-[#fffb00]">
-            <Dumbbell className="h-3.5 w-3.5 text-black" />
+          <div className="flex size-7 items-center justify-center rounded-md bg-adm-brand">
+            <Dumbbell className="size-3.5 text-adm-night" aria-hidden="true" />
           </div>
-          <span className="font-bold text-white text-sm">{saasName} Admin</span>
+          <span className="text-sm font-extrabold text-white">{saasName} Admin</span>
         </div>
         <button
           onClick={() => setMobileOpen(true)}
-          className="text-white/70 hover:text-white p-1"
+          className="flex size-10 items-center justify-center rounded-lg text-white/70 hover:text-white"
           aria-label="Abrir menú"
+          aria-expanded={mobileOpen}
         >
-          <Menu className="h-5 w-5" />
+          <Menu className="size-5" />
         </button>
       </div>
 
-      {/* Mobile overlay */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setMobileOpen(false)}
-          />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
           <div className="absolute left-0 top-0 h-full w-72 shadow-2xl">
-            <NavContent
-              user={user}
-              pathname={pathname}
-              onClose={() => setMobileOpen(false)}
-              isPending={isPending}
-              onLogout={handleLogout}
-              saasName={saasName}
-            />
+            <NavContent {...shared} onClose={() => setMobileOpen(false)} />
           </div>
         </div>
       )}

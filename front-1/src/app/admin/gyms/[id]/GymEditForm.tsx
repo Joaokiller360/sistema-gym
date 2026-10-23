@@ -2,10 +2,9 @@
 
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Camera, Pencil, X, Trash2, BarChart2 } from 'lucide-react'
-import { updateGymAction, deleteGymAction, updateGymOwnerAction, uploadGymLogoAction } from '../actions'
+import { Camera } from 'lucide-react'
+import { updateGymAction, deleteGymAction, updateGymOwnerAction } from '../actions'
 import { createHandlers } from '@/lib/input-validation'
-import { Switch } from '@/components/ui/switch'
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -15,23 +14,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Button } from '@/components/ui/button'
-
-const PLANS = ['BASIC', 'PRO', 'ENTERPRISE']
-
-const inputClass = 'w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all disabled:opacity-50'
+import { cn } from '@/lib/utils'
+import { Switch, btn, field, initials } from '@/components/admin/ui'
 
 const MAX_SIZE = 2 * 1024 * 1024
-
-function initials(name: string) {
-  return name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase()
-}
 
 interface Props {
   gymId: string
   defaultName: string
   defaultSlug: string
   defaultPlan: string
+  planOptions: { key: string; label: string }[]
   defaultLogoUrl?: string | null
   defaultAdvancedReports: boolean
   ownerName?: string
@@ -39,12 +32,20 @@ interface Props {
   hasOwner: boolean
 }
 
-export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, defaultLogoUrl, defaultAdvancedReports, ownerName, ownerEmail, hasOwner }: Props) {
+function Info({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex justify-between gap-3 border-b border-adm-line-soft py-2.5 text-sm last:border-b-0">
+      <dt className="text-adm-muted">{label}</dt>
+      <dd className="min-w-0 truncate text-right font-semibold">{children}</dd>
+    </div>
+  )
+}
+
+export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, planOptions, defaultLogoUrl, defaultAdvancedReports, ownerName, ownerEmail, hasOwner }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
-  const [deleteOpen, setDeleteOpen] = useState(false)
   const [logoUrl, setLogoUrl] = useState(defaultLogoUrl ?? '')
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [isUploading, startUploadTransition] = useTransition()
@@ -68,7 +69,7 @@ export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, defa
       const res = await fetch(`/api/v1/gyms/${gymId}/logo`, { method: 'POST', body: fd })
       const data = await res.json().catch(() => ({})) as { error?: string; logoUrl?: string }
       if (!res.ok || data.error) { setUploadError(data.error ?? 'Error al subir el logo') }
-      else if (data.logoUrl) { setLogoUrl(data.logoUrl) }
+      else if (data.logoUrl) { setLogoUrl(data.logoUrl); router.refresh() }
     })
     e.target.value = ''
   }
@@ -80,6 +81,9 @@ export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, defa
   const [newOwnerName, setNewOwnerName] = useState(ownerName ?? '')
   const [newOwnerEmail, setNewOwnerEmail] = useState(ownerEmail ?? '')
   const [newOwnerPassword, setNewOwnerPassword] = useState('')
+
+  const plans = planOptions.length > 0 ? planOptions : [{ key: defaultPlan, label: defaultPlan }]
+  const planLabel = (key: string) => plans.find(p => p.key.toUpperCase() === key?.toUpperCase())?.label ?? key
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault()
@@ -107,178 +111,175 @@ export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, defa
     })
   }
 
-  function handleDelete() {
-    startTransition(async () => {
-      const res = await deleteGymAction(gymId)
-      if (res?.error) { setError(res.error) }
-      else { router.push('/admin/gyms') }
-    })
-  }
-
   if (!open) {
     return (
-      <>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setOpen(true)}
-            className="flex items-center gap-2 rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-semibold text-zinc-600 hover:border-zinc-300 transition-all"
-          >
-            <Pencil className="h-4 w-4" />
-            Editar gimnasio
-          </button>
-
-          <button
-            onClick={() => setDeleteOpen(true)}
-            className="flex items-center gap-2 rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-semibold text-[#ff0000] hover:border-[#ff0000]/30 transition-all"
-          >
-            <Trash2 className="h-4 w-4" />
-            Eliminar
-          </button>
+      <section aria-labelledby="data-h" className="rounded-2xl border border-adm-line bg-adm-surface p-5">
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="data-h" className="text-[15px] font-bold">Datos del gimnasio</h2>
+          <button type="button" onClick={() => setOpen(true)} className={btn.line}>Editar</button>
         </div>
-
-        <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-          <AlertDialogContent size="sm">
-            <AlertDialogHeader>
-              <AlertDialogTitle>¿Eliminar gimnasio?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Esta acción es permanente y no se puede deshacer.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <Button variant="destructive" disabled={isPending} onClick={handleDelete}>
-                {isPending ? '…' : 'Eliminar'}
-              </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </>
+        <dl className="mt-3">
+          <Info label="Nombre">{defaultName}</Info>
+          <Info label="Slug"><span className="font-admin-mono">/{defaultSlug}</span></Info>
+          <Info label="Plan">{planLabel(defaultPlan)}</Info>
+          <Info label="Reportes avanzados">{defaultAdvancedReports ? 'Activos' : 'Inactivos'}</Info>
+        </dl>
+        <h3 className="mt-5 text-[13px] font-bold">Dueño</h3>
+        {hasOwner ? (
+          <div className="mt-2.5 flex items-center gap-3">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-adm-ink text-[13px] font-extrabold text-adm-surface">
+              {initials(ownerName ?? '?')}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate font-bold">{ownerName}</p>
+              <p className="truncate text-[13px] text-adm-muted">{ownerEmail}</p>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-1.5 text-sm text-adm-muted">Sin dueño asignado</p>
+        )}
+      </section>
     )
   }
 
   return (
-    <form onSubmit={handleSave} className="rounded-2xl border-2 border-zinc-200 bg-white p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h3 className="font-bold text-sm">Editar gimnasio</h3>
-        <button type="button" onClick={() => setOpen(false)} aria-label="Cerrar formulario" className="text-zinc-400 hover:text-zinc-700">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
+    <form onSubmit={handleSave} className="flex flex-col gap-5 rounded-2xl border-2 border-adm-ink bg-adm-surface p-5">
+      <h2 className="text-[15px] font-bold">Editar gimnasio</h2>
 
-      {/* Logo upload */}
-      <div className="space-y-3">
-        <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">Logo</p>
+      <div>
+        <span className={field.label}>Logo</span>
         <div className="flex items-center gap-4">
-          <div className="relative h-14 w-14 rounded-xl bg-[#fffb00] flex items-center justify-center shrink-0 overflow-hidden">
+          <div className="relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-[14px] border border-adm-night/15 bg-adm-brand text-sm font-black text-adm-night">
             {logoUrl
-              ? <img src={logoUrl} alt="Logo" className="h-full w-full object-cover" />
-              : <span className="text-sm font-black text-black">{initials(name || 'G')}</span>
-            }
+              // eslint-disable-next-line @next/next/no-img-element
+              ? <img src={logoUrl} alt="Logo actual" className="size-full object-cover" />
+              : initials(name || 'G')}
             {isUploading && (
-              <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-xl">
-                <span className="text-white text-xs font-bold">…</span>
-              </div>
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-xs font-bold text-white">…</div>
             )}
           </div>
-          <div className="space-y-1">
-            <button
-              type="button"
-              disabled={isUploading}
-              onClick={() => fileRef.current?.click()}
-              className="flex items-center gap-2 rounded-xl border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-600 hover:border-zinc-300 transition-all disabled:opacity-50"
-            >
-              <Camera className="h-3.5 w-3.5" />
+          <div>
+            <button type="button" disabled={isUploading} onClick={() => fileRef.current?.click()} className={btn.line}>
+              <Camera className="size-3.5" aria-hidden="true" />
               {isUploading ? 'Subiendo…' : 'Cambiar logo'}
             </button>
-            <p className="text-xs text-zinc-400">PNG, JPG, WebP, TIFF… · Máx. 2MB</p>
+            <p className={field.hint}>PNG, JPG, WebP, TIFF… · Máx. 2MB</p>
           </div>
         </div>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={handleFileChange}
-        />
-        {uploadError && <p className="text-xs text-[#ff0000] font-medium">{uploadError}</p>}
+        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+        {uploadError && <p className={field.error}>{uploadError}</p>}
       </div>
 
-      {/* Gym fields */}
-      <div className="space-y-4">
-        <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">Información del gimnasio</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-zinc-500">Nombre</label>
-            <input value={name} onChange={e => setName(e.target.value)} disabled={isPending} className={inputClass} {...createHandlers('text')} />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-zinc-500">Slug</label>
-            <input value={slug} onChange={e => setSlug(e.target.value)} disabled={isPending} className={inputClass} {...createHandlers('slug')} />
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-zinc-500">Plan</label>
-          <div className="flex gap-2">
-            {PLANS.map(p => (
-              <button key={p} type="button" onClick={() => setPlan(p)}
-                className={`flex-1 rounded-xl py-2 text-xs font-bold border-2 transition-all ${plan === p ? 'border-black bg-black text-white' : 'border-zinc-200 text-zinc-500 hover:border-zinc-300'}`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-        </div>
+      <div className="flex flex-wrap gap-4">
+        <label className="min-w-0 flex-1 basis-40">
+          <span className={field.label}>Nombre</span>
+          <input value={name} onChange={e => setName(e.target.value)} disabled={isPending} className={field.input} {...createHandlers('text')} />
+        </label>
+        <label className="min-w-0 flex-1 basis-40">
+          <span className={field.label}>Slug</span>
+          <input value={slug} onChange={e => setSlug(e.target.value)} disabled={isPending} className={cn(field.input, 'font-admin-mono')} {...createHandlers('slug')} />
+        </label>
       </div>
 
-      {/* Features */}
-      <div className="space-y-3 pt-2 border-t border-zinc-100">
-        <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">Funcionalidades</p>
-        <div className={`flex items-center justify-between rounded-xl border px-4 py-3 transition-colors ${advancedReports ? 'border-violet-200 bg-violet-50' : 'border-zinc-200 bg-zinc-50'}`}>
-          <div className="flex items-center gap-3">
-            <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${advancedReports ? 'bg-violet-100' : 'bg-zinc-100'}`}>
-              <BarChart2 className={`h-3.5 w-3.5 ${advancedReports ? 'text-violet-600' : 'text-zinc-400'}`} />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-zinc-700">Reportes Avanzados</p>
-              <p className="text-xs text-zinc-400">Tendencias, comparativas y análisis de retención</p>
-            </div>
-          </div>
-          <Switch checked={advancedReports} onCheckedChange={setAdvancedReports} disabled={isPending} />
+      <div>
+        <span className={field.label} id="edit-plan-label">Plan</span>
+        <div role="radiogroup" aria-labelledby="edit-plan-label" className="flex flex-wrap gap-2">
+          {plans.map(p => (
+            <button
+              key={p.key}
+              type="button"
+              role="radio"
+              aria-checked={plan === p.key}
+              onClick={() => setPlan(p.key)}
+              className={cn(
+                'min-h-10 flex-1 rounded-lg border px-3 text-[13px] font-bold transition-colors',
+                plan === p.key ? 'border-adm-ink bg-adm-ink text-adm-surface' : 'border-adm-line hover:border-adm-ink',
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
         </div>
+        <p className={field.hint}>Para cobrar la diferencia usá “Cambiar plan” en Suscripción.</p>
       </div>
 
-      {/* Owner fields */}
+      <div className="flex items-center gap-3 rounded-[10px] border border-adm-line-soft px-3.5 py-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold">Reportes avanzados</p>
+          <p className="text-xs text-adm-muted">Tendencias, comparativas y análisis de retención</p>
+        </div>
+        <Switch checked={advancedReports} onChange={setAdvancedReports} disabled={isPending} label="Reportes avanzados" />
+      </div>
+
       {hasOwner && (
-        <div className="space-y-4 pt-2 border-t border-zinc-100">
-          <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">Datos del dueño</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-zinc-500">Nombre</label>
-              <input value={newOwnerName} onChange={e => setNewOwnerName(e.target.value)} disabled={isPending} className={inputClass} {...createHandlers('name')} />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-zinc-500">Email</label>
-              <input type="email" value={newOwnerEmail} onChange={e => setNewOwnerEmail(e.target.value)} disabled={isPending} className={inputClass} {...createHandlers('email')} />
-            </div>
+        <div className="flex flex-col gap-4 border-t border-adm-line-soft pt-4">
+          <p className="text-[13px] font-bold">Datos del dueño</p>
+          <div className="flex flex-wrap gap-4">
+            <label className="min-w-0 flex-1 basis-40">
+              <span className={field.label}>Nombre</span>
+              <input value={newOwnerName} onChange={e => setNewOwnerName(e.target.value)} disabled={isPending} className={field.input} {...createHandlers('name')} />
+            </label>
+            <label className="min-w-0 flex-1 basis-40">
+              <span className={field.label}>Email</span>
+              <input type="email" value={newOwnerEmail} onChange={e => setNewOwnerEmail(e.target.value)} disabled={isPending} className={field.input} {...createHandlers('email')} />
+            </label>
           </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-zinc-500">Nueva contraseña (dejar vacío para no cambiar)</label>
-            <input type="password" value={newOwnerPassword} onChange={e => setNewOwnerPassword(e.target.value)} disabled={isPending} placeholder="••••••••" className={inputClass} {...createHandlers('password')} />
-          </div>
+          <label className="block">
+            <span className={field.label}>Nueva contraseña</span>
+            <input type="password" value={newOwnerPassword} onChange={e => setNewOwnerPassword(e.target.value)} disabled={isPending} placeholder="Dejar vacío para no cambiar" className={field.input} {...createHandlers('password')} />
+          </label>
         </div>
       )}
 
-      {error && <p className="text-xs text-[#ff0000] font-medium">{error}</p>}
+      {error && <p role="alert" className={field.error}>{error}</p>}
 
-      <div className="flex gap-3">
-        <button type="submit" disabled={isPending} className="flex-1 rounded-xl bg-black py-2.5 text-sm font-bold text-white hover:bg-zinc-800 disabled:opacity-50 transition-all">
+      <div className="flex gap-2">
+        <button type="submit" disabled={isPending} className={cn(btn.dark, 'min-h-11 flex-1')}>
           {isPending ? 'Guardando…' : 'Guardar cambios'}
         </button>
-        <button type="button" onClick={() => setOpen(false)} className="rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-semibold text-zinc-600 hover:border-zinc-300 transition-all">
-          Cancelar
-        </button>
+        <button type="button" onClick={() => setOpen(false)} className={cn(btn.line, 'min-h-11')}>Cancelar</button>
       </div>
     </form>
+  )
+}
+
+export function GymDangerZone({ gymId }: { gymId: string }) {
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
+
+  function handleDelete() {
+    startTransition(async () => {
+      const res = await deleteGymAction(gymId)
+      if (res?.error) { setError(res.error); setOpen(false) }
+      else { router.push('/admin/gyms') }
+    })
+  }
+
+  return (
+    <section aria-labelledby="dz-h" className="rounded-2xl border border-adm-bad-line bg-adm-surface p-5">
+      <h2 id="dz-h" className="text-[15px] font-bold text-adm-bad-fg">Zona de peligro</h2>
+      <p className="mb-4 mt-2 text-[13px] leading-relaxed text-adm-muted">
+        Eliminar borra miembros, pagos y la tienda del gimnasio. No se puede deshacer.
+      </p>
+      {error && <p role="alert" className={cn(field.error, 'mb-3')}>{error}</p>}
+      <button type="button" onClick={() => setOpen(true)} className={btn.danger}>Eliminar gimnasio</button>
+
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogContent size="sm" className="admin-surface">
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar gimnasio?</AlertDialogTitle>
+            <AlertDialogDescription>Esta acción es permanente y no se puede deshacer.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <button type="button" disabled={isPending} onClick={handleDelete} className={btn.dangerSolid}>
+              {isPending ? 'Eliminando…' : 'Eliminar'}
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </section>
   )
 }

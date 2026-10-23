@@ -1,5 +1,5 @@
 import {
-  IsUUID, IsDateString, IsOptional, IsString, MaxLength,
+  IsUUID, IsDateString, IsOptional, IsString, MaxLength, IsInt, Min, Max,
 } from 'class-validator';
 
 export class CreateMembershipDto {
@@ -23,4 +23,11 @@ export class CreateMembershipDto {
   @IsOptional()
   @MaxLength(500)
   notes?: string;
+
+  // Plan periods paid at once (e.g. 3 months): multiplies a visit plan's included days
+  @IsInt()
+  @Min(1)
+  @Max(24)
+  @IsOptional()
+  periods?: number;
 }

@@ -27,6 +27,7 @@ import { SupportModule } from './support/support.module';
 import { ContentModule } from './content/content.module';
 import { DemoRequestsModule } from './demo-requests/demo-requests.module';
 import { AccessRequestsModule } from './access-requests/access-requests.module';
+import { WalletModule } from './wallet/wallet.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { AccessRequestsModule } from './access-requests/access-requests.module';
     ContentModule,
     DemoRequestsModule,
     AccessRequestsModule,
+    WalletModule,
   ],
   controllers: [AppController],
   providers: [

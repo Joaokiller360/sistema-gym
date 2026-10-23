@@ -1,5 +1,6 @@
 'use client'
 
+import { planAccessSummary } from '@/lib/plans'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, X } from 'lucide-react'
@@ -101,8 +102,8 @@ export function AssignPlanForm({ memberId, gymSlug, plans, activeMembershipId }:
                   <p className="font-bold text-sm">{p.name}</p>
                   <p className="text-xs text-muted-foreground">
                     {p.price.toLocaleString('es-AR', { style: 'currency', currency: p.currency })}
-                    {' · '}{p.durationDays} días
-                    {p.daysPerWeek !== null ? ` · ${p.daysPerWeek}×/sem` : ' · Ilimitado'}
+                    {' · '}{planAccessSummary(p)}
+                    {p.visitLimit == null && p.daysPerWeek === null ? ' · Ilimitado' : ''}
                   </p>
                 </div>
                 {p.isFeatured && (

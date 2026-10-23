@@ -1,11 +1,12 @@
 import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronLeft, Users, ChevronRight, Star, Clock, Banknote } from 'lucide-react'
+import { ArrowUpRight, Star } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
+import { normalizeLogoUrl } from '@/lib/utils'
 import { Gym, Member, Plan, Payment } from '@/types'
-import { StatusBadge } from '@/components/shared/StatusBadge'
-import { GymEditForm } from './GymEditForm'
+import { AdminPage, EmptyState, GymMark, Meter, PageHeader, Panel, PanelLink, Pill, Stat, btn, td, th, type Tone } from '@/components/admin/ui'
+import { GymDangerZone, GymEditForm } from './GymEditForm'
 import { ResendGymWelcomeButton } from './ResendGymWelcomeButton'
 import { SubscriptionSection } from './SubscriptionSection'
 import type { SubscriptionInfo, BillingRecord } from '../actions'
@@ -14,29 +15,34 @@ interface Props {
   params: Promise<{ id: string }>
 }
 
-function initials(name: string) {
-  return name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase()
+interface SubscriptionPlan { key: string; label?: string; price: number | string; currency: string; maxMembers?: number | null }
+interface PaymentWithMember extends Payment {
+  member?: { firstName: string; lastName: string } | null
+}
+interface PaymentsResponse { data: PaymentWithMember[]; total: number }
+
+const SUB: Record<SubscriptionInfo['subscriptionStatus'], { label: string; tone: Tone }> = {
+  ACTIVE: { label: 'Suscripción activa', tone: 'ok' },
+  GRACE: { label: 'En prórroga', tone: 'warn' },
+  SUSPENDED: { label: 'Suspendida', tone: 'bad' },
 }
 
-const resolveLogoUrl = (url: string | null | undefined): string | null =>
-  url ? url.replace(/^https?:\/\/[^/]+/, '') : null
+const METHOD: Record<string, string> = { CASH: 'Efectivo', CARD: 'Tarjeta', TRANSFER: 'Transferencia', OTHER: 'Otro' }
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
 
 export default async function GymDetailPage({ params }: Props) {
   const { id } = await params
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value ?? ''
 
-  interface SubscriptionPlan { key: string; price: number | string; currency: string }
-  interface PaymentWithMember extends Payment {
-    member?: { firstName: string; lastName: string } | null
-  }
-  interface PaymentsResponse { data: PaymentWithMember[]; total: number }
-
   const [gym, membersRaw, plansRaw, subscription, billing, subPlans, paymentsRaw] = await Promise.all([
     apiFetch<Gym>(`/admin/gyms/${id}`, token, {
       next: { tags: [`admin-gym-${id}`] },
     }),
-    apiFetch<{ data: Member[] } | Member[]>(`/members?gymId=${id}&limit=5`, token),
+    apiFetch<{ data: Member[]; total?: number } | Member[]>(`/members?gymId=${id}&limit=5`, token),
     apiFetch<{ data: Plan[] } | Plan[]>(`/plans?gymId=${id}`, token),
     apiFetch<SubscriptionInfo>(`/admin/gyms/${id}/subscription`, token, {
       next: { tags: [`admin-gym-${id}-subscription`] },
@@ -48,249 +54,212 @@ export default async function GymDetailPage({ params }: Props) {
     apiFetch<PaymentsResponse | PaymentWithMember[]>(`/payments?gymId=${id}&limit=10`, token),
   ])
 
+  if (!gym) notFound()
+
   const payments: PaymentWithMember[] = paymentsRaw
     ? (Array.isArray(paymentsRaw) ? paymentsRaw : paymentsRaw.data)
     : []
-
-  if (!gym) notFound()
-  const gymLogoUrl = resolveLogoUrl(gym.logoUrl)
-
+  const gymLogoUrl = normalizeLogoUrl(gym.logoUrl)
   const members: Member[] = membersRaw
     ? (Array.isArray(membersRaw) ? membersRaw : membersRaw.data).slice(0, 5)
     : []
+  const memberTotal = membersRaw && !Array.isArray(membersRaw) && typeof membersRaw.total === 'number' ? membersRaw.total : members.length
+  const plans: Plan[] = plansRaw ? (Array.isArray(plansRaw) ? plansRaw : plansRaw.data) : []
 
-  const plans: Plan[] = plansRaw
-    ? (Array.isArray(plansRaw) ? plansRaw : plansRaw.data)
-    : []
+  const planKey = subscription?.subscriptionPlan ?? gym.subscriptionPlan
+  const matchedPlan = subPlans?.find(p => p.key.toUpperCase() === planKey?.toUpperCase())
+  const planAmount = matchedPlan ? parseFloat(String(matchedPlan.price)) : null
+  const planCurrency = matchedPlan?.currency ?? 'USD'
+
+  const history = [...(billing ?? [])].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  const lastPayment = history[0]
+  const now = new Date().getTime()
+  const periodStart = lastPayment ? new Date(lastPayment.periodStart).getTime() : 0
+  const periodEnd = lastPayment ? new Date(lastPayment.periodEnd).getTime() : 0
+  const periodProgress = periodEnd > periodStart ? ((now - periodStart) / (periodEnd - periodStart)) * 100 : null
+  const days = subscription?.daysUntilExpiry ?? null
+  const status = subscription ? SUB[subscription.subscriptionStatus] : null
 
   return (
-    <div className="p-6 lg:p-8">
-      <Link
-        href="/admin/gyms"
-        className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-black transition-colors mb-6"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        Volver a gimnasios
-      </Link>
+    <AdminPage>
+      <PageHeader
+        breadcrumb={[{ label: 'Gimnasios', href: '/admin/gyms' }, { label: gym.name }]}
+        media={<GymMark name={gym.name} logoUrl={gymLogoUrl} size="lg" />}
+        title={gym.name}
+        meta={
+          <>
+            <span className="font-admin-mono">/{gym.slug}</span>
+            {gym.country && <><span aria-hidden="true">·</span><span>{gym.country}</span></>}
+            {!gym.isActive && <Pill>Inactivo</Pill>}
+            {status && <Pill tone={status.tone}>{status.label}</Pill>}
+            {matchedPlan && <Pill>{matchedPlan.label ?? matchedPlan.key}</Pill>}
+          </>
+        }
+        actions={
+          <>
+            {gym.owner && <ResendGymWelcomeButton gymId={id} />}
+            <Link href={`/gym/${gym.slug}/dashboard`} className={btn.primary}>
+              Entrar al panel
+              <ArrowUpRight className="size-4" aria-hidden="true" />
+            </Link>
+          </>
+        }
+      />
 
-      <div className="space-y-6 max-w-2xl mx-auto">
-        <div className="flex items-center gap-4">
-          <div className="h-16 w-16 rounded-2xl bg-[#fffb00] flex items-center justify-center shrink-0 overflow-hidden">
-            {gymLogoUrl
-              ? <img src={gymLogoUrl} alt={gym.name} className="h-full w-full object-cover" />
-              : <span className="text-xl font-black text-black">{initials(gym.name)}</span>
-            }
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">{gym.name}</h1>
-            <p className="text-zinc-400 text-sm mt-0.5">{gym.slug}</p>
-          </div>
-          <StatusBadge status={gym.isActive ? 'active' : 'inactive'} />
-        </div>
+      <section aria-label="Resumen" className="flex flex-wrap gap-3">
+        <Stat
+          label="Miembros"
+          value={memberTotal}
+          hint={matchedPlan?.maxMembers ? `Límite del plan: ${matchedPlan.maxMembers}` : 'Sin límite en su plan'}
+        />
+        <Stat label="Plan" value={<span className="font-admin text-2xl font-extrabold">{matchedPlan?.label ?? planKey ?? '—'}</span>}>
+          {planAmount != null && <p className="mt-1.5 font-admin-mono text-[13px] text-adm-muted">{planCurrency} {planAmount.toLocaleString('es-AR')} / mes</p>}
+        </Stat>
+        <Stat
+          label="Vence"
+          value={<span className="text-2xl">{subscription?.subscriptionExpiresAt ? fmtDate(subscription.subscriptionExpiresAt) : '—'}</span>}
+          hint={days !== null ? (days >= 0 ? `Quedan ${days} días` : `Venció hace ${-days} días`) : undefined}
+          hintTone={days !== null && days <= 7 ? (days < 0 ? 'bad' : 'warn') : 'neutral'}
+        >
+          {periodProgress !== null && <Meter value={periodProgress} className="mt-2.5" />}
+        </Stat>
+        <Stat
+          label="Último pago"
+          value={<span className="text-2xl">{lastPayment ? fmtDate(lastPayment.createdAt) : '—'}</span>}
+          hint={lastPayment ? `${METHOD[lastPayment.method] ?? lastPayment.method} · ${lastPayment.currency} ${parseFloat(lastPayment.amount).toLocaleString('es-AR')}` : 'Sin pagos'}
+        />
+      </section>
 
-      {/* Info cards */}
-      <div className="rounded-2xl border border-zinc-200 bg-white divide-y divide-zinc-100">
-        <Row label="ID" value={<span className="font-mono text-xs text-zinc-500">{gym.id}</span>} />
-        <Row
-          label="Dueño"
-          value={
-            gym.owner
-              ? <div className="text-right">
-                <p className="font-semibold text-sm">{gym.owner.name}</p>
-                <p className="text-xs text-zinc-400">{gym.owner.email}</p>
+      <div className="flex flex-wrap items-start gap-4">
+        <div className="flex min-w-0 flex-[2_1_520px] flex-col gap-4">
+          {subscription && (
+            <SubscriptionSection
+              gymId={id}
+              gymSlug={gym.slug}
+              subscription={subscription}
+              billing={history}
+              planAmount={planAmount}
+              planCurrency={planCurrency}
+              subPlans={subPlans ?? []}
+            />
+          )}
+
+          <Panel
+            title="Pagos de miembros"
+            id="mp-h"
+            action={<PanelLink href={`/gym/${gym.slug}/memberships`}>Ver membresías</PanelLink>}
+          >
+            {payments.length === 0 ? (
+              <EmptyState>Sin pagos registrados</EmptyState>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[600px] border-collapse text-sm">
+                  <thead>
+                    <tr>
+                      <th scope="col" className={`${th} pl-5`}>Miembro</th>
+                      <th scope="col" className={th}>Fecha</th>
+                      <th scope="col" className={th}>Método</th>
+                      <th scope="col" className={th}>Notas</th>
+                      <th scope="col" className={`${th} pr-5 text-right`}>Monto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payments.map(p => (
+                      <tr key={p.id} className="hover:bg-adm-subtle">
+                        <td className={`${td} pl-5`}>
+                          {p.member
+                            ? <span className="font-medium">{p.member.firstName} {p.member.lastName}</span>
+                            : <span className="font-admin-mono text-xs text-adm-muted">{p.memberId.slice(0, 8)}…</span>}
+                        </td>
+                        <td className={`${td} font-admin-mono text-[13px]`}>{fmtDate(p.createdAt)}</td>
+                        <td className={td}>{METHOD[p.method] ?? p.method}</td>
+                        <td className={`${td} max-w-[200px] truncate text-adm-muted`}>{p.notes ?? '—'}</td>
+                        <td className={`${td} pr-5 text-right font-admin-mono font-bold`}>
+                          {p.currency} {(Number(p.amount) / 100).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              : <span className="text-zinc-400">Sin dueño asignado</span>
-          }
-        />
-        <Row label="Plan" value={
-          <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-[#fffb00]/40 text-black border border-[#fffb00]">
-            {gym.subscriptionPlan ?? '—'}
-          </span>
-        } />
-        {gym.address && <Row label="Dirección" value={gym.address} />}
-        {gym.country && <Row label="País" value={`${gym.country}${gym.timezone && gym.timezone !== 'UTC' ? ` · ${gym.timezone}` : ''}`} />}
-        <Row label="Creado" value={new Date(gym.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })} />
-        <Row label="Reportes Avanzados" value={
-          gym.advancedReportsEnabled
-            ? <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-violet-700 bg-violet-50 px-2.5 py-1 rounded-full border border-violet-200">
-                <span className="h-1.5 w-1.5 rounded-full bg-violet-500 inline-block" /> Activo
-              </span>
-            : <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-400 bg-zinc-100 px-2.5 py-1 rounded-full">
-                <span className="h-1.5 w-1.5 rounded-full bg-zinc-300 inline-block" /> Inactivo
-              </span>
-        } />
-      </div>
+            )}
+          </Panel>
 
-      <div className='flex gap-3 flex-col lg:flex-row'>
-        {/* Welcome email */}
-        {gym.owner && <ResendGymWelcomeButton gymId={id} />}
+          <Panel
+            title="Miembros recientes"
+            id="mem-h"
+            action={<PanelLink href={`/gym/${gym.slug}/members`}>{`Ver los ${memberTotal}`}</PanelLink>}
+          >
+            {members.length === 0 ? (
+              <EmptyState>Sin miembros registrados</EmptyState>
+            ) : (
+              <ul>
+                {members.map(m => (
+                  <li key={m.id} className="flex items-center gap-3 border-t border-adm-line-soft px-5 py-3 first:border-t-0">
+                    <div className="flex size-[34px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-adm-chip text-xs font-extrabold">
+                      {m.photoUrl
+                        // eslint-disable-next-line @next/next/no-img-element
+                        ? <img src={m.photoUrl} alt="" className="size-full object-cover" />
+                        : <>{m.firstName[0]}{m.lastName[0]}</>}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold">{m.firstName} {m.lastName}</p>
+                      <p className="truncate text-xs text-adm-muted">{m.email}</p>
+                    </div>
+                    <Pill tone={m.isActive ? 'ok' : 'neutral'}>{m.isActive ? 'Activo' : 'Inactivo'}</Pill>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </div>
 
-        {/* Edit form */}
-        <GymEditForm
-          gymId={id}
-          defaultName={gym.name}
-          defaultSlug={gym.slug}
-          defaultPlan={gym.subscriptionPlan}
-          defaultLogoUrl={gymLogoUrl}
-          defaultAdvancedReports={gym.advancedReportsEnabled}
-          ownerName={gym.owner?.name}
-          ownerEmail={gym.owner?.email}
-          hasOwner={!!gym.owner}
-        />
-      </div>
-
-      {/* Subscription */}
-      {subscription && (() => {
-        const matchedPlan = subPlans?.find(p => p.key.toUpperCase() === subscription.subscriptionPlan?.toUpperCase())
-        return (
-          <SubscriptionSection
+        <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-4">
+          <GymEditForm
             gymId={id}
-            gymSlug={gym.slug}
-            subscription={subscription}
-            billing={billing ?? []}
-            planAmount={matchedPlan ? parseFloat(String(matchedPlan.price)) : null}
-            planCurrency={matchedPlan?.currency ?? 'USD'}
-            subPlans={subPlans ?? []}
+            defaultName={gym.name}
+            defaultSlug={gym.slug}
+            defaultPlan={gym.subscriptionPlan}
+            planOptions={(subPlans ?? []).map(p => ({ key: p.key, label: p.label ?? p.key }))}
+            defaultLogoUrl={gymLogoUrl}
+            defaultAdvancedReports={gym.advancedReportsEnabled}
+            ownerName={gym.owner?.name}
+            ownerEmail={gym.owner?.email}
+            hasOwner={!!gym.owner}
           />
-        )
-      })()}
 
-      {/* Members */}
-      <div className="rounded-2xl border border-zinc-200 bg-white overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100">
-          <div className="flex items-center gap-2">
-            <Users className="h-4 w-4 text-zinc-400" />
-            <h2 className="font-semibold text-sm">Miembros</h2>
-            <span className="text-xs text-zinc-400">({members.length})</span>
-          </div>
-          <Link
-            href={`/gym/${gym.slug}/members`}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-[#1fad9d] hover:text-[#0e7a70] transition-colors"
-          >
-            Ver todos <ChevronRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
-        {members.length === 0 ? (
-          <p className="px-5 py-8 text-sm text-zinc-400 text-center">Sin miembros registrados</p>
-        ) : (
-          <ul className="divide-y divide-zinc-100">
-            {members.map(m => (
-              <li key={m.id} className="flex items-center gap-3 px-5 py-3">
-                <div className="h-8 w-8 rounded-full bg-zinc-100 flex items-center justify-center shrink-0 overflow-hidden">
-                  {m.photoUrl
-                    ? <img src={m.photoUrl} alt={`${m.firstName} ${m.lastName}`} className="h-full w-full object-cover" />
-                    : <span className="text-xs font-bold text-zinc-500">
-                        {m.firstName[0]}{m.lastName[0]}
-                      </span>
-                  }
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate">{m.firstName} {m.lastName}</p>
-                  <p className="text-xs text-zinc-400 truncate">{m.email}</p>
-                </div>
-                <StatusBadge status={m.isActive ? 'active' : 'inactive'} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {/* Plans */}
-      <div className="rounded-2xl border border-zinc-200 bg-white overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100">
-          <h2 className="font-semibold text-sm">Planes ofrecidos</h2>
-          <span className="text-xs text-zinc-400">{plans.length} plan{plans.length !== 1 ? 'es' : ''}</span>
-        </div>
-        {plans.length === 0 ? (
-          <p className="px-5 py-8 text-sm text-zinc-400 text-center">Sin planes configurados</p>
-        ) : (
-          <ul className="divide-y divide-zinc-100">
-            {plans.map(p => (
-              <li key={p.id} className="flex items-center gap-3 px-5 py-3.5">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold">{p.name}</p>
-                    {p.isFeatured && <Star className="h-3 w-3 text-[#fffb00] fill-[#fffb00]" />}
+          <Panel title="Planes que ofrece" id="gp-h" action={<span className="text-[13px] text-adm-muted">{plans.length}</span>} bodyClassName="flex flex-col gap-2 p-4">
+            {plans.length === 0 ? (
+              <p className="px-1 py-2 text-sm text-adm-muted">Sin planes configurados</p>
+            ) : (
+              plans.map(p => (
+                <div key={p.id} className="flex items-center justify-between gap-3 rounded-[10px] border border-adm-line-soft bg-adm-subtle px-3.5 py-3 text-sm">
+                  <div className="min-w-0">
+                    <p className="flex items-center gap-1.5 truncate font-semibold">
+                      {p.name}
+                      {p.isFeatured && <Star className="size-3 shrink-0 fill-adm-brand text-adm-warn-fg" aria-label="Destacado" />}
+                      {!p.isActive && <Pill>Inactivo</Pill>}
+                    </p>
+                    <p className="text-xs text-adm-muted">
+                      {p.durationDays} días{p.daysPerWeek ? ` · ${p.daysPerWeek}x/sem` : ''}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <Clock className="h-3 w-3 text-zinc-400" />
-                    <span className="text-xs text-zinc-400">{p.durationDays} días</span>
-                    {p.daysPerWeek && <span className="text-xs text-zinc-400">· {p.daysPerWeek}x/sem</span>}
-                  </div>
+                  <span className="shrink-0 font-admin-mono">{p.currency} {p.price.toLocaleString('es-AR')}</span>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-bold">{p.currency} {p.price.toLocaleString('es-AR')}</p>
-                  <StatusBadge status={p.isActive ? 'active' : 'inactive'} />
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+              ))
+            )}
+          </Panel>
 
-      {/* Payments */}
-      <div className="rounded-2xl border border-zinc-200 bg-white overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100">
-          <div className="flex items-center gap-2">
-            <Banknote className="h-4 w-4 text-zinc-400" />
-            <h2 className="font-semibold text-sm">Pagos recientes</h2>
+          <div className="rounded-2xl border border-adm-line bg-adm-surface p-5 text-[13px]">
+            <p className="text-adm-muted">ID del gimnasio</p>
+            <p className="mt-1 break-all font-admin-mono text-xs">{gym.id}</p>
+            <p className="mt-3 text-adm-muted">Creado el {new Date(gym.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+            {gym.address && <p className="mt-1 text-adm-muted">{gym.address}</p>}
           </div>
-          <Link
-            href={`/gym/${gym.slug}/memberships`}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-[#1fad9d] hover:text-[#0e7a70] transition-colors"
-          >
-            Ver membresías <ChevronRight className="h-3.5 w-3.5" />
-          </Link>
+
+          <GymDangerZone gymId={id} />
         </div>
-        {payments.length === 0 ? (
-          <p className="px-5 py-8 text-sm text-zinc-400 text-center">Sin pagos registrados</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-zinc-50 border-b border-zinc-100">
-                <th className="text-left px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-zinc-500">Miembro</th>
-                <th className="text-left px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-zinc-500">Monto</th>
-                <th className="text-left px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-zinc-500 hidden md:table-cell">Método</th>
-                <th className="text-left px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-zinc-500 hidden lg:table-cell">Fecha</th>
-                <th className="text-left px-5 py-2.5 text-xs font-semibold uppercase tracking-wider text-zinc-500 hidden lg:table-cell">Notas</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100">
-              {payments.map(p => (
-                <tr key={p.id} className="hover:bg-zinc-50 transition-colors">
-                  <td className="px-5 py-3">
-                    {p.member
-                      ? <span className="font-medium">{p.member.firstName} {p.member.lastName}</span>
-                      : <span className="font-mono text-xs text-zinc-400">{p.memberId.slice(0, 8)}…</span>
-                    }
-                  </td>
-                  <td className="px-5 py-3 font-semibold">
-                    {p.currency} {(Number(p.amount) / 100).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td className="px-5 py-3 text-zinc-500 hidden md:table-cell">
-                    {{ CASH: 'Efectivo', CARD: 'Tarjeta', TRANSFER: 'Transferencia', OTHER: 'Otro' }[p.method] ?? p.method}
-                  </td>
-                  <td className="px-5 py-3 text-zinc-400 hidden lg:table-cell">
-                    {new Date(p.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                  </td>
-                  <td className="px-5 py-3 text-zinc-400 hidden lg:table-cell">{p.notes ?? '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
       </div>
-
-      </div>
-    </div>
-  )
-}
-
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between px-5 py-3.5 text-sm">
-      <span className="text-zinc-500 font-medium">{label}</span>
-      <span>{value}</span>
-    </div>
+    </AdminPage>
   )
 }

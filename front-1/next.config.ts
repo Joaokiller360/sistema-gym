@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const BACKEND_URL = (process.env.API_URL ?? 'http://localhost:3001/api/v1').replace(/\/api\/v\d+$/, '')
@@ -47,6 +48,11 @@ const securityHeaders = [
 ]
 
 const nextConfig: NextConfig = {
+  // Pin the root: a stray ~/package-lock.json made Turbopack treat $HOME as the
+  // workspace and miss edits (e.g. globals.css) until a restart.
+  turbopack: {
+    root: path.join(__dirname),
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: '4mb',

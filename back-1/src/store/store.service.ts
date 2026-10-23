@@ -55,9 +55,14 @@ export class StoreService {
 
   // ── Sales ───────────────────────────────────────────────
 
-  async createSale(gymId: string, data: { items: { productId: string; quantity: number }[]; method: string; notes?: string }) {
-    const { items, method, notes } = data;
+  async createSale(gymId: string, data: { items: { productId: string; quantity: number }[]; method: string; notes?: string; memberId?: string }) {
+    const { items, method, notes, memberId } = data;
     if (!items?.length) throw new BadRequestException('Debe incluir al menos un producto');
+
+    if (memberId) {
+      const member = await this.prisma.member.findFirst({ where: { id: memberId, gymId }, select: { id: true } });
+      if (!member) throw new NotFoundException('Miembro no encontrado en este gimnasio');
+    }
 
     // Fetch products and validate stock
     const products = await this.prisma.product.findMany({
@@ -83,6 +88,7 @@ export class StoreService {
       const created = await tx.productSale.create({
         data: {
           gymId,
+          memberId: memberId ?? null,
           total,
           method: method as any,
           notes,

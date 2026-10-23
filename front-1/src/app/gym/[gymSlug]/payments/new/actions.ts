@@ -15,6 +15,7 @@ const schema = z.object({
   planId: z.string().min(1, 'Seleccioná un plan'),
   startDate: z.string().min(1),
   durationDays: z.number().int().positive(),
+  periods: z.number().int().min(1).max(24).default(1),
   amount: z.coerce.number().positive('Monto inválido'),
   currency: z.string().min(1),
   method: z.enum(['CASH', 'CARD', 'TRANSFER', 'OTHER']),
@@ -31,7 +32,7 @@ export async function registerMemberPaymentAction(
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
 
   const token = await getToken()
-  const { memberId, planId, startDate, durationDays, amount, currency, method, notes } = parsed.data
+  const { memberId, planId, startDate, durationDays, periods, amount, currency, method, notes } = parsed.data
 
   const start = new Date(startDate)
   const end = new Date(start)
@@ -46,6 +47,7 @@ export async function registerMemberPaymentAction(
       planId,
       startDate: start.toISOString(),
       endDate: end.toISOString(),
+      periods,
     }),
   })
 

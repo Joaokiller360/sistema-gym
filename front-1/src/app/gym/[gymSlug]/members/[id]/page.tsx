@@ -11,6 +11,9 @@ import { MemberTabs } from './MemberTabs'
 import { MemberStatusControl } from './MemberStatusControl'
 import { ResendWelcomeButton } from './ResendWelcomeButton'
 import { EditMemberModal } from './EditMemberModal'
+import { WalletPassCard } from './WalletPassCard'
+import type { WalletPassInfo } from './wallet-actions'
+import { verifyToken } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 import { buttonVariants } from '@/components/ui/button'
 
@@ -37,7 +40,10 @@ export default async function MemberDetailPage({ params, searchParams }: Props) 
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value ?? ''
 
-  const [member, memberships, payments, attendance, plans, storeProducts, memberCredits] = await Promise.all([
+  const session = await verifyToken(token)
+  const canRevokeWallet = ['SUPER_ADMIN', 'GYM_OWNER', 'GYM_ADMIN'].includes(session?.role ?? '')
+
+  const [member, memberships, payments, attendance, plans, storeProducts, memberCredits, walletPass] = await Promise.all([
     apiFetch<Member>(`/members/${id}`, token, {
       next: { tags: [`member-${id}`] }, headers: { 'x-gym-slug': gymSlug },
     }),
@@ -56,6 +62,9 @@ export default async function MemberDetailPage({ params, searchParams }: Props) 
     }),
     apiFetch<{ id: string; productId: string; quantity: number; unitPrice: number; isPaid: boolean; paidAt: string | null; notes: string | null; createdAt: string; product: { name: string; price: number } }[]>(`/store/credits/${id}`, token, {
       cache: 'no-store', headers: { 'x-gym-slug': gymSlug },
+    }),
+    apiFetch<WalletPassInfo>(`/wallet/members/${id}/pass`, token, {
+      next: { tags: [`member-${id}-wallet`] }, headers: { 'x-gym-slug': gymSlug }, silent: true,
     }),
   ])
 
@@ -134,6 +143,14 @@ export default async function MemberDetailPage({ params, searchParams }: Props) 
             <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Correo</p>
             <ResendWelcomeButton memberId={member.id} />
           </div>
+
+          <WalletPassCard
+            gymSlug={gymSlug}
+            memberId={member.id}
+            memberEmail={member.email}
+            pass={walletPass}
+            canRevoke={canRevokeWallet}
+          />
         </div>
       </div>
 

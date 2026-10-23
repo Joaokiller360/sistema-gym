@@ -13,6 +13,7 @@ const planSchema = z.object({
   currency: z.string().min(1),
   durationDays: z.number().int().min(1).max(365),
   daysPerWeek: z.string().min(1),
+  visitLimit: z.string().regex(/^(unlimited|[1-9]\d{0,2})$/),
   benefits: z.array(z.object({
     value: z.string().refine(v => v === '' || ONLY_LETTERS_NUMBERS.test(v), 'Solo letras y números'),
   })).default([]),
@@ -35,6 +36,7 @@ function buildPayload(data: PlanActionInput) {
     currency: data.currency,
     durationDays: data.durationDays,
     daysPerWeek: data.daysPerWeek === 'unlimited' ? null : parseInt(data.daysPerWeek, 10),
+    visitLimit: data.visitLimit === 'unlimited' ? null : parseInt(data.visitLimit, 10),
     benefits: data.benefits.map((b) => b.value.trim()).filter(Boolean),
     isActive: data.isActive,
     isFeatured: data.isFeatured,

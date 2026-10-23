@@ -29,6 +29,13 @@ export class CreatePlanDto {
   @IsOptional()
   daysPerWeek?: number;
 
+  // Number of gym days included; null/omitted = unlimited for durationDays
+  @IsInt()
+  @Min(1)
+  @Max(365)
+  @IsOptional()
+  visitLimit?: number | null;
+
   @IsArray()
   @IsOptional()
   benefits?: unknown[];
@@ -73,6 +80,13 @@ export class UpdatePlanDto {
   @Max(7)
   @IsOptional()
   daysPerWeek?: number;
+
+  // Number of gym days included; null/omitted = unlimited for durationDays
+  @IsInt()
+  @Min(1)
+  @Max(365)
+  @IsOptional()
+  visitLimit?: number | null;
 
   @IsArray()
   @IsOptional()

@@ -1,9 +1,13 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { WalletPassService } from '../wallet/wallet-pass.service';
 
 @Injectable()
 export class PaymentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly passes: WalletPassService,
+  ) {}
 
   async findAll(gymId: string, query: any) {
     const { memberId, startDate, endDate, branchId } = query;
@@ -55,6 +59,7 @@ export class PaymentsService {
           where: { id: payment.membershipId },
           data: { status: 'CANCELLED' },
         });
+        void this.passes.sync(gymId, payment.memberId);
         return { message: 'Pago eliminado. Membresía cancelada por falta de pagos.' };
       }
     }

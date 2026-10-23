@@ -1,67 +1,45 @@
 'use client'
 
 import { useState, useTransition, useRef } from 'react'
-import {
-  Plus, Trash2, Camera, Dumbbell, Palette, Layout,
-  List, FileText, User, AlignLeft, GripVertical, Eye,
-  Globe, Sparkles,
-} from 'lucide-react'
+import { Plus, Trash2, Camera, Dumbbell, Globe, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { updatePlatformSettingsAction, uploadPlatformLogoAction } from './actions'
+import { updatePlatformSettingsAction } from './actions'
 import { type PlatformSettings, type FooterLink, type LandingFeature } from './types'
 import { createHandlers } from '@/lib/input-validation'
+import { cn } from '@/lib/utils'
+import { Switch, btn, field } from '@/components/admin/ui'
 
 const MAX_SIZE = 2 * 1024 * 1024
 
 interface Props { settings: PlatformSettings }
 
-const inputClass = 'w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-zinc-400 transition-all disabled:opacity-50 disabled:bg-zinc-50 placeholder:text-zinc-300'
-const labelClass = 'text-[11px] font-bold uppercase tracking-[0.08em] text-zinc-400 block mb-1.5'
+const SECTIONS = [
+  { id: 'marca', label: 'Marca' },
+  { id: 'landing', label: 'Landing' },
+  { id: 'footer', label: 'Footer y créditos' },
+  { id: 'terminos', label: 'Términos' },
+] as const
 
-function Toggle({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
+function Section({ id, title, description, children }: { id: string; title: string; description: string; children: React.ReactNode }) {
   return (
-    <label className="flex items-center gap-3 cursor-pointer group">
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        onClick={onChange}
-        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-black ${checked ? 'bg-black' : 'bg-zinc-200'}`}
-      >
-        <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
-      </button>
-      <span className="text-sm font-medium text-zinc-700 group-hover:text-black transition-colors" onClick={onChange}>{label}</span>
-    </label>
+    <section id={id} aria-labelledby={`${id}-h`} className="scroll-mt-6 rounded-2xl border border-adm-line bg-adm-surface">
+      <div className="border-b border-adm-line-soft px-6 py-4">
+        <h2 id={`${id}-h`} className="text-[17px] font-bold">{title}</h2>
+        <p className="mt-0.5 text-[13px] text-adm-muted">{description}</p>
+      </div>
+      <div className="flex flex-col gap-5 p-6">{children}</div>
+    </section>
   )
 }
 
-function SectionCard({
-  icon: Icon,
-  iconColor,
-  title,
-  description,
-  children,
-}: {
-  icon: React.ElementType
-  iconColor: string
-  title: string
-  description: string
-  children: React.ReactNode
-}) {
+function ToggleRow({ checked, onChange, label, hint }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint?: string }) {
   return (
-    <div className="rounded-2xl border border-zinc-200/80 bg-white shadow-sm shadow-zinc-100 overflow-hidden">
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-zinc-100">
-        <div className="h-9 w-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: iconColor + '15', border: `1px solid ${iconColor}25` }}>
-          <Icon className="h-4 w-4" style={{ color: iconColor }} />
-        </div>
-        <div>
-          <h2 className="text-sm font-bold text-zinc-900">{title}</h2>
-          <p className="text-xs text-zinc-400">{description}</p>
-        </div>
+    <div className="flex items-center gap-3 rounded-[10px] border border-adm-line-soft px-3.5 py-3">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold">{label}</p>
+        {hint && <p className="text-xs text-adm-muted">{hint}</p>}
       </div>
-      <div className="p-6 space-y-5">
-        {children}
-      </div>
+      <Switch checked={checked} onChange={onChange} label={label} />
     </div>
   )
 }
@@ -135,343 +113,261 @@ export function PlatformSettingsForm({ settings }: Props) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 pb-24">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-start gap-4">
+        <nav aria-label="Secciones" className="flex min-w-0 flex-[1_1_180px] flex-wrap gap-1 lg:sticky lg:top-6 lg:max-w-[200px] lg:flex-col">
+          {SECTIONS.map(s => (
+            <a
+              key={s.id}
+              href={`#${s.id}`}
+              className="flex min-h-10 items-center rounded-lg px-3 text-sm font-semibold text-adm-muted transition-colors hover:bg-adm-surface hover:text-adm-ink"
+            >
+              {s.label}
+            </a>
+          ))}
+        </nav>
 
-      {/* Row 1: Identidad (2/3) + Creator+Footer (1/3) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
-
-        {/* Identidad */}
-        <div className="lg:col-span-2">
-          <SectionCard icon={Palette} iconColor="#7c3aed" title="Identidad" description="Logo, nombre y color principal">
-
-            {/* Logo + upload */}
-            <div className="flex items-center gap-5 p-4 rounded-xl bg-zinc-50 border border-zinc-100">
+        <div className="flex min-w-0 flex-[999_1_560px] flex-col gap-4">
+          <Section id="marca" title="Marca" description="Nombre, logo y color principal de la plataforma">
+            <div className="flex flex-wrap items-center gap-5 rounded-xl border border-adm-line-soft bg-adm-subtle p-4">
               <div
-                className="relative h-20 w-20 rounded-2xl flex items-center justify-center shrink-0 overflow-hidden ring-4 ring-white shadow-md"
+                className="relative flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-adm-night/15"
                 style={{ background: primaryColor || '#fffb00' }}
               >
                 {logoUrl
-                  ? <img src={logoUrl} alt="Logo" className="h-full w-full object-cover" />
-                  : <Dumbbell className="h-8 w-8 text-black" />
-                }
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={logoUrl} alt="Logo actual" className="size-full object-cover" />
+                  : <Dumbbell className="size-8 text-black" aria-hidden="true" />}
                 {isUploading && (
-                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                    <span className="text-white text-xs font-bold animate-pulse">↑</span>
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                    <Loader2 className="size-5 animate-spin text-white" aria-label="Subiendo" />
                   </div>
                 )}
               </div>
-              <div className="space-y-2 flex-1">
-                <p className="text-sm font-semibold text-zinc-900">Logo de la plataforma</p>
-                <p className="text-xs text-zinc-400">PNG, JPG, WebP · Máx. 2MB · Recomendado 512×512</p>
-                <button
-                  type="button"
-                  disabled={isUploading || isPending}
-                  onClick={() => fileRef.current?.click()}
-                  className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-600 hover:border-zinc-300 hover:text-zinc-900 transition-all disabled:opacity-50 shadow-sm"
-                >
-                  <Camera className="h-3.5 w-3.5" />
-                  {isUploading ? 'Subiendo…' : 'Cambiar logo'}
-                </button>
-                {uploadError && <p className="text-xs text-red-500 font-medium">{uploadError}</p>}
+              <div className="min-w-0 flex-[1_1_200px]">
+                <p className="text-sm font-semibold">Logo de la plataforma</p>
+                <p className="mt-0.5 text-xs text-adm-muted">PNG, JPG, WebP · Máx. 2MB · Recomendado 512×512</p>
+                {uploadError && <p className={field.error}>{uploadError}</p>}
               </div>
+              <button type="button" disabled={isUploading || isPending} onClick={() => fileRef.current?.click()} className={btn.line}>
+                <Camera className="size-3.5" aria-hidden="true" />
+                {isUploading ? 'Subiendo…' : 'Cambiar logo'}
+              </button>
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className={labelClass}>Nombre del SaaS</label>
-                <input
-                  type="text"
-                  value={saasName}
-                  onChange={e => setSaasName(e.target.value)}
-                  placeholder="GymOS"
-                  disabled={isPending}
-                  className={inputClass}
-                  {...createHandlers('text')}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Color principal</label>
+            <div className="flex flex-wrap gap-4">
+              <label className="min-w-0 flex-1 basis-56">
+                <span className={field.label}>Nombre del SaaS</span>
+                <input type="text" value={saasName} onChange={e => setSaasName(e.target.value)} placeholder="GymOS" disabled={isPending} className={field.input} {...createHandlers('text')} />
+              </label>
+              <div className="min-w-0 flex-1 basis-56">
+                <label htmlFor="primary-color" className={field.label}>Color principal</label>
                 <div className="flex items-center gap-2">
-                  <div className="relative shrink-0">
-                    <input
-                      type="color"
-                      value={primaryColor}
-                      onChange={e => setPrimaryColor(e.target.value)}
-                      disabled={isPending}
-                      className="h-[42px] w-11 rounded-xl border border-zinc-200 cursor-pointer disabled:opacity-50 p-1"
-                    />
-                  </div>
                   <input
+                    type="color"
+                    value={primaryColor}
+                    onChange={e => setPrimaryColor(e.target.value)}
+                    disabled={isPending}
+                    aria-label="Elegir color"
+                    className="h-11 w-12 shrink-0 cursor-pointer rounded-[10px] border border-adm-line bg-adm-surface p-1 disabled:opacity-50"
+                  />
+                  <input
+                    id="primary-color"
                     type="text"
                     value={primaryColor}
                     onChange={e => setPrimaryColor(e.target.value)}
                     disabled={isPending}
-                    className={inputClass}
+                    className={cn(field.input, 'font-admin-mono')}
                     placeholder="#fffb00"
                     {...createHandlers('text')}
                   />
                 </div>
-                {/* Mini preview */}
                 <div className="mt-2 flex items-center gap-2">
-                  <div
-                    className="h-6 rounded-lg px-3 flex items-center text-[11px] font-black"
-                    style={{ background: primaryColor, color: '#000' }}
-                  >
+                  <span className="flex h-7 items-center rounded-lg border border-black/20 px-3 text-[11px] font-black text-black" style={{ background: primaryColor }}>
                     Botón CTA
-                  </div>
-                  <div
-                    className="h-2 w-2 rounded-full"
-                    style={{ background: primaryColor }}
-                  />
-                  <span className="text-[11px] text-zinc-400">Vista previa del color</span>
+                  </span>
+                  <span className="text-xs text-adm-muted">Vista previa del color</span>
                 </div>
               </div>
             </div>
-          </SectionCard>
-        </div>
+          </Section>
 
-        {/* Creador + Footer apilados */}
-        <div className="space-y-5">
-          <SectionCard icon={User} iconColor="#0ea5e9" title="Creador" description="Aparece en el footer de todas las páginas">
-            <div className="space-y-4">
-              <div>
-                <label className={labelClass}>Nombre</label>
-                <input type="text" value={creatorName} onChange={e => setCreatorName(e.target.value)} placeholder="Tu nombre" disabled={isPending} className={inputClass} {...createHandlers('name')} />
-              </div>
-              <div>
-                <label className={labelClass}>Link / Portfolio</label>
-                <input type="text" value={creatorUrl} onChange={e => setCreatorUrl(e.target.value)} placeholder="https://..." disabled={isPending} className={inputClass} {...createHandlers('url')} />
-              </div>
+          <Section id="landing" title="Landing" description="Sección principal, beneficios y precios de la página pública">
+            <label className="block">
+              <span className={field.label}>Título principal</span>
+              <input type="text" value={heroTitle} onChange={e => setHeroTitle(e.target.value)} placeholder="Gestión profesional para tu gimnasio" disabled={isPending} className={field.input} {...createHandlers('text')} />
+              <span className={field.hint}>Se divide en 2 líneas automáticamente. La segunda usa el color principal.</span>
+            </label>
+            <label className="block">
+              <span className={field.label}>Subtítulo</span>
+              <textarea value={heroSubtitle} onChange={e => setHeroSubtitle(e.target.value)} placeholder="Todo lo que necesitás para administrar tu gimnasio..." disabled={isPending} rows={2} className={cn(field.textarea, 'min-h-20')} {...createHandlers('text')} />
+            </label>
+            <div className="flex flex-wrap gap-4">
+              <label className="min-w-0 flex-1 basis-48">
+                <span className={field.label}>Texto del botón CTA</span>
+                <input type="text" value={heroCtaText} onChange={e => setHeroCtaText(e.target.value)} placeholder="Comenzar gratis" disabled={isPending} className={field.input} {...createHandlers('text')} />
+              </label>
+              <label className="min-w-0 flex-1 basis-48">
+                <span className={field.label}>URL del botón CTA</span>
+                <input type="text" value={heroCtaUrl} onChange={e => setHeroCtaUrl(e.target.value)} placeholder="/login o https://wa.me/..." disabled={isPending} className={field.input} {...createHandlers('url')} />
+                <span className={field.hint}>Vacío → va al login. Las URLs externas abren en otra pestaña.</span>
+              </label>
             </div>
-          </SectionCard>
 
-          <SectionCard icon={AlignLeft} iconColor="#10b981" title="Footer" description="Pie de página global del sitio">
-            <Toggle checked={showPoweredBy} onChange={() => setShowPoweredBy(v => !v)} label={`"Desarrollado por ${saasName || 'SaaS'}"`} />
             <div>
-              <label className={labelClass}>Texto del footer</label>
-              <input
-                type="text"
-                value={footerText}
-                onChange={e => setFooterText(e.target.value)}
-                placeholder={`© ${new Date().getFullYear()} ${saasName}. Todos los derechos.`}
-                disabled={isPending}
-                className={inputClass}
-                {...createHandlers('text')}
-              />
-            </div>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <label className={labelClass + ' mb-0'}>Links extras</label>
-                <button
-                  type="button"
-                  onClick={() => setFooterLinks(prev => [...prev, { label: '', url: '' }])}
-                  disabled={isPending || footerLinks.length >= 6}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-zinc-400 hover:text-black transition-colors disabled:opacity-40"
-                >
-                  <Plus className="h-3 w-3" /> Agregar
-                </button>
+              <div className="mb-2 flex items-center justify-between">
+                <span className={cn(field.label, 'mb-0')}>Beneficios</span>
+                <span className="font-admin-mono text-xs text-adm-muted">{landingFeatures.length}/6</span>
               </div>
-              {footerLinks.length === 0 && (
-                <p className="text-xs text-zinc-300 py-1">Sin links configurados</p>
+              {landingFeatures.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-adm-line bg-adm-subtle py-6 text-center text-[13px] text-adm-muted">
+                  Sin beneficios. Agregá hasta 6.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {landingFeatures.map((feat, i) => (
+                    <div key={i} className="flex items-start gap-2 rounded-xl border border-adm-line-soft bg-adm-subtle p-3">
+                      <span className="mt-3 w-6 shrink-0 font-admin-mono text-xs font-bold text-adm-muted">{i + 1}</span>
+                      <div className="flex min-w-0 flex-1 flex-wrap gap-2">
+                        <input
+                          type="text"
+                          value={feat.title}
+                          onChange={e => setLandingFeatures(prev => prev.map((x, idx) => idx === i ? { ...x, title: e.target.value } : x))}
+                          placeholder="Título"
+                          aria-label={`Título del beneficio ${i + 1}`}
+                          disabled={isPending}
+                          className={cn(field.input, 'flex-1 basis-40')}
+                          {...createHandlers('text')}
+                        />
+                        <input
+                          type="text"
+                          value={feat.description}
+                          onChange={e => setLandingFeatures(prev => prev.map((x, idx) => idx === i ? { ...x, description: e.target.value } : x))}
+                          placeholder="Descripción breve"
+                          aria-label={`Descripción del beneficio ${i + 1}`}
+                          disabled={isPending}
+                          className={cn(field.input, 'flex-[2_1_240px]')}
+                          {...createHandlers('text')}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        aria-label={`Eliminar beneficio ${i + 1}`}
+                        onClick={() => setLandingFeatures(prev => prev.filter((_, idx) => idx !== i))}
+                        disabled={isPending}
+                        className={cn(btn.icon, 'size-11 hover:bg-adm-bad-bg hover:text-adm-bad-fg')}
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               )}
-              {footerLinks.map((link, i) => (
-                <div key={i} className="flex items-center gap-1.5">
-                  <input
-                    type="text"
-                    value={link.label}
-                    onChange={e => setFooterLinks(prev => prev.map((l, idx) => idx === i ? { ...l, label: e.target.value } : l))}
-                    placeholder="Label"
-                    disabled={isPending}
-                    className={inputClass}
-                    {...createHandlers('text')}
-                  />
-                  <input
-                    type="text"
-                    value={link.url}
-                    onChange={e => setFooterLinks(prev => prev.map((l, idx) => idx === i ? { ...l, url: e.target.value } : l))}
-                    placeholder="URL"
-                    disabled={isPending}
-                    className={inputClass}
-                    {...createHandlers('url')}
-                  />
-                  <button
-                    type="button"
-                    aria-label={`Eliminar link ${i + 1}`}
-                    onClick={() => setFooterLinks(prev => prev.filter((_, idx) => idx !== i))}
-                    disabled={isPending}
-                    className="p-2 rounded-lg text-zinc-300 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </SectionCard>
-        </div>
-      </div>
-
-      {/* Row 2: Hero + Características */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
-
-        <SectionCard icon={Layout} iconColor="#f59e0b" title="Landing — Hero" description="Texto y CTA de la sección principal">
-          <div>
-            <label className={labelClass}>Título principal</label>
-            <input
-              type="text"
-              value={heroTitle}
-              onChange={e => setHeroTitle(e.target.value)}
-              placeholder="Gestión profesional para tu gimnasio"
-              disabled={isPending}
-              className={inputClass}
-              {...createHandlers('text')}
-            />
-            <p className="text-[11px] text-zinc-400 mt-1.5">Se divide en 2 líneas automáticamente. La segunda tendrá el color principal.</p>
-          </div>
-          <div>
-            <label className={labelClass}>Subtítulo</label>
-            <textarea
-              value={heroSubtitle}
-              onChange={e => setHeroSubtitle(e.target.value)}
-              placeholder="Todo lo que necesitás para administrar tu gimnasio..."
-              disabled={isPending}
-              rows={2}
-              className={inputClass + ' resize-none'}
-              {...createHandlers('text')}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelClass}>Texto del botón CTA</label>
-              <input
-                type="text"
-                value={heroCtaText}
-                onChange={e => setHeroCtaText(e.target.value)}
-                placeholder="Comenzar gratis"
-                disabled={isPending}
-                className={inputClass}
-                {...createHandlers('text')}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>URL del botón CTA</label>
-              <input
-                type="text"
-                value={heroCtaUrl}
-                onChange={e => setHeroCtaUrl(e.target.value)}
-                placeholder="/login o https://wa.me/..."
-                disabled={isPending}
-                className={inputClass}
-                {...createHandlers('url')}
-              />
-            </div>
-          </div>
-          <p className="text-[11px] text-zinc-300">Vacío → redirige al login. URLs externas abren en nueva pestaña.</p>
-        </SectionCard>
-
-        <SectionCard icon={Sparkles} iconColor="#ec4899" title="Landing — Características" description="Hasta 6 beneficios visibles en la landing">
-          <div className="space-y-2.5">
-            {landingFeatures.length === 0 && (
-              <div className="flex flex-col items-center gap-2 py-8 text-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50">
-                <List className="h-6 w-6 text-zinc-300" />
-                <p className="text-xs text-zinc-400 font-medium">Sin características. Agregá hasta 6.</p>
-              </div>
-            )}
-            {landingFeatures.map((feat, i) => (
-              <div
-                key={i}
-                className="group rounded-xl border border-zinc-200 bg-zinc-50 hover:bg-white hover:border-zinc-300 transition-all p-3.5 space-y-2.5"
+              <button
+                type="button"
+                onClick={() => setLandingFeatures(prev => [...prev, { title: '', description: '' }])}
+                disabled={isPending || landingFeatures.length >= 6}
+                className={cn(btn.line, 'mt-2')}
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <GripVertical className="h-3.5 w-3.5 text-zinc-300" />
-                    <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest">#{i + 1}</span>
-                  </div>
-                  <button
-                    type="button"
-                    aria-label={`Eliminar característica ${i + 1}`}
-                    onClick={() => setLandingFeatures(prev => prev.filter((_, idx) => idx !== i))}
-                    disabled={isPending}
-                    className="p-1 rounded-lg text-zinc-300 hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </div>
-                <input
-                  type="text"
-                  value={feat.title}
-                  onChange={e => setLandingFeatures(prev => prev.map((x, idx) => idx === i ? { ...x, title: e.target.value } : x))}
-                  placeholder="Título de la característica"
-                  disabled={isPending}
-                  className={inputClass}
-                  {...createHandlers('text')}
-                />
-                <input
-                  type="text"
-                  value={feat.description}
-                  onChange={e => setLandingFeatures(prev => prev.map((x, idx) => idx === i ? { ...x, description: e.target.value } : x))}
-                  placeholder="Descripción breve"
-                  disabled={isPending}
-                  className={inputClass}
-                  {...createHandlers('text')}
-                />
+                <Plus className="size-3.5" aria-hidden="true" /> Agregar beneficio
+              </button>
+            </div>
+
+            <ToggleRow checked={landingShowPlans} onChange={setLandingShowPlans} label="Mostrar precios en la landing" hint="Usa los planes marcados como visibles" />
+          </Section>
+
+          <Section id="footer" title="Footer y créditos" description="Pie de página de todas las páginas">
+            <ToggleRow checked={showPoweredBy} onChange={setShowPoweredBy} label={`Mostrar “Desarrollado por ${saasName || 'SaaS'}”`} />
+            <label className="block">
+              <span className={field.label}>Texto del footer</span>
+              <input type="text" value={footerText} onChange={e => setFooterText(e.target.value)} placeholder={`© ${new Date().getFullYear()} ${saasName}. Todos los derechos.`} disabled={isPending} className={field.input} {...createHandlers('text')} />
+            </label>
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <span className={cn(field.label, 'mb-0')}>Links extra</span>
+                <span className="font-admin-mono text-xs text-adm-muted">{footerLinks.length}/6</span>
               </div>
-            ))}
-          </div>
+              <div className="flex flex-col gap-2">
+                {footerLinks.length === 0 && <p className="text-[13px] text-adm-muted">Sin links configurados.</p>}
+                {footerLinks.map((link, i) => (
+                  <div key={i} className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="text"
+                      value={link.label}
+                      onChange={e => setFooterLinks(prev => prev.map((l, idx) => idx === i ? { ...l, label: e.target.value } : l))}
+                      placeholder="Texto"
+                      aria-label={`Texto del link ${i + 1}`}
+                      disabled={isPending}
+                      className={cn(field.input, 'flex-1 basis-40')}
+                      {...createHandlers('text')}
+                    />
+                    <input
+                      type="text"
+                      value={link.url}
+                      onChange={e => setFooterLinks(prev => prev.map((l, idx) => idx === i ? { ...l, url: e.target.value } : l))}
+                      placeholder="https://…"
+                      aria-label={`URL del link ${i + 1}`}
+                      disabled={isPending}
+                      className={cn(field.input, 'flex-[2_1_240px]')}
+                      {...createHandlers('url')}
+                    />
+                    <button
+                      type="button"
+                      aria-label={`Eliminar link ${i + 1}`}
+                      onClick={() => setFooterLinks(prev => prev.filter((_, idx) => idx !== i))}
+                      disabled={isPending}
+                      className={cn(btn.icon, 'size-11 hover:bg-adm-bad-bg hover:text-adm-bad-fg')}
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setFooterLinks(prev => [...prev, { label: '', url: '' }])}
+                disabled={isPending || footerLinks.length >= 6}
+                className={cn(btn.line, 'mt-2')}
+              >
+                <Plus className="size-3.5" aria-hidden="true" /> Agregar link
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-4 border-t border-adm-line-soft pt-5">
+              <label className="min-w-0 flex-1 basis-48">
+                <span className={field.label}>Creado por</span>
+                <input type="text" value={creatorName} onChange={e => setCreatorName(e.target.value)} placeholder="Tu nombre" disabled={isPending} className={field.input} {...createHandlers('name')} />
+              </label>
+              <label className="min-w-0 flex-1 basis-48">
+                <span className={field.label}>Link / portfolio</span>
+                <input type="text" value={creatorUrl} onChange={e => setCreatorUrl(e.target.value)} placeholder="https://..." disabled={isPending} className={field.input} {...createHandlers('url')} />
+              </label>
+            </div>
+          </Section>
 
-          <button
-            type="button"
-            onClick={() => setLandingFeatures(prev => [...prev, { title: '', description: '' }])}
-            disabled={isPending || landingFeatures.length >= 6}
-            className="w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-200 py-2.5 text-sm font-semibold text-zinc-400 hover:border-zinc-300 hover:text-zinc-600 hover:bg-zinc-50 transition-all disabled:opacity-40"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Agregar característica {landingFeatures.length > 0 && `(${landingFeatures.length}/6)`}
-          </button>
-
-          <div className="pt-1 border-t border-zinc-100">
-            <Toggle checked={landingShowPlans} onChange={() => setLandingShowPlans(v => !v)} label="Mostrar sección de precios en la landing" />
-          </div>
-        </SectionCard>
+          <Section id="terminos" title="Términos y condiciones" description="Contenido de /terminos — texto plano o Markdown (## título, - lista, **negrita**)">
+            <textarea
+              value={termsContent}
+              onChange={e => setTermsContent(e.target.value)}
+              rows={16}
+              disabled={isPending}
+              aria-label="Términos y condiciones"
+              placeholder={'## Términos y Condiciones\n\nÚltima actualización: ...\n\n### 1. Uso del servicio\n\nAl usar esta plataforma aceptás los siguientes términos...'}
+              className={cn(field.textarea, 'min-h-80 font-admin-mono text-xs')}
+              {...createHandlers('text')}
+            />
+            <p className="flex items-center gap-1.5 text-xs text-adm-muted">
+              <Globe className="size-3.5" aria-hidden="true" />
+              Visible en <a href="/terminos" target="_blank" rel="noopener noreferrer" className="font-semibold underline">/terminos</a>
+            </p>
+          </Section>
+        </div>
       </div>
 
-      {/* Row 3: Terms */}
-      <SectionCard icon={FileText} iconColor="#6366f1" title="Términos y condiciones" description="Contenido de /terminos — texto plano o Markdown (## título, - lista, **negrita**)">
-        <textarea
-          value={termsContent}
-          onChange={e => setTermsContent(e.target.value)}
-          rows={16}
-          disabled={isPending}
-          placeholder={'## Términos y Condiciones\n\nÚltima actualización: ...\n\n### 1. Uso del servicio\n\nAl usar esta plataforma aceptás los siguientes términos...'}
-          className={inputClass + ' resize-y font-mono text-xs leading-relaxed'}
-          {...createHandlers('text')}
-        />
-        <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
-          <Globe className="h-3 w-3" />
-          Visible en{' '}
-          <a href="/terminos" target="_blank" rel="noopener noreferrer" className="underline hover:text-zinc-600 transition-colors">
-            /terminos
-          </a>
-        </div>
-      </SectionCard>
-
-      {/* Sticky save bar */}
-      <div className="fixed bottom-0 left-0 right-0 lg:left-64 z-40 border-t border-zinc-200 bg-white/95 backdrop-blur-sm px-6 py-3.5 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <Eye className="h-3.5 w-3.5 text-zinc-400" />
-          <p className="text-xs text-zinc-400">Los cambios se reflejan en la landing y el footer al guardar.</p>
-        </div>
-        <button
-          type="submit"
-          disabled={isPending || isUploading}
-          className="inline-flex items-center gap-2 rounded-xl bg-black px-6 py-2.5 text-sm font-bold text-white hover:bg-zinc-800 disabled:opacity-50 transition-all shadow-sm shrink-0"
-        >
-          {isPending ? (
-            <>
-              <span className="h-3.5 w-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-              Guardando…
-            </>
-          ) : 'Guardar cambios'}
+      <div className="sticky bottom-0 z-30 -mx-4 flex flex-wrap items-center justify-between gap-3 border-t border-adm-line bg-adm-ground/95 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6 lg:-mx-10 lg:px-10">
+        <p className="text-[13px] text-adm-muted">Los cambios se ven en la landing y el footer al guardar.</p>
+        <button type="submit" disabled={isPending || isUploading} className={btn.primary}>
+          {isPending ? <><Loader2 className="size-4 animate-spin" aria-hidden="true" /> Guardando…</> : 'Guardar cambios'}
         </button>
       </div>
     </form>

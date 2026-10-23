@@ -1,11 +1,16 @@
 import { cookies } from 'next/headers'
 import { apiFetch } from '@/lib/api'
 import { getPlatformSettingsAction } from '@/app/admin/settings/actions'
-import { SlotsConfigPanel } from '@/app/admin/dashboard/SlotsConfigPanel'
-import { DemoRequestsSection, type DemoRequest } from '@/app/admin/dashboard/DemoRequestsSection'
-import { AccessRequestsPanel, type AccessRequest } from '@/app/admin/dashboard/AccessRequestsPanel'
+import { AdminPage, PageHeader } from '@/components/admin/ui'
+import { SlotsConfigPanel } from './SlotsConfigPanel'
+import { RequestsInbox, type AccessRequest, type DemoRequest } from './RequestsInbox'
 
-export default async function AccesoPage() {
+interface Props {
+  searchParams: Promise<{ tab?: string }>
+}
+
+export default async function AccesoPage({ searchParams }: Props) {
+  const { tab } = await searchParams
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value ?? ''
 
@@ -24,17 +29,14 @@ export default async function AccesoPage() {
     : []
 
   return (
-    <div className="p-8 space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Solicitudes de acceso</h1>
-        <p className="text-muted-foreground text-sm mt-1">Configurá horarios y gestioná las solicitudes</p>
-      </div>
-
+    <AdminPage>
+      <PageHeader eyebrow="Pedidos que llegan desde la landing" title="Solicitudes" />
+      <RequestsInbox
+        accessRequests={accessRequests}
+        demoRequests={demoRequests}
+        initialTab={tab === 'demo' ? 'demo' : 'access'}
+      />
       <SlotsConfigPanel initialSlots={platformSettings.availableSlots ?? []} />
-
-      <AccessRequestsPanel requests={accessRequests} />
-
-      <DemoRequestsSection requests={demoRequests} />
-    </div>
+    </AdminPage>
   )
 }

@@ -23,6 +23,10 @@ const formSchema = z.object({
   currency: z.string().min(1),
   durationDays: z.number({ message: 'Duración inválida' }).int().min(1).max(365, 'Máximo 365 días'),
   daysPerWeek: z.string().min(1),
+  visitLimit: z.string().refine(
+    v => v === 'unlimited' || /^[1-9]\d{0,2}$/.test(v) && Number(v) <= 365,
+    'Entre 1 y 365 días',
+  ),
   benefits: z.array(z.object({
     value: z.string().refine(
       v => v === '' || zodSafeField('text')(v),
@@ -43,6 +47,8 @@ const DURATION_PRESETS = [
   { days: 180, label: '6 meses' },
   { days: 365, label: '1 año' },
 ]
+
+const VISIT_PRESETS = [8, 12, 16, 20]
 
 const CURRENCIES = [
   { value: 'USD', label: 'USD', symbol: '$' },
@@ -99,6 +105,7 @@ export function PlanForm({ gymSlug, planId, defaultValues, onSuccess, onClose, s
       currency: 'USD',
       durationDays: 30,
       daysPerWeek: 'unlimited',
+      visitLimit: 'unlimited',
       benefits: [],
       isActive: true,
       isFeatured: false,
@@ -132,6 +139,8 @@ export function PlanForm({ gymSlug, planId, defaultValues, onSuccess, onClose, s
   const currency = watch('currency')
   const durationDays = watch('durationDays')
   const daysPerWeek = watch('daysPerWeek')
+  const visitLimit = watch('visitLimit')
+  const isVisitPlan = visitLimit !== 'unlimited'
   const benefits = watch('benefits')
   const isActive = watch('isActive')
   const isFeatured = watch('isFeatured')
@@ -196,9 +205,80 @@ export function PlanForm({ gymSlug, planId, defaultValues, onSuccess, onClose, s
           <FieldError msg={errors.price?.message} />
         </div>
 
+        {/* Plan type: time-based vs N gym days */}
+        <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Tipo de plan</p>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { visits: false, label: 'Por tiempo', desc: 'Entra cuando quiera hasta que venza' },
+              { visits: true, label: 'Por cantidad de días', desc: 'Cada día que entrena descuenta uno' },
+            ] as const).map(o => (
+              <button
+                key={o.label}
+                type="button"
+                disabled={isPending}
+                onClick={() => {
+                  setValue('visitLimit', o.visits ? (isVisitPlan ? visitLimit : '12') : 'unlimited', { shouldValidate: true })
+                  if (o.visits) setValue('daysPerWeek', 'unlimited')
+                }}
+                className={cn(
+                  'rounded-xl border px-4 py-3 text-left transition-all',
+                  isVisitPlan === o.visits
+                    ? 'border-[#1fad9d] bg-[#1fad9d]/10'
+                    : 'border-zinc-200 hover:border-zinc-300',
+                )}
+              >
+                <p className={cn('text-sm font-bold', isVisitPlan === o.visits ? 'text-[#0e7a70]' : 'text-zinc-700')}>{o.label}</p>
+                <p className="text-xs text-zinc-500 mt-0.5">{o.desc}</p>
+              </button>
+            ))}
+          </div>
+          {isVisitPlan && (
+            <div className="space-y-2 pt-1">
+              <label htmlFor="visitLimit" className="text-xs font-semibold text-zinc-600">Días incluidos</label>
+              <div className="flex flex-wrap gap-2">
+                {VISIT_PRESETS.map(n => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setValue('visitLimit', String(n), { shouldValidate: true })}
+                    className={cn(
+                      'rounded-xl border px-4 py-2 text-sm font-semibold transition-all',
+                      visitLimit === String(n)
+                        ? 'border-[#1fad9d] bg-[#1fad9d]/10 text-[#0e7a70]'
+                        : 'border-zinc-200 text-zinc-500 hover:border-zinc-300',
+                    )}
+                  >
+                    {n} días
+                  </button>
+                ))}
+                <input
+                  id="visitLimit"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={3}
+                  disabled={isPending}
+                  {...register('visitLimit')}
+                  {...createBlockHandlers('number')}
+                  className={cn(
+                    'w-24 rounded-xl border px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:border-transparent disabled:opacity-50 transition-all bg-zinc-50',
+                    errors.visitLimit
+                      ? 'border-red-400 text-red-500 focus:ring-red-400'
+                      : 'border-zinc-200 text-zinc-600 focus:ring-[#1fad9d]',
+                  )}
+                />
+              </div>
+              <p className="text-xs text-zinc-500">
+                Al usar el último día, el plan termina para ese miembro aunque no haya llegado la fecha de vencimiento.
+              </p>
+              <FieldError msg={errors.visitLimit?.message} />
+            </div>
+          )}
+        </div>
+
         {/* Duration */}
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Duración</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">{isVisitPlan ? 'Vigencia máxima' : 'Duración'}</p>
           <div className="flex flex-wrap gap-2">
             {DURATION_PRESETS.map(p => (
               <button
@@ -237,8 +317,8 @@ export function PlanForm({ gymSlug, planId, defaultValues, onSuccess, onClose, s
           <FieldError msg={errors.durationDays?.message} />
         </div>
 
-        {/* Days per week */}
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3">
+        {/* Days per week (not applicable to visit plans: the day count is the limit) */}
+        {!isVisitPlan && <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3">
           <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Días por semana</p>
           <div className="flex flex-wrap gap-2">
             {DAYS_OPTIONS.map(o => (
@@ -264,7 +344,7 @@ export function PlanForm({ gymSlug, planId, defaultValues, onSuccess, onClose, s
             ))}
           </div>
           <FieldError msg={errors.daysPerWeek?.message} />
-        </div>
+        </div>}
 
         {/* Benefits */}
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3">
@@ -397,7 +477,7 @@ export function PlanForm({ gymSlug, planId, defaultValues, onSuccess, onClose, s
               {durationPreset ? durationPreset.label : `${durationDays} días`}
             </span>
             <span className="inline-flex items-center gap-1 rounded-lg bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-600">
-              {daysLabel}
+              {isVisitPlan ? `${visitLimit || '—'} días de entrenamiento` : daysLabel}
             </span>
           </div>
 

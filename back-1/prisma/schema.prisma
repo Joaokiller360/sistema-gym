@@ -188,6 +188,8 @@ model Plan {
   currency    String   @default("USD")
   durationDays Int
   daysPerWeek Int?
+  // Visit-limited plan: number of gym days included (null = unlimited within durationDays)
+  visitLimit  Int?
   benefits       Json     @default("[]")
   accessSchedule Json?
   isActive      Boolean  @default(true)
@@ -218,6 +220,13 @@ model Member {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Wallet pass (WalletWallet). walletToken is the secret encoded in the pass QR.
+  walletToken     String?   @unique
+  walletSerial    String?
+  walletShareUrl  String?
+  walletGoogleUrl String?
+  walletIssuedAt  DateTime?
+
   gymId    String
   gym      Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
   branchId String?
@@ -228,6 +237,7 @@ model Member {
   attendances      Attendance[]
   classEnrollments ClassEnrollment[]
   productCredits   MemberProductCredit[]
+  productSales     ProductSale[]
 
   @@index([gymId])
   @@index([branchId])
@@ -242,6 +252,9 @@ model Membership {
   status    MembershipStatus @default(ACTIVE)
   frozenAt  DateTime?
   frozenDays Int             @default(0)
+  // Snapshot of plan.visitLimit at creation; one visit is consumed per gym day attended
+  visitsTotal Int?
+  visitsUsed  Int            @default(0)
   notes     String?
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
@@ -254,7 +267,8 @@ model Membership {
   branchId String?
   branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
-  payments Payment[]
+  payments    Payment[]
+  attendances Attendance[]
 
   @@index([gymId])
   @@index([memberId])
@@ -301,12 +315,16 @@ model Attendance {
   branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
   groupId  String?
   group    AttendanceGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  // Set when this check-in consumed a visit from a visit-limited membership
+  membershipId String?
+  membership   Membership? @relation(fields: [membershipId], references: [id], onDelete: SetNull)
 
   @@index([gymId])
   @@index([memberId])
   @@index([branchId])
   @@index([checkIn])
   @@index([groupId])
+  @@index([membershipId])
   @@map("attendances")
 }
 
@@ -575,13 +593,16 @@ model ProductSale {
   notes     String?
   createdAt DateTime      @default(now())
 
-  gymId String
-  gym   Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  gymId    String
+  gym      Gym     @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  memberId String?
+  member   Member? @relation(fields: [memberId], references: [id], onDelete: SetNull)
 
   items   ProductSaleItem[]
   credits MemberProductCredit[]
 
   @@index([gymId])
+  @@index([memberId])
   @@map("product_sales")
 }
 

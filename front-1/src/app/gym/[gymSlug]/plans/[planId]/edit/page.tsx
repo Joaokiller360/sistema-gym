@@ -30,6 +30,7 @@ export default async function EditPlanPage({ params }: Props) {
     currency: plan.currency,
     durationDays: plan.durationDays,
     daysPerWeek: plan.daysPerWeek === null ? 'unlimited' : String(plan.daysPerWeek),
+    visitLimit: plan.visitLimit == null ? 'unlimited' : String(plan.visitLimit),
     benefits: plan.benefits.map((b) => ({ value: b })),
     isActive: plan.isActive,
     isFeatured: plan.isFeatured,

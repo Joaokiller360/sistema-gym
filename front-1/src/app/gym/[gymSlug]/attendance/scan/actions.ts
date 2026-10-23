@@ -1,0 +1,95 @@
+'use server'
+
+import { cookies } from 'next/headers'
+import { updateTag } from 'next/cache'
+import { apiFetchWithError } from '@/lib/api'
+
+async function getToken() {
+  const store = await cookies()
+  return store.get('session')?.value ?? ''
+}
+
+export interface ScanResult {
+  member: { id: string; firstName: string; lastName: string; photoUrl: string | null; isActive: boolean }
+  membership: {
+    active: boolean
+    planName: string | null
+    endDate: string | null
+    /** Visit-limited plans only (null = unlimited) */
+    visitsTotal: number | null
+    visitsRemaining: number | null
+  }
+  checkedInToday: string | null
+  pendingCredits: { count: number; total: number; currency: string }
+}
+
+type Item = { productId: string; quantity: number }
+
+function codePath(code: string) {
+  return `/wallet/scan/${encodeURIComponent(code.trim().slice(0, 80))}`
+}
+
+function friendly(error: string) {
+  const lower = error.toLowerCase()
+  if (lower.includes('already checked in')) return 'Ya registró su entrada hoy'
+  if (lower.includes('no active membership')) return 'No tiene una membresía activa'
+  return error
+}
+
+export async function scanCodeAction(gymSlug: string, code: string): Promise<{ data?: ScanResult; error?: string }> {
+  if (!code.trim()) return { error: 'Código vacío' }
+  const result = await apiFetchWithError<ScanResult>(codePath(code), await getToken(), {
+    headers: { 'x-gym-slug': gymSlug },
+  })
+  if ('error' in result) return { error: friendly(result.error) }
+  return { data: result.data }
+}
+
+export async function scanCheckInAction(
+  gymSlug: string,
+  code: string,
+): Promise<{ error?: string; visitsRemaining?: number | null }> {
+  const result = await apiFetchWithError<{ visitsRemaining: number | null }>(`${codePath(code)}/checkin`, await getToken(), {
+    method: 'POST',
+    headers: { 'x-gym-slug': gymSlug },
+  })
+  if ('error' in result) return { error: friendly(result.error) }
+  updateTag(`attendance-${gymSlug}`)
+  return { visitsRemaining: result.data.visitsRemaining }
+}
+
+export async function scanSaleAction(
+  gymSlug: string,
+  code: string,
+  data: { items: Item[]; method: string; notes?: string },
+): Promise<{ error?: string }> {
+  if (!data.items.length) return { error: 'Elegí al menos un producto' }
+  const result = await apiFetchWithError(`${codePath(code)}/sale`, await getToken(), {
+    method: 'POST',
+    headers: { 'x-gym-slug': gymSlug },
+    body: JSON.stringify(data),
+  })
+  if ('error' in result) return { error: friendly(result.error) }
+  updateTag(`store-products-${gymSlug}`)
+  updateTag(`store-sales-${gymSlug}`)
+  return {}
+}
+
+export async function scanCreditAction(
+  gymSlug: string,
+  code: string,
+  memberId: string,
+  data: { items: Item[]; notes?: string },
+): Promise<{ error?: string }> {
+  if (!data.items.length) return { error: 'Elegí al menos un producto' }
+  const result = await apiFetchWithError(`${codePath(code)}/credit`, await getToken(), {
+    method: 'POST',
+    headers: { 'x-gym-slug': gymSlug },
+    body: JSON.stringify(data),
+  })
+  if ('error' in result) return { error: friendly(result.error) }
+  updateTag(`store-credits-${gymSlug}`)
+  updateTag(`store-credits-${memberId}`)
+  updateTag(`store-products-${gymSlug}`)
+  return {}
+}

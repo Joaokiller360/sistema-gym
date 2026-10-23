@@ -2,12 +2,12 @@
 
 import { Suspense } from 'react'
 import { cookies } from 'next/headers'
-import { Users, TrendingUp, CheckSquare, Calendar, UserPlus, ClipboardList, Dumbbell, BarChart2, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
+import { QrCode, UserPlus, LogIn } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
 import { verifyToken } from '@/lib/auth'
-import { KpiCard } from '@/components/shared/KpiCard'
-import { Member, Plan, Class, Gym } from '@/types'
+import { Member, Class, Gym } from '@/types'
+import { AdminPage, EmptyState, PageHeader, Panel, PanelLink, PersonMark, Pill, SectionLabel, Stat, btn, type Tone } from '@/components/admin/ui'
 import { NewMemberModal } from '../members/NewMemberModal'
 import { AdvancedReportsSection, type AdvancedReport } from './AdvancedReportsSection'
 import { QuickCheckInModal } from './QuickCheckInModal'
@@ -21,6 +21,8 @@ interface AttendanceWithMember {
   memberId: string
   member?: { id: string; firstName: string; lastName: string } | null
 }
+interface PendingCredit { memberId: string; quantity: number; unitPrice: number }
+interface DailyCut { salesCount: number; total: number }
 
 interface Props {
   params: Promise<{ gymSlug: string }>
@@ -43,6 +45,21 @@ function gymDayBoundsISO(dateStr: string, tz: string): { start: string; end: str
   }
 }
 
+function AttentionCard({ href, count, label, tag, tone }: { href: string; count: React.ReactNode; label: string; tag?: string; tone: Tone }) {
+  return (
+    <Link
+      href={href}
+      className="flex min-h-11 flex-1 basis-48 flex-col gap-1.5 rounded-xl border border-adm-line bg-adm-surface px-4.5 py-4 transition-colors hover:border-adm-ink"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-admin-mono text-[28px] font-bold leading-none">{count}</span>
+        {tag && <Pill tone={tone}>{tag}</Pill>}
+      </div>
+      <span className="text-sm font-semibold">{label}</span>
+    </Link>
+  )
+}
+
 export default async function GymDashboardPage({ params, searchParams }: Props) {
   const { gymSlug } = await params
   const { new: newParam, modal } = await searchParams
@@ -51,10 +68,10 @@ export default async function GymDashboardPage({ params, searchParams }: Props) 
 
   const session = await verifyToken(token)
   const isSuperAdmin = session?.role === 'SUPER_ADMIN'
+  const canScan = ['SUPER_ADMIN', 'GYM_OWNER', 'GYM_ADMIN', 'RECEPTIONIST'].includes(session?.role ?? '')
 
   const gymHeader = { headers: { 'x-gym-slug': gymSlug } }
 
-  // Fetch gym info + timezone
   const [gym, gymStatus] = await Promise.all([
     apiFetch<Gym>(`/gyms/${gymSlug}`, token),
     apiFetch<{ timezone: string; localTime: string; isOpen: boolean }>(`/gyms/${gymSlug}/status`, token),
@@ -63,182 +80,201 @@ export default async function GymDashboardPage({ params, searchParams }: Props) 
   const tz = gymStatus?.timezone ?? 'UTC'
   const now = new Date()
   const todayStr = now.toLocaleDateString('en-CA', { timeZone: tz })
-  const monthStr = todayStr.slice(0, 7) + '-01' // "YYYY-MM-01"
-
-  // 3-day expiry window in gym timezone
-  const in3DaysStr = new Date(now.getTime() + 3 * 86400000)
-    .toLocaleDateString('en-CA', { timeZone: tz })
+  const monthStr = todayStr.slice(0, 7) + '-01'
+  const in3DaysStr = new Date(now.getTime() + 3 * 86400000).toLocaleDateString('en-CA', { timeZone: tz })
 
   const gymIdParam = isSuperAdmin && gym ? `&gymId=${gym.id}` : ''
   const advancedEnabled = gym?.advancedReportsEnabled ?? false
+  const storeEnabled = gym?.storeEnabled ?? false
+  const dayBounds = gymDayBoundsISO(todayStr, tz)
 
-  const [membersRaw, attendanceRaw, classes, financial, advancedReport, expiringRaw] = await Promise.all([
+  const [membersRaw, attendanceRaw, classes, financial, advancedReport, expiringRaw, pendingCredits, dailyCut] = await Promise.all([
     apiFetch<MembersResponse | Member[]>(`/members?status=active&limit=5`, token, gymHeader),
-    apiFetch<AttendanceWithMember[]>(`/attendance?startDate=${gymDayBoundsISO(todayStr, tz).start}&endDate=${gymDayBoundsISO(todayStr, tz).end}`, token, gymHeader),
+    apiFetch<AttendanceWithMember[]>(`/attendance?startDate=${dayBounds.start}&endDate=${dayBounds.end}`, token, gymHeader),
     apiFetch<Class[]>(`/classes`, token, gymHeader),
     apiFetch<FinancialReport>(`/reports/financial?startDate=${monthStr}${gymIdParam}`, token, gymHeader),
     advancedEnabled
       ? apiFetch<AdvancedReport>(`/reports/advanced?startDate=${monthStr}&endDate=${todayStr}`, token, gymHeader)
       : Promise.resolve(null),
-    apiFetch<any[]>(`/memberships?status=ACTIVE&endsAfter=${todayStr}&endsBefore=${in3DaysStr}`, token, gymHeader),
+    apiFetch<unknown[]>(`/memberships?status=ACTIVE&endsAfter=${todayStr}&endsBefore=${in3DaysStr}`, token, gymHeader),
+    storeEnabled ? apiFetch<PendingCredit[]>(`/store/credits`, token, { ...gymHeader, silent: true }) : Promise.resolve(null),
+    storeEnabled ? apiFetch<DailyCut>(`/store/cuts/daily?date=${todayStr}`, token, { ...gymHeader, silent: true }) : Promise.resolve(null),
   ])
 
-  const activeMembers = membersRaw
-    ? Array.isArray(membersRaw) ? membersRaw.length : membersRaw.total
-    : 0
-  const todayAttendance = attendanceRaw?.length ?? 0
+  const activeMembers = membersRaw ? (Array.isArray(membersRaw) ? membersRaw.length : membersRaw.total) : 0
+  const attendance = attendanceRaw ?? []
+  const insideNow = attendance.filter(a => !a.checkOut).length
   const activeClasses = classes?.filter(c => c.isActive).length ?? 0
   const monthRevenue = financial?.totalRevenue ?? 0
-  const currency = financial?.currency ?? 'USD'
-
-  const recentMembers: Member[] = membersRaw
-    ? (Array.isArray(membersRaw) ? membersRaw : membersRaw.data).slice(0, 5)
-    : []
-
+  const currency = financial?.currency ?? gym?.currency ?? 'USD'
+  const recentMembers: Member[] = membersRaw ? (Array.isArray(membersRaw) ? membersRaw : membersRaw.data).slice(0, 5) : []
   const expiringCount = Array.isArray(expiringRaw) ? expiringRaw.length : 0
 
-  const QUICK_LINKS = [
-    { href: `?new=member`, label: 'Nuevo miembro', icon: UserPlus, color: 'bg-[#1fad9d]/10 text-[#1fad9d] hover:bg-[#1fad9d]/20' },
-    { href: `?modal=checkin`, label: 'Asistencia', icon: CheckSquare, color: 'bg-[#fffb00]/30 text-black hover:bg-[#fffb00]/50' },
-    { href: `trainers`, label: 'Entrenadores', icon: Dumbbell, color: 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200' },
-    { href: `plans`, label: 'Planes', icon: ClipboardList, color: 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200' },
-    { href: `members`, label: 'Miembros', icon: Users, color: 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200' },
-    { href: `reports`, label: 'Reportes', icon: BarChart2, color: 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200' },
-  ]
+  const credits = pendingCredits ?? []
+  const creditTotal = credits.reduce((sum, c) => sum + c.quantity * c.unitPrice, 0)
+  const creditMembers = new Set(credits.map(c => c.memberId)).size
+
+  // Check-ins per hour (gym local time), 6 to 23 h
+  const hourOf = (iso: string) => Number(new Date(iso).toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: tz })) % 24
+  const hours = Array.from({ length: 18 }, (_, i) => i + 6)
+  const perHour = hours.map(h => attendance.filter(a => hourOf(a.checkIn) === h).length)
+  const maxHour = Math.max(1, ...perHour)
+  const currentHour = hourOf(now.toISOString())
+
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: tz })
 
   return (
-    <div className="p-6 lg:p-8 space-y-8">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground text-sm mt-1 capitalize">
-            {now.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: tz })}
-          </p>
-        </div>
-      </div>
-
-      {/* Quick access */}
-      <div>
-        <p className="text-xs font-bold uppercase tracking-widest text-zinc-400 mb-3">Accesos rápidos</p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {QUICK_LINKS.map(({ href, label, icon: Icon, color }) => (
-            <Link
-              key={href}
-              href={href}
-              className={`flex flex-col items-center gap-2 rounded-2xl px-3 py-4 text-center text-xs font-semibold transition-all ${color}`}
-            >
-              <Icon className="h-5 w-5" />
-              {label}
-            </Link>
-          ))}
-        </div>
-      </div>
-
-      {/* KPI cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard title="Miembros activos" value={activeMembers} icon={Users} />
-        <KpiCard
-          title="Ingresos del mes"
-          value={`${currency} ${(monthRevenue/100).toLocaleString('es-AR')}`}
-          icon={TrendingUp}
-        />
-        <KpiCard title="Asistencia hoy" value={todayAttendance} icon={CheckSquare} />
-        <KpiCard title="Clases activas" value={activeClasses} icon={Calendar} />
-      </div>
-
-      {/* Expiring alert */}
-      {expiringCount > 0 && (
-        <Link
-          href="members?status=expiring"
-          className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-3 text-sm font-semibold text-amber-700 hover:bg-amber-100 transition-colors"
-        >
-          <AlertTriangle className="h-4 w-4 shrink-0" />
-          {expiringCount} membresía{expiringCount !== 1 ? 's' : ''} vence{expiringCount === 1 ? '' : 'n'} pronto — revisar
-        </Link>
-      )}
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Recent members */}
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-400">Últimos miembros</h2>
-            <Link href="members" className="text-xs font-semibold text-[#1fad9d] hover:underline">Ver todos</Link>
-          </div>
-          {recentMembers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sin miembros registrados</p>
-          ) : (
-            <ul className="divide-y divide-zinc-100">
-              {recentMembers.map(m => (
-                <li key={m.id} className="flex items-center gap-3 py-2.5">
-                  <div className="h-8 w-8 rounded-full bg-[#1fad9d]/10 flex items-center justify-center shrink-0">
-                    <span className="text-[10px] font-black text-[#0e7a70]">
-                      {(m.firstName[0] + (m.lastName[0] ?? '')).toUpperCase()}
-                    </span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-zinc-800 truncate">{m.firstName} {m.lastName}</p>
-                    <p className="text-xs text-zinc-400 truncate">{m.email}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {/* Today's attendance */}
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-zinc-400">Asistencia hoy</h2>
-            <Link href="attendance" className="text-xs font-semibold text-[#1fad9d] hover:underline">Ver todo</Link>
-          </div>
-          {todayAttendance === 0 ? (
-            <p className="text-sm text-muted-foreground">Sin registros hoy</p>
-          ) : (
-            <ul className="divide-y divide-zinc-100">
-              {(attendanceRaw ?? []).slice(0, 5).map(a => {
-                const name = a.member
-                  ? `${a.member.firstName} ${a.member.lastName}`
-                  : a.memberId.slice(0, 8) + '…'
-                return (
-                  <li key={a.id} className="flex items-center gap-3 py-2.5">
-                    <div className="h-8 w-8 rounded-full bg-zinc-100 flex items-center justify-center shrink-0">
-                      <span className="text-[10px] font-black text-zinc-500">
-                        {a.member ? (a.member.firstName[0] + (a.member.lastName[0] ?? '')).toUpperCase() : '?'}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-zinc-800 truncate">{name}</p>
-                      <p className="text-xs text-zinc-400">
-                        {new Date(a.checkIn).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: tz })}
-                        {a.checkOut ? ' — salida registrada' : ' — en el gimnasio'}
-                      </p>
-                    </div>
-                  </li>
-                )
-              })}
-              {todayAttendance > 5 && (
-                <li className="pt-2.5 text-xs text-zinc-400 text-center">+{todayAttendance - 5} más</li>
+    <div className="admin-shell min-h-full">
+      <AdminPage>
+        <PageHeader
+          eyebrow={<span className="capitalize">{now.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: tz })}</span>}
+          title={gym?.name ?? 'Dashboard'}
+          meta={
+            gymStatus ? (
+              <>
+                <Pill tone={gymStatus.isOpen ? 'ok' : 'neutral'}>{gymStatus.isOpen ? 'Abierto ahora' : 'Cerrado'}</Pill>
+                <span>Hora local {gymStatus.localTime}</span>
+              </>
+            ) : undefined
+          }
+          actions={
+            <>
+              <Link href="?new=member" className={btn.line}>
+                <UserPlus className="size-4" aria-hidden="true" /> Nuevo miembro
+              </Link>
+              <Link href="?modal=checkin" className={btn.line}>
+                <LogIn className="size-4" aria-hidden="true" /> Asistencia manual
+              </Link>
+              {canScan && (
+                <Link href="attendance/scan" className={btn.primary}>
+                  <QrCode className="size-4" aria-hidden="true" /> Escanear QR
+                </Link>
               )}
-            </ul>
+            </>
+          }
+        />
+
+        <section aria-labelledby="attn-h" className="flex flex-col gap-2.5">
+          <SectionLabel id="attn-h">Hoy</SectionLabel>
+          <div className="flex flex-wrap gap-3">
+            <AttentionCard href="attendance" count={insideNow} label="En el gimnasio ahora" tag={insideNow > 0 ? 'En vivo' : undefined} tone="ok" />
+            <AttentionCard
+              href="members?status=expiring"
+              count={expiringCount}
+              label="Membresías vencen en 3 días"
+              tag={expiringCount > 0 ? 'Revisar' : undefined}
+              tone="warn"
+            />
+            {storeEnabled && (
+              <AttentionCard
+                href="store"
+                count={<span className="text-[24px]">${creditTotal.toLocaleString('es-AR')}</span>}
+                label={`Fiado pendiente${creditMembers ? ` · ${creditMembers} socio${creditMembers !== 1 ? 's' : ''}` : ''}`}
+                tag={credits.length > 0 ? `${credits.length} ítem${credits.length !== 1 ? 's' : ''}` : undefined}
+                tone="high"
+              />
+            )}
+          </div>
+        </section>
+
+        <section aria-label="Indicadores" className="flex flex-wrap gap-3">
+          <Stat label="Miembros activos" value={activeMembers.toLocaleString('es-AR')} />
+          <Stat label="Ingresos del mes" unit={currency} value={(monthRevenue / 100).toLocaleString('es-AR')} />
+          <Stat label="Asistencia hoy" value={attendance.length} hint={insideNow > 0 ? `${insideNow} adentro ahora` : undefined} hintTone="ok" />
+          {storeEnabled ? (
+            <Stat label="Ventas de la tienda hoy" value={`$${(dailyCut?.total ?? 0).toLocaleString('es-AR')}`} hint={`${dailyCut?.salesCount ?? 0} venta${dailyCut?.salesCount !== 1 ? 's' : ''}`} />
+          ) : (
+            <Stat label="Clases activas" value={activeClasses} />
           )}
+        </section>
+
+        <section aria-labelledby="hours-h" className="rounded-2xl border border-adm-line bg-adm-night p-6 text-white">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 id="hours-h" className="text-[15px] font-bold">Entradas por hora</h2>
+              <p className="mt-1 text-[13px] text-[#a3a39d]">Hoy · hora del gimnasio</p>
+            </div>
+            <span className="font-admin-mono text-[13px] text-[#a3a39d]">{attendance.length} entradas</span>
+          </div>
+          <div className="mt-6 flex h-[140px] items-end gap-1.5 border-b border-[#2a2a2c]" role="img" aria-label={`Entradas por hora de hoy, total ${attendance.length}`}>
+            {perHour.map((n, i) => (
+              <div key={hours[i]} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1" title={`${hours[i]} h: ${n}`}>
+                {n > 0 && <span className="font-admin-mono text-[10px] text-[#a3a39d]">{n}</span>}
+                <div
+                  className={hours[i] === currentHour ? 'w-full max-w-7 rounded-t bg-adm-brand' : 'w-full max-w-7 rounded-t bg-[#3a3a3d]'}
+                  style={{ height: `${n > 0 ? Math.max(4, (n / maxHour) * 85) : 2}%` }}
+                />
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 flex gap-1.5" aria-hidden="true">
+            {hours.map(h => (
+              <div key={h} className="min-w-0 flex-1 text-center font-admin-mono text-[10px] text-[#85857f]">{h % 3 === 0 ? h : ''}</div>
+            ))}
+          </div>
+        </section>
+
+        <div className="flex flex-wrap gap-3">
+          <Panel title="Asistencia de hoy" id="att-h" action={<PanelLink href="attendance">Ver todo</PanelLink>} className="min-w-0 flex-[1_1_380px]">
+            {attendance.length === 0 ? (
+              <EmptyState>Sin registros hoy.</EmptyState>
+            ) : (
+              <ul>
+                {attendance.slice(0, 6).map(a => {
+                  const name = a.member ? `${a.member.firstName} ${a.member.lastName}` : a.memberId.slice(0, 8) + '…'
+                  return (
+                    <li key={a.id} className="flex items-center gap-3 border-t border-adm-line-soft px-5 py-3 first:border-t-0">
+                      <PersonMark name={name} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold">{name}</p>
+                        <p className="font-admin-mono text-xs text-adm-muted">{fmtTime(a.checkIn)}{a.checkOut ? ` → ${fmtTime(a.checkOut)}` : ''}</p>
+                      </div>
+                      <Pill tone={a.checkOut ? 'neutral' : 'ok'}>{a.checkOut ? 'Salió' : 'Adentro'}</Pill>
+                    </li>
+                  )
+                })}
+                {attendance.length > 6 && (
+                  <li className="border-t border-adm-line-soft py-2.5 text-center text-xs text-adm-muted">+{attendance.length - 6} más</li>
+                )}
+              </ul>
+            )}
+          </Panel>
+
+          <Panel title="Últimos miembros" id="mem-h" action={<PanelLink href="members">Ver todos</PanelLink>} className="min-w-0 flex-[1_1_380px]">
+            {recentMembers.length === 0 ? (
+              <EmptyState>Sin miembros registrados.</EmptyState>
+            ) : (
+              <ul>
+                {recentMembers.map(m => (
+                  <li key={m.id}>
+                    <Link href={`members/${m.id}`} className="flex items-center gap-3 border-t border-adm-line-soft px-5 py-3 transition-colors hover:bg-adm-subtle">
+                      <PersonMark name={`${m.firstName} ${m.lastName}`} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold">{m.firstName} {m.lastName}</p>
+                        <p className="truncate text-xs text-adm-muted">{m.email}</p>
+                      </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
         </div>
-      </div>
 
-      {advancedEnabled && (
-        <AdvancedReportsSection gymSlug={gymSlug} data={advancedReport} />
-      )}
+        {advancedEnabled && <AdvancedReportsSection gymSlug={gymSlug} data={advancedReport} />}
 
-      {newParam === 'member' && (
-        <Suspense>
-          <NewMemberModal gymSlug={gymSlug} />
-        </Suspense>
-      )}
+        {newParam === 'member' && (
+          <Suspense>
+            <NewMemberModal gymSlug={gymSlug} />
+          </Suspense>
+        )}
 
-      {modal === 'checkin' && (
-        <Suspense>
-          <QuickCheckInModal gymSlug={gymSlug} />
-        </Suspense>
-      )}
+        {modal === 'checkin' && (
+          <Suspense>
+            <QuickCheckInModal gymSlug={gymSlug} />
+          </Suspense>
+        )}
+      </AdminPage>
     </div>
   )
 }

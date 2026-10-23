@@ -1,5 +1,5 @@
-import { BarChart2, Users, TrendingUp, UserMinus, Clock, AlertTriangle } from 'lucide-react'
-import Link from 'next/link'
+import { BarChart2 } from 'lucide-react'
+import { EmptyState, Meter, Panel, PanelLink, SectionLabel, Stat } from '@/components/admin/ui'
 
 export interface AdvancedReport {
   revenueTrend: { label: string; amount: number }[]
@@ -27,178 +27,109 @@ function fmt(n: number, currency: string) {
   return `${currency} ${n.toLocaleString('es-AR')}`
 }
 
-function MiniBarChart({ data, color = '#1fad9d' }: { data: { label: string; count: number }[]; color?: string }) {
-  const max = Math.max(...data.map(d => d.count), 1)
+/** Bar chart on the dark night surface; the last bar is highlighted in brand yellow. */
+function NightBars({ data, title }: { data: { label: string; value: number; tooltip: string }[]; title: string }) {
+  const max = Math.max(1, ...data.map(d => d.value))
   return (
-    <div className="flex items-end gap-1 h-16">
-      {data.map((d, i) => (
-        <div key={i} className="flex-1 flex flex-col items-center gap-1 min-w-0">
-          <div
-            className="w-full rounded-t-sm transition-all"
-            style={{ height: `${Math.max(4, (d.count / max) * 56)}px`, background: color }}
-          />
-          <span className="text-[8px] text-zinc-400 truncate w-full text-center">{d.label}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function RevenueBarChart({ data, currency }: { data: { label: string; amount: number }[]; currency: string }) {
-  const max = Math.max(...data.map(d => d.amount), 1)
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-end gap-1 h-20">
+    <>
+      <div className="mt-6 flex h-[140px] items-end gap-1.5 border-b border-[#2a2a2c]" role="img" aria-label={title}>
+        {data.map((d, i) => {
+          const last = i === data.length - 1
+          return (
+            <div key={i} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1" title={d.tooltip}>
+              <div
+                className={last ? 'w-full max-w-7 rounded-t bg-adm-brand' : 'w-full max-w-7 rounded-t bg-[#3a3a3d]'}
+                style={{ height: `${d.value > 0 ? Math.max(4, (d.value / max) * 88) : 2}%` }}
+              />
+            </div>
+          )
+        })}
+      </div>
+      <div className="mt-2 flex gap-1.5" aria-hidden="true">
         {data.map((d, i) => (
-          <div key={i} className="flex-1 flex flex-col items-center gap-0.5 min-w-0 group relative">
-            <div
-              className="w-full rounded-t-sm bg-[#1fad9d] hover:bg-[#0e7a70] transition-colors cursor-default"
-              style={{ height: `${Math.max(4, (d.amount / max) * 72)}px` }}
-              title={`${d.label}: ${fmt(d.amount, currency)}`}
-            />
-            <span className="text-[8px] text-zinc-400 truncate w-full text-center">{d.label}</span>
-          </div>
+          <div key={i} className="min-w-0 flex-1 truncate text-center font-admin-mono text-[10px] text-[#85857f]">{d.label}</div>
         ))}
       </div>
-    </div>
+    </>
   )
 }
 
 export function AdvancedReportsSection({ gymSlug, data }: Props) {
   if (!data) {
     return (
-      <div className="rounded-2xl border border-zinc-200 bg-white p-6 flex items-center gap-3 text-sm text-zinc-400">
-        <BarChart2 className="h-5 w-5 shrink-0" />
-        Sin datos de reportes avanzados disponibles
-      </div>
+      <Panel title="Reportes avanzados" id="adv-h">
+        <EmptyState icon={<BarChart2 className="size-8" aria-hidden="true" />}>
+          Sin datos de reportes avanzados disponibles.
+        </EmptyState>
+      </Panel>
     )
   }
 
-  const kpis = [
-    {
-      label: 'Nuevos este mes',
-      value: data.newMembers,
-      icon: Users,
-      color: 'text-[#1fad9d]',
-      bg: 'bg-[#1fad9d]/10',
-    },
-    {
-      label: 'Bajas este mes',
-      value: data.churned,
-      icon: UserMinus,
-      color: 'text-red-500',
-      bg: 'bg-red-50',
-    },
-    {
-      label: 'Vencen en 7 días',
-      value: data.expiringNext7Days,
-      icon: AlertTriangle,
-      color: 'text-amber-500',
-      bg: 'bg-amber-50',
-    },
-    {
-      label: 'Hora pico',
-      value: data.peakHour ?? '—',
-      subtitle: data.peakDay ?? undefined,
-      icon: Clock,
-      color: 'text-zinc-600',
-      bg: 'bg-zinc-100',
-    },
-  ]
+  const revenueTotal = data.revenueTrend.reduce((s, d) => s + d.amount, 0)
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-xl bg-violet-100 flex items-center justify-center">
-            <BarChart2 className="h-4 w-4 text-violet-600" />
-          </div>
-          <div>
-            <p className="font-bold text-sm">Reportes Avanzados</p>
-            <p className="text-[11px] text-zinc-400">Últimos 30 días</p>
-          </div>
-        </div>
-        <Link
-          href={`/gym/${gymSlug}/reports`}
-          className="text-xs font-semibold text-violet-600 hover:text-violet-800 transition-colors"
-        >
-          Ver reportes completos →
-        </Link>
+    <section aria-labelledby="adv-h" className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <SectionLabel id="adv-h">Reportes avanzados · últimos 30 días</SectionLabel>
+        <PanelLink href={`/gym/${gymSlug}/reports`}>Ver reportes completos</PanelLink>
       </div>
 
-      {/* KPI row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {kpis.map(({ label, value, subtitle, icon: Icon, color, bg }) => (
-          <div key={label} className="rounded-2xl border border-zinc-100 bg-white p-4 space-y-2">
-            <div className={`h-8 w-8 rounded-xl ${bg} flex items-center justify-center`}>
-              <Icon className={`h-4 w-4 ${color}`} />
-            </div>
-            <div>
-              <p className="text-xl font-black tracking-tight leading-none">{value}</p>
-              {subtitle && <p className="text-[10px] text-zinc-400 mt-0.5">{subtitle}</p>}
-              <p className="text-[11px] text-zinc-400 mt-0.5">{label}</p>
-            </div>
-          </div>
-        ))}
+      <div className="flex flex-wrap gap-3">
+        <Stat label="Nuevos este mes" value={data.newMembers} />
+        <Stat label="Bajas este mes" value={data.churned} hint={data.churned > 0 ? 'Revisar retención' : undefined} hintTone="bad" />
+        <Stat label="Vencen en 7 días" value={data.expiringNext7Days} hint={data.expiringNext7Days > 0 ? 'Contactar para renovar' : undefined} hintTone="warn" />
+        <Stat label="Hora pico" value={data.peakHour ?? '—'} hint={data.peakDay ?? undefined} />
       </div>
 
-      {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Revenue trend */}
+      <div className="flex flex-wrap gap-3">
         {data.revenueTrend.length > 0 && (
-          <div className="rounded-2xl border border-zinc-100 bg-white p-5 space-y-3">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-3.5 w-3.5 text-[#1fad9d]" />
-              <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">Tendencia de ingresos</p>
+          <section aria-labelledby="adv-rev-h" className="min-w-0 flex-[2_1_480px] rounded-2xl border border-adm-line bg-adm-night p-6 text-white">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h3 id="adv-rev-h" className="text-[15px] font-bold">Tendencia de ingresos</h3>
+                <p className="mt-1 text-[13px] text-[#a3a39d]">{data.currency}</p>
+              </div>
+              <span className="font-admin-mono text-[13px] font-bold text-adm-brand">{fmt(revenueTotal, data.currency)}</span>
             </div>
-            <RevenueBarChart data={data.revenueTrend} currency={data.currency} />
-            <p className="text-xs text-zinc-400 text-right">
-              Total: <span className="font-bold text-zinc-700">{fmt(data.revenueTrend.reduce((s, d) => s + d.amount, 0), data.currency)}</span>
-            </p>
-          </div>
+            <NightBars
+              title={`Tendencia de ingresos, total ${fmt(revenueTotal, data.currency)}`}
+              data={data.revenueTrend.map(d => ({ label: d.label, value: d.amount, tooltip: `${d.label}: ${fmt(d.amount, data.currency)}` }))}
+            />
+          </section>
         )}
 
-        {/* Members by plan */}
         {data.membersByPlan.length > 0 && (
-          <div className="rounded-2xl border border-zinc-100 bg-white p-5 space-y-3">
-            <div className="flex items-center gap-2">
-              <Users className="h-3.5 w-3.5 text-zinc-400" />
-              <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">Distribución por plan</p>
-            </div>
-            <div className="space-y-2.5">
-              {data.membersByPlan.map((p, i) => {
-                const colors = ['bg-[#1fad9d]', 'bg-violet-500', 'bg-amber-400', 'bg-zinc-400', 'bg-blue-400']
-                const barColor = colors[i % colors.length]
-                return (
-                  <div key={p.planName} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-medium text-zinc-700 truncate max-w-[60%]">{p.planName}</span>
-                      <span className="font-bold text-zinc-500">{p.count} · {p.percent}%</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-zinc-100 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${barColor} transition-all`}
-                        style={{ width: `${p.percent}%` }}
-                      />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
+          <Panel title="Distribución por plan" id="adv-plan-h" className="min-w-0 flex-[1_1_280px]" bodyClassName="flex flex-col gap-4 p-5">
+            {data.membersByPlan.map(p => (
+              <div key={p.planName} className="flex flex-col gap-1.5">
+                <div className="flex justify-between gap-3 text-[13px]">
+                  <span className="truncate font-semibold">{p.planName}</span>
+                  <span className="shrink-0 font-admin-mono">{p.count} · {p.percent}%</span>
+                </div>
+                <Meter value={p.percent} className="h-2.5" />
+              </div>
+            ))}
+          </Panel>
         )}
       </div>
 
-      {/* Attendance trend */}
       {data.attendanceTrend.length > 0 && (
-        <div className="rounded-2xl border border-zinc-100 bg-white p-5 space-y-3">
-          <div className="flex items-center gap-2">
-            <Clock className="h-3.5 w-3.5 text-zinc-400" />
-            <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">Asistencia últimos 7 días</p>
+        <section aria-labelledby="adv-att-h" className="rounded-2xl border border-adm-line bg-adm-night p-6 text-white">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h3 id="adv-att-h" className="text-[15px] font-bold">Asistencia últimos 7 días</h3>
+              <p className="mt-1 text-[13px] text-[#a3a39d]">Entradas por día</p>
+            </div>
+            <span className="font-admin-mono text-[13px] text-[#a3a39d]">
+              {data.attendanceTrend.reduce((s, d) => s + d.count, 0)} entradas
+            </span>
           </div>
-          <MiniBarChart data={data.attendanceTrend} color="#18181b" />
-        </div>
+          <NightBars
+            title="Asistencia de los últimos 7 días"
+            data={data.attendanceTrend.map(d => ({ label: d.label, value: d.count, tooltip: `${d.label}: ${d.count}` }))}
+          />
+        </section>
       )}
-    </div>
+    </section>
   )
 }
