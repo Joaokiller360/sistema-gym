@@ -1,10 +1,16 @@
 'use client'
 
+import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Users, UserMinus, AlertTriangle, Clock, Download } from 'lucide-react'
+import { ArrowDown, ArrowRight, ArrowUp, ChevronLeft, ChevronRight, Download, FileText, Loader2, Mail } from 'lucide-react'
 import { type AdvancedReport } from '../dashboard/AdvancedReportsSection'
+import { AdminPage, btn } from '@/components/admin/ui'
+import { cn } from '@/lib/utils'
+import { emailMonthlyReport } from './actions'
 
 interface Props {
+  gymSlug: string
   defaultMonth: string
   view: 'daily' | 'monthly'
   gymTimezone: string
@@ -12,54 +18,100 @@ interface Props {
   advancedPrevious: AdvancedReport | null
 }
 
-const PLAN_COLORS = ['#8b5cf6', '#1fad9d', '#f59e0b', '#6b7280', '#3b82f6']
-const GROUP_BAR_COLORS = ['#8b5cf6', '#0ea5e9', '#10b981', '#f59e0b', '#f43f5e']
+function shiftMonth(month: string, delta: number) {
+  const [y, m] = month.split('-').map(Number)
+  const d = new Date(y, m - 1 + delta, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
 
-function DeltaBadge({ n }: { n: number | null }) {
+function pct(cur: number, prev: number): number | null {
+  return prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null
+}
+
+/** Delta pill on the dark hero surface. */
+function NightDelta({ n }: { n: number | null }) {
   if (n === null) return null
+  const up = n >= 0
   return (
-    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${n >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
-      {n >= 0 ? '+' : ''}{n}%
+    <span className={cn(
+      'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[13px] font-bold',
+      up ? 'bg-[#0f2a27] text-[#5fd4c4]' : 'bg-[#2e1513] text-[#ff8a80]',
+    )}>
+      {up ? <ArrowUp className="size-3" aria-hidden="true" /> : <ArrowDown className="size-3" aria-hidden="true" />}
+      {Math.abs(n)}%
     </span>
   )
 }
 
-function RevenueBar({ data, currency, color }: { data: { label: string; amount: number }[]; currency: string; color: string }) {
-  if (!data.length) return <p className="text-xs text-zinc-400 py-10 text-center">Sin datos</p>
-  const max = Math.max(...data.map(d => d.amount), 1)
+/** Membership revenue per bucket: current period in brand yellow, previous month (monthly view) in grey. */
+function HeroBars({ cur, prev, fmt }: {
+  cur: { label: string; amount: number }[]
+  prev: { label: string; amount: number }[] | null
+  fmt: (n: number) => string
+}) {
+  if (!cur.length) return <p className="py-16 text-center text-sm text-[#a3a39d]">Sin ventas de membresías en este período</p>
+  const max = Math.max(1, ...cur.map(d => d.amount), ...(prev ?? []).map(d => d.amount))
+  const dense = cur.length > 10
+  const every = dense ? Math.ceil(cur.length / 8) : 1
   return (
-    <div className="flex items-end gap-1 h-32 overflow-x-auto">
-      {data.map((d, i) => (
-        <div key={i} className="flex-1 flex flex-col items-center gap-1 min-w-[18px]">
-          <div
-            className="w-full rounded-t-md hover:opacity-80 transition-opacity"
-            style={{ height: `${Math.max(4, (d.amount / max) * 116)}px`, background: color }}
-            title={`${d.label}: ${currency} ${d.amount.toLocaleString('es-AR')}`}
-          />
-          <span className="text-[8px] text-zinc-400 truncate w-full text-center">{d.label}</span>
-        </div>
-      ))}
+    <>
+      <div className={cn('flex h-[200px] items-end border-b border-[#2a2a2e]', dense ? 'gap-1' : 'gap-3.5')} role="img" aria-label="Ingresos de membresías por período">
+        {cur.map((d, i) => {
+          const p = prev?.[i]?.amount
+          return (
+            <div
+              key={d.label}
+              className="flex h-full min-w-0 flex-1 items-end justify-center gap-1"
+              title={`${d.label}: ${fmt(d.amount)}${p !== undefined ? ` · mes anterior ${fmt(p)}` : ''}`}
+            >
+              {prev && (
+                <div className="w-full max-w-[30px] rounded-t-md bg-[#3a3a3d]" style={{ height: `${Math.max(2, (p ?? 0) / max * 100)}%` }} />
+              )}
+              <div className="w-full max-w-[30px] rounded-t-md bg-adm-brand" style={{ height: `${Math.max(2, d.amount / max * 100)}%` }} />
+            </div>
+          )
+        })}
+      </div>
+      <div className={cn('mt-2 flex', dense ? 'gap-1' : 'gap-3.5')} aria-hidden="true">
+        {cur.map((d, i) => (
+          <div key={d.label} className="flex min-w-0 flex-1 flex-col items-center gap-0.5 text-center font-admin-mono text-xs">
+            <span className="truncate text-[#a3a39d]">{i % every === 0 ? d.label : ''}</span>
+            {!dense && <span className="truncate text-[#f2f2ee]">{d.amount.toLocaleString('es-AR')}</span>}
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
+function KpiCard({ label, value, foot, badge, tone }: {
+  label: string
+  value: React.ReactNode
+  foot?: React.ReactNode
+  badge?: React.ReactNode
+  tone?: 'warn'
+}) {
+  return (
+    <div className={cn(
+      'flex flex-col gap-2.5 rounded-2xl border p-5',
+      tone === 'warn' ? 'border-adm-warn-line bg-adm-warn-bg text-adm-warn-fg' : 'border-adm-line bg-adm-surface',
+    )}>
+      <div className="flex items-center justify-between gap-2">
+        <p className={cn('text-[13px] font-semibold', tone === 'warn' ? '' : 'text-adm-muted')}>{label}</p>
+        {badge}
+      </div>
+      <p className="text-4xl font-black leading-none tracking-tight text-adm-ink">{value}</p>
+      {foot && <div className={cn('text-[13px]', tone === 'warn' ? '' : 'text-adm-muted')}>{foot}</div>}
     </div>
   )
 }
 
-function AttendanceBarChart({ data, color = '#18181b' }: { data: { label: string; count: number }[]; color?: string }) {
-  if (!data.length) return <p className="text-xs text-zinc-400 py-10 text-center">Sin datos</p>
-  const max = Math.max(...data.map(d => d.count), 1)
-  return (
-    <div className="flex items-end gap-1 h-24">
-      {data.map((d, i) => (
-        <div key={i} className="flex-1 flex flex-col items-center gap-1 min-w-0">
-          <div
-            className="w-full rounded-t-md opacity-80 hover:opacity-100 transition-opacity"
-            style={{ height: `${Math.max(3, (d.count / max) * 88)}px`, background: color }}
-            title={`${d.label}: ${d.count}`}
-          />
-          <span className="text-[8px] text-zinc-400 truncate w-full text-center">{d.label}</span>
-        </div>
-      ))}
-    </div>
-  )
+function GoodBadge({ children }: { children: React.ReactNode }) {
+  return <span className="rounded-full border border-adm-ok-line bg-adm-ok-bg px-2.5 py-0.5 text-xs font-bold text-adm-ok-fg">{children}</span>
+}
+
+function BadBadge({ children }: { children: React.ReactNode }) {
+  return <span className="rounded-full border border-adm-bad-line bg-adm-bad-bg px-2.5 py-0.5 text-xs font-bold text-adm-bad-fg">{children}</span>
 }
 
 async function exportToExcel(
@@ -112,8 +164,12 @@ async function exportToExcel(
   XLSX.writeFile(wb, `reportes-${monthStr.replace(/ /g, '-')}.xlsx`)
 }
 
-export function AdvancedReports({ defaultMonth, view, gymTimezone, advancedCurrent, advancedPrevious }: Props) {
+export function AdvancedReports({ gymSlug, defaultMonth, view, gymTimezone, advancedCurrent, advancedPrevious }: Props) {
   const router = useRouter()
+  const [sending, startSending] = useTransition()
+  const [downloading, setDownloading] = useState(false)
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
+
   const [curYear, curMonthNum] = defaultMonth
     ? defaultMonth.split('-').map(Number)
     : [new Date().getFullYear(), new Date().getMonth() + 1]
@@ -129,303 +185,313 @@ export function AdvancedReports({ defaultMonth, view, gymTimezone, advancedCurre
   // Revenue from memberships sold in period (plan price × count, via revenueTrend)
   const curRevTotal = advancedCurrent?.revenueTrend.reduce((s, d) => s + d.amount, 0) ?? 0
   const prevRevTotal = advancedPrevious?.revenueTrend.reduce((s, d) => s + d.amount, 0) ?? 0
+  // Store totals arrive in cents (not covered by the money interceptor)
+  const curStoreCash = (advancedCurrent?.storeRevenue ?? 0) / 100
+  const curStoreCredit = (advancedCurrent?.storeCreditIssued ?? 0) / 100
+  const curTotal = curRevTotal + curStoreCash + curStoreCredit
+  const prevTotal = prevRevTotal + ((advancedPrevious?.storeRevenue ?? 0) + (advancedPrevious?.storeCreditIssued ?? 0)) / 100
+  const share = (n: number) => (curTotal > 0 ? (n / curTotal) * 100 : 0)
+
   const realCurrentMonth = new Intl.DateTimeFormat('en-CA', {
     timeZone: gymTimezone, year: 'numeric', month: '2-digit',
   }).format(new Date()).slice(0, 7)
-  const isCurReal = defaultMonth === realCurrentMonth
-  const revDelta = view === 'monthly' && prevRevTotal > 0
-    ? Math.round(((curRevTotal - prevRevTotal) / prevRevTotal) * 100)
-    : null
-  const membersDelta =
-    view === 'monthly' &&
-    advancedCurrent?.newMembers != null &&
-    advancedPrevious?.newMembers != null &&
-    advancedPrevious.newMembers > 0
-      ? Math.round(((advancedCurrent.newMembers - advancedPrevious.newMembers) / advancedPrevious.newMembers) * 100)
-      : null
+  const monthly = view === 'monthly'
+  const totalDelta = monthly ? pct(curTotal, prevTotal) : null
+  const membersDelta = monthly && advancedCurrent && advancedPrevious ? pct(advancedCurrent.newMembers, advancedPrevious.newMembers) : null
+  const churnDiff = monthly && advancedCurrent && advancedPrevious ? advancedCurrent.churned - advancedPrevious.churned : null
+  const net = advancedCurrent ? advancedCurrent.newMembers - advancedCurrent.churned : null
+  const activeTotal = advancedCurrent?.membersByPlan.reduce((s, p) => s + p.count, 0) ?? 0
 
-  const handleExport = () => {
-    exportToExcel(advancedCurrent, advancedPrevious, monthStr, prevMonthStr, curRevTotal, prevRevTotal, view)
+  const attendance = advancedCurrent?.attendanceTrend ?? []
+  const attendanceTotal = attendance.reduce((s, d) => s + d.count, 0)
+  const attendancePeak = Math.max(0, ...attendance.map(d => d.count))
+  const groups = (advancedCurrent?.attendanceTrendByGroup ?? [])
+    .map(g => ({ name: g.groupName ?? 'Sin grupo', count: g.trend.reduce((s, d) => s + d.count, 0) }))
+
+  const go = (month: string, v = view) => router.push(`?month=${month}&view=${v}`)
+  const nextMonth = shiftMonth(defaultMonth, 1)
+
+  const handleEmail = () => {
+    setStatus(null)
+    startSending(async () => {
+      const res = await emailMonthlyReport(gymSlug, defaultMonth)
+      setStatus('error' in res
+        ? { ok: false, text: res.error }
+        : { ok: true, text: `Reporte enviado a ${res.sentTo}` })
+    })
+  }
+
+  // Fetch instead of a plain link so a failed generation shows a message instead of saving an error file
+  const handleDownload = async () => {
+    setStatus(null)
+    setDownloading(true)
+    try {
+      const res = await fetch(`/gym/${gymSlug}/reports/pdf?month=${defaultMonth}`)
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string }
+        setStatus({ ok: false, text: body.error ?? 'No se pudo generar el PDF' })
+        return
+      }
+      const url = URL.createObjectURL(await res.blob())
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `reporte-${gymSlug}-${defaultMonth}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      setStatus({ ok: false, text: 'Error de conexión al descargar el PDF' })
+    } finally {
+      setDownloading(false)
+    }
   }
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <AdminPage>
       {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Reportes</h1>
-          <p className="text-muted-foreground text-sm mt-1 capitalize">{monthStr}</p>
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex flex-col gap-1.5">
+          <p className="font-admin-mono text-xs uppercase tracking-[0.08em] text-adm-muted">Reportes</p>
+          <h1 className="text-[34px] font-black capitalize leading-none tracking-tight">{monthStr}</h1>
+          <p className="text-sm text-adm-muted">
+            {monthly ? <>Comparado con <span className="capitalize">{prevMonthStr}</span></> : 'Detalle día por día'}
+          </p>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* View toggle */}
-          <div className="flex gap-1 border rounded-lg p-1 bg-muted/30">
-            <button
-              onClick={() => router.push(`?month=${defaultMonth}&view=monthly`)}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                view === 'monthly' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Mensual
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex gap-1 rounded-full border border-adm-line bg-adm-surface p-1" role="group" aria-label="Vista">
+            {(['monthly', 'daily'] as const).map(v => (
+              <button
+                key={v}
+                type="button"
+                aria-pressed={view === v}
+                onClick={() => go(defaultMonth, v)}
+                className={cn(
+                  'min-h-9 rounded-full px-4 text-[13px] font-semibold transition-colors',
+                  view === v ? 'bg-adm-ink text-adm-surface' : 'text-adm-ink hover:bg-adm-chip',
+                )}
+              >
+                {v === 'monthly' ? 'Mensual' : 'Diario'}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center rounded-[10px] border border-adm-line bg-adm-surface">
+            <button type="button" aria-label="Mes anterior" onClick={() => go(shiftMonth(defaultMonth, -1))} className="flex size-11 items-center justify-center rounded-l-[10px] hover:bg-adm-chip">
+              <ChevronLeft className="size-4" aria-hidden="true" />
             </button>
+            <input
+              type="month"
+              aria-label="Mes"
+              value={defaultMonth}
+              max={realCurrentMonth}
+              onChange={e => { if (e.target.value) go(e.target.value) }}
+              className="min-h-11 w-[150px] bg-transparent px-1 text-center text-sm font-semibold focus:outline-none"
+            />
             <button
-              onClick={() => router.push(`?month=${defaultMonth}&view=daily`)}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                view === 'daily' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
-              }`}
+              type="button"
+              aria-label="Mes siguiente"
+              disabled={nextMonth > realCurrentMonth}
+              onClick={() => go(nextMonth)}
+              className="flex size-11 items-center justify-center rounded-r-[10px] hover:bg-adm-chip disabled:pointer-events-none disabled:opacity-35"
             >
-              Diario
+              <ChevronRight className="size-4" aria-hidden="true" />
             </button>
           </div>
 
-          {/* Month picker */}
-          <input
-            type="month"
-            defaultValue={defaultMonth}
-            onChange={e => { if (e.target.value) router.push(`?month=${e.target.value}&view=${view}`) }}
-            className="rounded-md border px-3 py-1.5 text-sm bg-background"
-          />
-
-          {/* Export */}
+          <button type="button" onClick={handleDownload} disabled={downloading} className={btn.primary}>
+            {downloading ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <FileText className="size-4" aria-hidden="true" />}
+            Descargar PDF
+          </button>
           <button
-            onClick={handleExport}
-            className="flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted/50 transition-colors"
+            type="button"
+            onClick={() => exportToExcel(advancedCurrent, advancedPrevious, monthStr, prevMonthStr, curRevTotal, prevRevTotal, view)}
+            className={cn(btn.line, 'min-h-11')}
           >
-            <Download className="h-4 w-4" />
-            Exportar
+            <Download className="size-4" aria-hidden="true" />
+            Excel
+          </button>
+          <button type="button" onClick={handleEmail} disabled={sending} className={cn(btn.line, 'min-h-11')}>
+            {sending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Mail className="size-4" aria-hidden="true" />}
+            Enviar al correo
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* KPI row */}
-      <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
-        <div className="rounded-2xl border border-zinc-100 bg-white p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Membresías</p>
-            <DeltaBadge n={revDelta} />
-          </div>
-          <p className="text-xl font-black tracking-tight text-zinc-900 leading-none">{fmt(curRevTotal)}</p>
-          {view === 'monthly' && <p className="text-xs text-zinc-400 truncate">{fmt(prevRevTotal)} en {prevMonthStr}</p>}
-        </div>
+      <p aria-live="polite" className={cn('-mt-3 text-[13px] font-semibold', !status && 'sr-only', status?.ok ? 'text-adm-ok-fg' : 'text-adm-bad-fg')}>
+        {status?.text}
+      </p>
 
-        {(advancedCurrent?.storeRevenue ?? 0) > 0 && (
-          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/40 p-5 space-y-3">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-600">Tienda contado</p>
-            <p className="text-xl font-black tracking-tight text-zinc-900 leading-none">{fmt(advancedCurrent!.storeRevenue/100)}</p>
-            <p className="text-xs text-emerald-600/60">ventas en efectivo/débito</p>
-          </div>
-        )}
-
-        {(advancedCurrent?.storeCreditIssued ?? 0) > 0 && (
-          <div className="rounded-2xl border border-amber-100 bg-amber-50/40 p-5 space-y-3">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600">Tienda crédito</p>
-            <p className="text-xl font-black tracking-tight text-zinc-900 leading-none">{fmt(advancedCurrent!.storeCreditIssued/100)}</p>
-            <p className="text-xs text-amber-600/60">descuentos de crédito</p>
-          </div>
-        )}
-
-        <div className="rounded-2xl border border-zinc-100 bg-white p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Nuevos</p>
-            <DeltaBadge n={membersDelta} />
-          </div>
-          <p className="text-xl font-black tracking-tight text-zinc-900 leading-none">{advancedCurrent?.newMembers ?? '—'}</p>
-          {view === 'monthly' && <p className="text-xs text-zinc-400">{advancedPrevious?.newMembers ?? '—'} en {prevMonthStr}</p>}
-        </div>
-
-        <div className="rounded-2xl border border-zinc-100 bg-white p-5 space-y-3">
-          <div className="flex items-center gap-1.5">
-            <UserMinus className="h-3 w-3 text-red-400" />
-            <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Bajas</p>
-          </div>
-          <p className="text-xl font-black tracking-tight text-zinc-900 leading-none">{advancedCurrent?.churned ?? '—'}</p>
-          {view === 'monthly' && <p className="text-xs text-zinc-400">{advancedPrevious?.churned ?? '—'} en {prevMonthStr}</p>}
-        </div>
-
-        <div className="rounded-2xl border border-amber-100 bg-amber-50 p-5 space-y-3">
-          <div className="flex items-center gap-1.5">
-            <AlertTriangle className="h-3 w-3 text-amber-500" />
-            <p className="text-[10px] font-bold uppercase tracking-widest text-amber-600">Vencen en 7 días</p>
-          </div>
-          <p className="text-xl font-black tracking-tight text-zinc-900 leading-none">{advancedCurrent?.expiringNext7Days ?? '—'}</p>
-          <p className="text-xs text-amber-500/80">membresías próximas a vencer</p>
-        </div>
-      </div>
-
-      {/* Revenue chart(s) */}
-      {view === 'monthly' ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className={`rounded-2xl p-5 space-y-4 ${isCurReal ? 'border-2 border-violet-500 bg-violet-50/30' : 'border border-zinc-100 bg-white'}`}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className={`h-2 w-2 rounded-full ${isCurReal ? 'bg-violet-500' : 'bg-zinc-400'}`} />
-                <p className={`text-xs font-bold uppercase tracking-widest capitalize ${isCurReal ? 'text-violet-600' : 'text-zinc-500'}`}>{monthStr}</p>
-                {isCurReal && <span className="text-[9px] font-bold uppercase tracking-widest text-violet-400 bg-violet-100 px-1.5 py-0.5 rounded-full">Actual</span>}
-              </div>
-              <p className="text-sm font-bold text-zinc-900">{fmt(curRevTotal)}</p>
-            </div>
-            <RevenueBar data={advancedCurrent?.revenueTrend ?? []} currency={currency} color="#8b5cf6" />
-          </div>
-
-          <div className="rounded-2xl border border-zinc-100 bg-white p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-zinc-300" />
-                <p className="text-xs font-bold uppercase tracking-widest text-zinc-400 capitalize">{prevMonthStr}</p>
-              </div>
-              <p className="text-sm font-bold text-zinc-400">{fmt(prevRevTotal)}</p>
-            </div>
-            <RevenueBar data={advancedPrevious?.revenueTrend ?? []} currency={currency} color="#c4b5fd" />
-          </div>
+      {!advancedCurrent ? (
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-adm-line bg-adm-subtle p-12 text-center">
+          <p className="text-sm font-medium text-adm-muted">Sin datos para este período</p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-zinc-100 bg-white p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-violet-500" />
-              <p className="text-xs font-bold uppercase tracking-widest text-zinc-500 capitalize">{monthStr} — por día</p>
-            </div>
-            <p className="text-sm font-bold text-zinc-900">{fmt(curRevTotal)}</p>
-          </div>
-          <RevenueBar data={advancedCurrent?.revenueTrend ?? []} currency={currency} color="#8b5cf6" />
-        </div>
-      )}
+        <>
+          {/* Hero: total income + membership revenue chart */}
+          <section aria-labelledby="hero-h" className="adm-night flex flex-wrap gap-8 rounded-[20px] bg-adm-night p-7 text-[#f2f2ee]">
+            <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-[18px]">
+              <div className="flex flex-col gap-2">
+                <h2 id="hero-h" className="font-admin-mono text-xs font-medium uppercase tracking-[0.08em] text-[#a3a39d]">
+                  Ingresos totales {monthly ? 'del mes' : 'del período'}
+                </h2>
+                <p className="text-[44px] font-black leading-none tracking-tight sm:text-[52px]">{fmt(curTotal)}</p>
+                {monthly && (
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <NightDelta n={totalDelta} />
+                    <span className="text-[13px] text-[#a3a39d]">{fmt(prevTotal)} en <span className="capitalize">{prevMonthStr}</span></span>
+                  </div>
+                )}
+              </div>
 
-      {/* Store revenue */}
-      {view === 'monthly' ? (
-        ((advancedCurrent?.storeRevenue ?? 0) > 0 || (advancedCurrent?.storeCreditIssued ?? 0) > 0) && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {(advancedCurrent?.storeRevenue ?? 0) > 0 && (
-              <div className="rounded-2xl border border-zinc-100 bg-white p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                    <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">Tienda — al contado</p>
-                  </div>
-                  <p className="text-sm font-bold text-zinc-900">{fmt(advancedCurrent!.storeRevenue/100)}</p>
+              {curTotal > 0 && (
+                <div
+                  className="flex h-2.5 gap-0.5 overflow-hidden rounded-full"
+                  role="img"
+                  aria-label={`Membresías ${Math.round(share(curRevTotal))}%, tienda al contado ${Math.round(share(curStoreCash))}%, tienda en crédito ${Math.round(share(curStoreCredit))}%`}
+                >
+                  <div className="bg-adm-brand" style={{ width: `${share(curRevTotal)}%` }} />
+                  <div className="bg-[#f2f2ee]" style={{ width: `${share(curStoreCash)}%` }} />
+                  <div className="bg-[#6b6b66]" style={{ width: `${share(curStoreCredit)}%` }} />
                 </div>
-                <RevenueBar data={advancedCurrent?.storeSalesTrend ?? []} currency={currency} color="#10b981" />
-              </div>
-            )}
-            {(advancedCurrent?.storeCreditIssued ?? 0) > 0 && (
-              <div className="rounded-2xl border border-zinc-100 bg-white p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-amber-400" />
-                    <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">Tienda — en crédito</p>
-                  </div>
-                  <p className="text-sm font-bold text-zinc-900">{fmt(advancedCurrent!.storeCreditIssued/100)}</p>
-                </div>
-                <RevenueBar data={advancedCurrent?.storeCreditTrend ?? []} currency={currency} color="#f59e0b" />
-              </div>
-            )}
-          </div>
-        )
-      ) : (
-        ((advancedCurrent?.storeRevenue ?? 0) > 0 || (advancedCurrent?.storeCreditIssued ?? 0) > 0) && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {(advancedCurrent?.storeRevenue ?? 0) > 0 && (
-              <div className="rounded-2xl border border-zinc-100 bg-white p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                    <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">Tienda al contado — por día</p>
-                  </div>
-                  <p className="text-sm font-bold text-zinc-900">{fmt(advancedCurrent!.storeRevenue/100)}</p>
-                </div>
-                <RevenueBar data={advancedCurrent?.storeSalesTrend ?? []} currency={currency} color="#10b981" />
-              </div>
-            )}
-            {(advancedCurrent?.storeCreditIssued ?? 0) > 0 && (
-              <div className="rounded-2xl border border-zinc-100 bg-white p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-amber-400" />
-                    <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">Tienda en crédito — por día</p>
-                  </div>
-                  <p className="text-sm font-bold text-zinc-900">{fmt(advancedCurrent!.storeCreditIssued/100)}</p>
-                </div>
-                <RevenueBar data={advancedCurrent?.storeCreditTrend ?? []} currency={currency} color="#f59e0b" />
-              </div>
-            )}
-          </div>
-        )
-      )}
+              )}
 
-      {/* Members by plan + Attendance */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {(advancedCurrent?.membersByPlan.length ?? 0) > 0 && (
-          <div className="rounded-2xl border border-zinc-100 bg-white p-5 space-y-4">
-            <div className="flex items-center gap-2">
-              <Users className="h-3.5 w-3.5 text-zinc-400" />
-              <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">Membresías activas por plan</p>
-            </div>
-            <div className="space-y-3">
-              {advancedCurrent!.membersByPlan.map((p, i) => (
-                <div key={p.planName} className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium text-zinc-700 truncate max-w-[60%]">{p.planName}</span>
-                    <span className="font-bold text-zinc-500 shrink-0 ml-2">{p.count} · {p.percent}%</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-zinc-100 overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{ width: `${p.percent}%`, background: PLAN_COLORS[i % PLAN_COLORS.length] }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {(advancedCurrent?.attendanceTrend.length ?? 0) > 0 && (
-          <div className="rounded-2xl border border-zinc-100 bg-white p-5 space-y-4">
-            <div className="flex items-center gap-2">
-              <Clock className="h-3.5 w-3.5 text-zinc-400" />
-              <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">Asistencia — últimos 7 días</p>
-            </div>
-            {(advancedCurrent?.attendanceTrendByGroup?.length ?? 0) > 0 ? (
-              <div className="space-y-5">
-                {advancedCurrent!.attendanceTrendByGroup.map((g, i) => (
-                  <div key={g.groupId ?? 'ungrouped'}>
-                    <div className="flex items-center gap-1.5 mb-2">
-                      <div className={`h-1.5 w-1.5 rounded-full`} style={{ background: GROUP_BAR_COLORS[i % GROUP_BAR_COLORS.length] }} />
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">{g.groupName ?? 'Sin grupo'}</p>
-                    </div>
-                    <AttendanceBarChart data={g.trend} color={GROUP_BAR_COLORS[i % GROUP_BAR_COLORS.length]} />
+              <dl className="flex flex-col">
+                {[
+                  { label: 'Membresías', value: curRevTotal, swatch: 'bg-adm-brand' },
+                  { label: 'Tienda al contado', value: curStoreCash, swatch: 'bg-[#f2f2ee]' },
+                  { label: 'Tienda en crédito (por cobrar)', value: curStoreCredit, swatch: 'bg-[#6b6b66]' },
+                ].map((row, i) => (
+                  <div key={row.label} className={cn('flex items-center justify-between gap-3 py-2.5', i < 2 && 'border-b border-[#2a2a2e]')}>
+                    <dt className="flex items-center gap-2 text-sm text-[#d6d6d0]">
+                      <span className={cn('size-2.5 rounded-[3px]', row.swatch)} aria-hidden="true" />
+                      {row.label}
+                    </dt>
+                    <dd className="font-admin-mono text-sm font-semibold">{fmt(row.value)}</dd>
                   </div>
                 ))}
+              </dl>
+            </div>
+
+            <div className="flex min-w-0 flex-[2_1_460px] flex-col gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-[15px] font-bold">Membresías {monthly ? 'por semana' : 'por día'}</h3>
+                <div className="flex gap-4 text-[13px] text-[#a3a39d]">
+                  <span className="flex items-center gap-1.5 capitalize"><span className="size-2.5 rounded-[3px] bg-adm-brand" aria-hidden="true" />{monthStr.split(' ')[0]}</span>
+                  {monthly && (
+                    <span className="flex items-center gap-1.5 capitalize"><span className="size-2.5 rounded-[3px] bg-[#3a3a3d]" aria-hidden="true" />{prevMonthStr.split(' ')[0]}</span>
+                  )}
+                </div>
               </div>
-            ) : (
-              <AttendanceBarChart data={advancedCurrent!.attendanceTrend} />
-            )}
+              <HeroBars cur={advancedCurrent.revenueTrend} prev={monthly ? advancedPrevious?.revenueTrend ?? [] : null} fmt={fmt} />
+            </div>
+          </section>
+
+          {/* Members KPIs */}
+          <section aria-label="Socios" className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
+            <KpiCard
+              label="Socios nuevos"
+              value={advancedCurrent.newMembers}
+              badge={membersDelta !== null && (membersDelta >= 0 ? <GoodBadge>+{membersDelta}%</GoodBadge> : <BadBadge>{membersDelta}%</BadBadge>)}
+              foot={monthly && advancedPrevious ? <>{advancedPrevious.newMembers} en <span className="capitalize">{prevMonthStr.split(' ')[0]}</span></> : undefined}
+            />
+            <KpiCard
+              label="Bajas"
+              value={advancedCurrent.churned}
+              badge={churnDiff !== null && churnDiff !== 0 && (churnDiff < 0 ? <GoodBadge>{-churnDiff} menos</GoodBadge> : <BadBadge>{churnDiff} más</BadBadge>)}
+              foot={monthly && advancedPrevious ? <>{advancedPrevious.churned} en <span className="capitalize">{prevMonthStr.split(' ')[0]}</span></> : undefined}
+            />
+            <KpiCard label="Crecimiento neto" value={net !== null && net > 0 ? `+${net}` : net ?? '—'} foot="nuevos menos bajas" />
+            <KpiCard
+              tone="warn"
+              label="Vencen en 7 días"
+              value={advancedCurrent.expiringNext7Days}
+              foot={
+                <Link href={`/gym/${gymSlug}/memberships?status=ACTIVE`} className="inline-flex min-h-6 items-center gap-1 font-bold hover:underline">
+                  Ver membresías <ArrowRight className="size-3.5" aria-hidden="true" />
+                </Link>
+              }
+            />
+          </section>
+
+          <div className="flex flex-wrap gap-3">
+            {/* Members by plan */}
+            <section aria-labelledby="plans-h" className="flex min-w-0 flex-[1_1_400px] flex-col gap-[18px] rounded-2xl border border-adm-line bg-adm-surface p-[22px]">
+              <div className="flex items-baseline justify-between gap-3">
+                <h2 id="plans-h" className="text-base font-extrabold">Membresías activas por plan</h2>
+                <span className="font-admin-mono text-[13px] text-adm-muted">{activeTotal} activas</span>
+              </div>
+              {advancedCurrent.membersByPlan.length === 0 ? (
+                <p className="py-6 text-center text-sm text-adm-muted">No hay membresías activas</p>
+              ) : (
+                <ul className="flex flex-col gap-3.5">
+                  {[...advancedCurrent.membersByPlan].sort((a, b) => b.count - a.count).map(p => (
+                    <li key={p.planName} className="flex flex-col gap-1.5">
+                      <div className="flex justify-between gap-3 text-sm">
+                        <span className="truncate font-semibold">{p.planName}</span>
+                        <span className="shrink-0 font-admin-mono text-adm-muted">{p.count} · {p.percent}%</span>
+                      </div>
+                      <div className="h-2.5 overflow-hidden rounded-full bg-adm-chip">
+                        <div className="h-full rounded-full bg-adm-ink" style={{ width: `${p.percent}%` }} />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            {/* Attendance */}
+            <section aria-labelledby="att-h" className="flex min-w-0 flex-[1_1_400px] flex-col gap-[18px] rounded-2xl border border-adm-line bg-adm-surface p-[22px]">
+              <div className="flex items-baseline justify-between gap-3">
+                <h2 id="att-h" className="text-base font-extrabold">Asistencia · últimos 7 días</h2>
+                <span className="font-admin-mono text-[13px] text-adm-muted">{attendanceTotal.toLocaleString('es-AR')} check-ins</span>
+              </div>
+              {attendance.length > 0 && (
+                <div>
+                  <div className="flex h-[140px] items-end gap-2.5 border-b border-adm-line" role="img" aria-label="Check-ins por día de los últimos 7 días">
+                    {attendance.map(d => {
+                      const peak = d.count === attendancePeak && d.count > 0
+                      return (
+                        <div key={d.label} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1">
+                          <span className={cn('font-admin-mono text-[11px]', peak ? 'font-bold text-adm-ink' : 'text-adm-muted')}>{d.count}</span>
+                          <div
+                            className={cn('w-full max-w-9 rounded-t-md', peak ? 'border border-b-0 border-adm-night bg-adm-brand' : 'bg-adm-muted/30')}
+                            style={{ height: `${Math.max(3, (d.count / Math.max(1, attendancePeak)) * 82)}%` }}
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="mt-2 flex gap-2.5" aria-hidden="true">
+                    {attendance.map(d => (
+                      <span key={d.label} className="min-w-0 flex-1 text-center font-admin-mono text-xs text-adm-muted">{d.label}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2.5">
+                <div className="flex flex-[1_1_140px] flex-col gap-1 rounded-xl border border-adm-line-soft bg-adm-subtle px-3.5 py-3">
+                  <span className="text-xs font-semibold text-adm-muted">Día con más gente</span>
+                  <span className="text-xl font-extrabold capitalize">{advancedCurrent.peakDay ?? '—'}</span>
+                </div>
+                <div className="flex flex-[1_1_140px] flex-col gap-1 rounded-xl border border-adm-line-soft bg-adm-subtle px-3.5 py-3">
+                  <span className="text-xs font-semibold text-adm-muted">Hora pico</span>
+                  <span className="text-xl font-extrabold">{advancedCurrent.peakHour ?? '—'}</span>
+                </div>
+              </div>
+              {groups.length > 1 && (
+                <ul className="flex flex-col" aria-label="Check-ins por grupo">
+                  {groups.map(g => (
+                    <li key={g.name} className="flex justify-between gap-3 border-t border-adm-line-soft py-2.5 text-sm">
+                      <span className="truncate font-semibold">{g.name}</span>
+                      <span className="font-admin-mono text-adm-muted">{g.count}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
           </div>
-        )}
-      </div>
-
-      {/* Peak day / hour */}
-      {(advancedCurrent?.peakDay || advancedCurrent?.peakHour) && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {advancedCurrent.peakDay && (
-            <div className="rounded-2xl border border-zinc-100 bg-white p-5">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-2">Día con más asistencia</p>
-              <p className="text-3xl font-black text-zinc-900 capitalize">{advancedCurrent.peakDay}</p>
-            </div>
-          )}
-          {advancedCurrent.peakHour && (
-            <div className="rounded-2xl border border-zinc-100 bg-white p-5">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-2">Hora pico</p>
-              <p className="text-3xl font-black text-zinc-900">{advancedCurrent.peakHour}</p>
-            </div>
-          )}
-        </div>
+        </>
       )}
-
-      {!advancedCurrent && (
-        <div className="rounded-2xl border border-zinc-100 bg-zinc-50 p-12 flex flex-col items-center gap-3 text-center">
-          <p className="text-sm font-medium text-zinc-400">Sin datos para este período</p>
-        </div>
-      )}
-    </div>
+    </AdminPage>
   )
 }

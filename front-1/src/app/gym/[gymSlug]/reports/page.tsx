@@ -100,6 +100,7 @@ export default async function ReportsPage({ params, searchParams }: Props) {
 
     return (
       <AdvancedReports
+        gymSlug={gymSlug}
         defaultMonth={defaultMonth}
         view={isDaily ? 'daily' : 'monthly'}
         gymTimezone={gymTimezone}
