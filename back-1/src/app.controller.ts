@@ -1,4 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { AppService } from './app.service';
 
 @Controller()
@@ -8,6 +9,13 @@ export class AppController {
   @Get()
   getHello(): string {
     return this.appService.getHello();
+  }
+
+  // Public liveness + DB check, polled by the super-admin dashboard
+  @SkipThrottle()
+  @Get('health')
+  getHealth() {
+    return this.appService.getHealth();
   }
 
   @Get('platform-settings')

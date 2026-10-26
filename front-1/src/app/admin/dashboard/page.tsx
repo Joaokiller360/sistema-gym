@@ -31,6 +31,8 @@ import {
   type Tone,
 } from '@/components/admin/ui'
 import type { AccessRequest, DemoRequest } from '../acceso/RequestsInbox'
+import { ApiHealthPanel } from './ApiHealthPanel'
+import { checkApiHealthAction } from './health-actions'
 
 interface DashboardStats {
   totalGyms: number
@@ -115,13 +117,14 @@ export default async function AdminDashboardPage() {
   const token = cookieStore.get('session')?.value ?? ''
   const now = new Date()
 
-  const [stats, gyms, subPlans, ticketsRaw, demosRaw, accessRaw] = await Promise.all([
+  const [stats, gyms, subPlans, ticketsRaw, demosRaw, accessRaw, health] = await Promise.all([
     apiFetch<DashboardStats>(`/admin/dashboard`, token),
     loadGymsWithBilling(token),
     apiFetch<SubscriptionPlanPrice[]>(`/admin/subscription-plans`, token, { silent: true }),
     apiFetch<ListResponse<SupportTicket>>(`/support/tickets?all=true`, token, { silent: true }),
     apiFetch<ListResponse<DemoRequest>>(`/admin/demo-requests?limit=100`, token, { silent: true }),
     apiFetch<ListResponse<AccessRequest>>(`/access-requests/admin?limit=100`, token, { silent: true }),
+    checkApiHealthAction(),
   ])
 
   const tickets = list(ticketsRaw).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -222,6 +225,8 @@ export default async function AdminDashboardPage() {
           <AttentionCard href="/admin/income" count={expiringSoon} label="Suscripciones por vencer" tag="≤ 7 días" tone="high" />
         </div>
       </section>
+
+      <ApiHealthPanel initial={'httpStatus' in health ? health : null} />
 
       <section aria-label="Indicadores" className="flex flex-wrap gap-3">
         <Stat label="Gimnasios activos" value={activeGyms}>

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from './prisma/prisma.service';
 
 @Injectable()
@@ -7,6 +7,24 @@ export class AppService {
 
   getHello(): string {
     return '!';
+  }
+
+  async getHealth() {
+    const started = Date.now();
+    let dbOk = true;
+    try {
+      await this.prisma.$queryRaw`SELECT 1`;
+    } catch {
+      dbOk = false;
+    }
+    const body = {
+      status: dbOk ? 'ok' : 'degraded',
+      db: { ok: dbOk, latencyMs: Date.now() - started },
+      uptimeSeconds: Math.round(process.uptime()),
+      timestamp: new Date().toISOString(),
+    };
+    if (!dbOk) throw new ServiceUnavailableException(body);
+    return body;
   }
 
   getPlatformSettings() {
