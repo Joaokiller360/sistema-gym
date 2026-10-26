@@ -24,6 +24,8 @@ const DEFAULTS: PlatformSettings = {
 export async function FooterBar() {
   const settings = await apiFetch<PlatformSettings>('/platform-settings', '', {
     next: { tags: ['platform-settings'], revalidate: 300 },
+    // Optional chrome with defaults: an unreachable API shouldn't spam the console
+    silent: true,
   }).catch(() => null) ?? DEFAULTS
 
   const hasContent =

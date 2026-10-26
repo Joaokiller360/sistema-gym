@@ -1,5 +1,27 @@
 const API_URL = process.env.API_URL ?? 'http://localhost:3001/api/v1'
 
+/**
+ * Short, log-friendly version of an error body. A proxy in front of the API
+ * (e.g. a Cloudflare tunnel that is down) answers with a full HTML page;
+ * keep only its <title> instead of dumping the whole document.
+ */
+function describeBody(text: string) {
+  const trimmed = text.trim()
+  if (trimmed.startsWith('<')) {
+    const title = trimmed.match(/<title>([^<]*)<\/title>/i)?.[1]?.trim()
+    return `HTML response${title ? ` "${title}"` : ''} — the API is probably unreachable (check ${API_URL})`
+  }
+  return trimmed.length > 300 ? `${trimmed.slice(0, 300)}…` : trimmed
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return text ? JSON.parse(text) : {}
+  } catch {
+    return null
+  }
+}
+
 export async function apiFetch<T>(
   path: string,
   token: string,
@@ -20,7 +42,7 @@ export async function apiFetch<T>(
 
     if (!res.ok) {
       if (!silent && process.env.NODE_ENV !== 'production') {
-        console.error(`[apiFetch] ${fetchOptions?.method ?? 'GET'} ${path} → ${res.status}:`, text)
+        console.error(`[apiFetch] ${fetchOptions?.method ?? 'GET'} ${path} → ${res.status}:`, describeBody(text))
       }
       return null
     }
@@ -51,17 +73,20 @@ export async function apiFetchWithError<T>(
     })
 
     const text = await res.text()
-    const json = text ? JSON.parse(text) : {}
+    const json = parseJson(text) as { message?: unknown } | null
 
     if (!res.ok) {
       const msg = json?.message
         ? Array.isArray(json.message) ? json.message.join(', ') : String(json.message)
-        : `Error ${res.status}`
+        : res.status >= 500 && json === null
+          ? 'No se pudo conectar con el servidor'
+          : `Error ${res.status}`
       if (process.env.NODE_ENV !== 'production') {
-        console.error(`[apiFetchWithError] ${options?.method ?? 'GET'} ${path} → ${res.status}:`, JSON.stringify(json))
+        console.error(`[apiFetchWithError] ${options?.method ?? 'GET'} ${path} → ${res.status}:`, json ? JSON.stringify(json) : describeBody(text))
       }
       return { error: msg }
     }
+    if (json === null) return { error: 'Respuesta inválida del servidor' }
 
     return { data: json as T }
   } catch {
