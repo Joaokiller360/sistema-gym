@@ -1,8 +1,8 @@
 import type { Metadata } from "next"
 import { Archivo, JetBrains_Mono, Roboto } from "next/font/google"
-import Script from "next/script"
 import { Toaster } from "@/components/ui/sonner"
 import { ThemeProvider } from "@/components/providers/ThemeProvider"
+import { ThemeScript } from "@/components/providers/ThemeScript"
 import "./globals.css"
 
 const roboto = Roboto({
@@ -37,13 +37,7 @@ export default function RootLayout({
   return (
     <html lang="es" className={`${roboto.variable} ${archivo.variable} ${jetbrains.variable} h-full antialiased`} suppressHydrationWarning>
       <head>
-        <Script
-          id="theme-init"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.classList.add('dark')}catch(e){}})()`,
-          }}
-        />
+        <ThemeScript />
       </head>
       <body className="min-h-full flex flex-col">
         <ThemeProvider>
