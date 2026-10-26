@@ -15,6 +15,8 @@ const resolveLogoUrl = (url: string | null | undefined): string | null => {
   return url
 }
 
+const FEATURES = ['Escaneo con Wallet', 'Planes por días', 'Cortes de caja', 'Reportes']
+
 export default async function LoginPage() {
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value
@@ -34,54 +36,55 @@ export default async function LoginPage() {
   const logoUrl = resolveLogoUrl(platform?.logoUrl)
 
   return (
-    <main className="min-h-screen flex flex-col lg:flex-row">
-      {/* Left panel — brand */}
-      <div className="flex flex-col items-center justify-center bg-black px-8 py-12 lg:w-1/2 lg:sticky lg:top-0 lg:h-screen">
-        <div className="w-full max-w-xs text-center lg:text-left">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#fffb00] mb-6 overflow-hidden relative">
-            {logoUrl
-              ? <Image src={logoUrl} alt={saasName} fill className="object-cover" sizes="56px" />
-              : <Dumbbell className="h-7 w-7 text-black" />
-            }
+    // Always dark, regardless of the app theme
+    <main className="font-admin flex min-h-screen flex-col bg-[#0B0B0C] px-6 py-8 text-white">
+      <div className="mx-auto flex w-full max-w-[1280px] flex-1 flex-col gap-12">
+        <header className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl bg-[#FFFB00] text-[#0B0B0C]">
+              {logoUrl
+                ? <Image src={logoUrl} alt="" fill className="object-cover" sizes="44px" />
+                : <Dumbbell className="h-[22px] w-[22px]" strokeWidth={2.2} aria-hidden="true" />}
+            </span>
+            <span className="text-xl font-extrabold tracking-tight">{saasName}</span>
           </div>
-          <h1 className="text-5xl font-black text-white tracking-tight">{saasName}</h1>
-          <p className="mt-3 text-white/50 text-base leading-relaxed">
-            Gestión profesional para tu gimnasio. Miembros, planes, asistencia y más en un solo lugar.
-          </p>
-          <div className="mt-10 space-y-3 hidden lg:block">
-            {[
-              'Gestión de miembros y membresías',
-              'Control de asistencia en tiempo real',
-              'Reportes financieros y retención',
-              'Marketing y comunicaciones',
-            ].map(f => (
-              <div key={f} className="flex items-center gap-3 text-sm text-white/60">
-                <span className="w-5 h-5 rounded-full bg-[#1fad9d] flex items-center justify-center shrink-0">
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                    <path d="M2 5l2.5 2.5L8 2.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </span>
-                {f}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+          <span className="font-admin-mono text-xs uppercase tracking-[0.08em] text-[#A3A39D]">Panel de gestión</span>
+        </header>
 
-      {/* Right panel — form */}
-      <div className="flex flex-1 items-center justify-center px-6 py-12 bg-zinc-50 lg:bg-white">
-        <div className="w-full max-w-sm space-y-8">
-          <div>
-            <h2 className="text-2xl font-black tracking-tight">Iniciar sesión</h2>
-            <p className="text-muted-foreground text-sm mt-1">
-              Ingresá tus credenciales para continuar
+        <div className="flex flex-1 flex-wrap items-center justify-between gap-14">
+          <section className="flex min-w-0 flex-[999_1_520px] flex-col gap-7">
+            <h1 className="text-[clamp(56px,9vw,132px)] font-black uppercase leading-[0.88] tracking-[-0.04em] [font-stretch:125%]">
+              Tu gym,<br />
+              <span className="text-[#FFFB00]">en orden.</span>
+            </h1>
+            <p className="max-w-[520px] text-lg leading-normal text-[#C9C9C3]">
+              Socios, planes, asistencia, tienda y caja en un solo lugar.
             </p>
-          </div>
+            <ul className="flex flex-wrap gap-2">
+              {FEATURES.map(f => (
+                <li key={f} className="rounded-full border border-[#2A2A2E] px-3.5 py-2 text-[13px] font-semibold text-[#E4E4DF]">
+                  {f}
+                </li>
+              ))}
+            </ul>
+          </section>
 
-          <div className="bg-white rounded-2xl border border-zinc-200 p-6 shadow-sm lg:shadow-none lg:border-0 lg:p-0">
+          <section
+            aria-labelledby="login-title"
+            className="w-full max-w-[440px] flex-[1_1_380px] rounded-3xl bg-[#FFFFFF] p-7 text-[#111111] sm:p-9"
+          >
+            <div className="mb-5 space-y-1.5">
+              <h2 id="login-title" className="text-[28px] font-black tracking-tight">Iniciar sesión</h2>
+              <p className="text-sm text-[#5E5E58]">Ingresá con el correo de tu cuenta.</p>
+            </div>
             <LoginForm />
-          </div>
+          </section>
         </div>
+
+        <footer className="flex flex-wrap justify-between gap-3 font-admin-mono text-xs text-[#A3A39D]">
+          <span>¿Sin acceso? Pedíselo al dueño de tu gimnasio.</span>
+          <span>{saasName}</span>
+        </footer>
       </div>
     </main>
   )
