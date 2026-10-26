@@ -145,8 +145,12 @@ model User {
   name      String
   role      Role
   isActive  Boolean  @default(true)
+  language  String   @default("es")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  /// When the user finished (or skipped) the guided tour of the gym panel
+  tourCompletedAt DateTime?
 
   gymId String?
   gym   Gym?    @relation("GymUsers", fields: [gymId], references: [id], onDelete: SetNull)

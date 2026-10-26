@@ -21,6 +21,7 @@ function toSlug(name: string): string {
 }
 
 const REFRESH_TOKEN_DAYS = 30;
+const SUPPORTED_LANGUAGES = ['es', 'en'];
 
 @Injectable()
 export class AuthService {
@@ -155,6 +156,7 @@ export class AuthService {
         role: user.role,
         gymId: user.gymId,
         gymSlug,
+        language: user.language,
       },
     };
   }
@@ -208,24 +210,36 @@ export class AuthService {
   async getMe(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, email: true, role: true },
+      select: { id: true, name: true, email: true, role: true, language: true, tourCompletedAt: true },
     });
     if (!user) throw new UnauthorizedException();
     return user;
   }
 
-  async updateMe(userId: string, data: { name?: string; email?: string }) {
+  async completeTour(userId: string) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { tourCompletedAt: new Date() },
+      select: { tourCompletedAt: true },
+    });
+  }
+
+  async updateMe(userId: string, data: { name?: string; email?: string; language?: string }) {
     if (data.email) {
       const existing = await this.prisma.user.findUnique({ where: { email: data.email } });
       if (existing && existing.id !== userId) throw new ConflictException('Email ya en uso');
     }
-    const safeData: { name?: string; email?: string } = {};
+    if (data.language !== undefined && !SUPPORTED_LANGUAGES.includes(data.language)) {
+      throw new BadRequestException('Idioma no soportado');
+    }
+    const safeData: { name?: string; email?: string; language?: string } = {};
     if (data.name !== undefined) safeData.name = data.name;
     if (data.email !== undefined) safeData.email = data.email;
+    if (data.language !== undefined) safeData.language = data.language;
     const user = await this.prisma.user.update({
       where: { id: userId },
       data: safeData,
-      select: { id: true, name: true, email: true, role: true },
+      select: { id: true, name: true, email: true, role: true, language: true },
     });
     return user;
   }

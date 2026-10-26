@@ -45,8 +45,16 @@ export class AuthController {
   @Patch('me')
   @SkipThrottle()
   @UseGuards(JwtAuthGuard)
-  updateMe(@Req() req: any, @Body() body: { name?: string; email?: string }) {
+  updateMe(@Req() req: any, @Body() body: { name?: string; email?: string; language?: string }) {
     return this.authService.updateMe(req.user.userId, body);
+  }
+
+  @Post('me/tour')
+  @HttpCode(HttpStatus.OK)
+  @SkipThrottle()
+  @UseGuards(JwtAuthGuard)
+  completeTour(@Req() req: any) {
+    return this.authService.completeTour(req.user.userId);
   }
 
   @Patch('change-password')
