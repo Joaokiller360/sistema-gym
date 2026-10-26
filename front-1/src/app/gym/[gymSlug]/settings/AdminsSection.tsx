@@ -15,19 +15,23 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { useT } from '@/i18n/client'
+import { commonMessages } from '@/i18n/common'
+import { settingsMessages } from './messages'
 
 const inputClass = 'h-12 w-full rounded-xl border border-adm-line bg-adm-ground px-3.5 text-[15px] text-adm-ink outline-none transition-colors placeholder:text-adm-muted focus:border-adm-brand disabled:opacity-50'
 const labelClass = 'mb-2 block text-xs font-bold uppercase tracking-[0.08em] text-adm-muted'
 
 function CopyButton({ text, label, className }: { text: string; label: string; className?: string }) {
   const [copied, setCopied] = useState(false)
+  const tc = useT(commonMessages)
   function handleCopy() {
     navigator.clipboard.writeText(text)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
   return (
-    <button type="button" onClick={handleCopy} aria-label={copied ? 'Copiado' : label} className={className ?? 'text-zinc-400 transition-colors hover:text-black'}>
+    <button type="button" onClick={handleCopy} aria-label={copied ? tc.copied : label} className={className ?? 'text-zinc-400 transition-colors hover:text-black'}>
       {copied ? <Check className="h-3.5 w-3.5 text-[#1fad9d]" /> : <Copy className="h-3.5 w-3.5" />}
     </button>
   )
@@ -37,6 +41,8 @@ function DeleteAdminButton({ admin, onDeleted }: { admin: GymAdmin; onDeleted: (
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const t = useT(settingsMessages).admins
+  const tc = useT(commonMessages)
 
   function handleDelete() {
     startTransition(async () => {
@@ -51,24 +57,24 @@ function DeleteAdminButton({ admin, onDeleted }: { admin: GymAdmin; onDeleted: (
       <button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label={`Quitar acceso a ${admin.name}`}
+        aria-label={t.removeAccess(admin.name)}
         className="h-10 rounded-[10px] px-3 text-[13px] font-bold text-adm-bad-fg transition-colors hover:bg-adm-bad-bg"
       >
-        Quitar
+        {t.remove}
       </button>
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent size="sm">
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar administrador?</AlertDialogTitle>
+            <AlertDialogTitle>{t.deleteTitle}</AlertDialogTitle>
             <AlertDialogDescription>
-              {admin.name} ({admin.email}) perderá acceso al panel. Esta acción no se puede deshacer.
+              {t.deleteBody(admin.name, admin.email)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {error && <p className="text-xs text-[#ff0000] font-medium px-1">{error}</p>}
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{tc.cancel}</AlertDialogCancel>
             <Button variant="destructive" disabled={isPending} onClick={handleDelete}>
-              {isPending ? '…' : 'Eliminar'}
+              {isPending ? '…' : tc.delete}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -85,6 +91,7 @@ export function AdminsSection({ initialAdmins }: { initialAdmins: GymAdmin[] }) 
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [newCreds, setNewCreds] = useState<{ name: string; email: string; password: string } | null>(null)
+  const t = useT(settingsMessages).admins
 
   function handleCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -109,23 +116,23 @@ export function AdminsSection({ initialAdmins }: { initialAdmins: GymAdmin[] }) 
       <AlertDialog open={!!newCreds} onOpenChange={() => setNewCreds(null)}>
         <AlertDialogContent size="sm">
           <AlertDialogHeader>
-            <AlertDialogTitle>Administrador creado</AlertDialogTitle>
+            <AlertDialogTitle>{t.createdTitle}</AlertDialogTitle>
             <AlertDialogDescription>
-              Guardá estas credenciales antes de cerrar. La contraseña no se puede recuperar.
+              {t.createdBody}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 space-y-3 text-sm">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-zinc-500">Email</span>
-              <div className="flex items-center gap-2 font-medium">{newCreds?.email} <CopyButton text={newCreds?.email ?? ''} label="Copiar email" /></div>
+              <span className="text-zinc-500">{t.email}</span>
+              <div className="flex items-center gap-2 font-medium">{newCreds?.email} <CopyButton text={newCreds?.email ?? ''} label={t.copyEmail} /></div>
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-zinc-500">Contraseña</span>
-              <div className="flex items-center gap-2 font-mono font-bold">{newCreds?.password} <CopyButton text={newCreds?.password ?? ''} label="Copiar contraseña" /></div>
+              <span className="text-zinc-500">{t.password}</span>
+              <div className="flex items-center gap-2 font-mono font-bold">{newCreds?.password} <CopyButton text={newCreds?.password ?? ''} label={t.copyPassword} /></div>
             </div>
           </div>
           <AlertDialogFooter>
-            <Button onClick={() => setNewCreds(null)}>Entendido</Button>
+            <Button onClick={() => setNewCreds(null)}>{t.gotIt}</Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -133,16 +140,16 @@ export function AdminsSection({ initialAdmins }: { initialAdmins: GymAdmin[] }) 
       <section aria-labelledby="admins-h" className="overflow-hidden rounded-[20px] border border-adm-line bg-adm-surface">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-adm-line p-[22px]">
           <div className="flex flex-col gap-1">
-            <h2 id="admins-h" className="text-[17px] font-extrabold">Administradores</h2>
-            <p className="text-[13px] text-adm-muted">Acceso completo al panel de este gimnasio.</p>
+            <h2 id="admins-h" className="text-[17px] font-extrabold">{t.title}</h2>
+            <p className="text-[13px] text-adm-muted">{t.subtitle}</p>
           </div>
           <span className="font-admin-mono text-[13px] text-adm-muted">
-            {admins.length} {admins.length === 1 ? 'persona' : 'personas'}
+            {t.count(admins.length)}
           </span>
         </div>
 
         {admins.length === 0 ? (
-          <p className="border-b border-adm-line px-[22px] py-6 text-sm text-adm-muted">No hay administradores aún.</p>
+          <p className="border-b border-adm-line px-[22px] py-6 text-sm text-adm-muted">{t.empty}</p>
         ) : (
           <ul>
             {admins.map(admin => {
@@ -157,11 +164,11 @@ export function AdminsSection({ initialAdmins }: { initialAdmins: GymAdmin[] }) 
                     <span className="truncate font-admin-mono text-xs text-adm-muted">{admin.email}</span>
                   </span>
                   {!admin.isActive && (
-                    <span className="inline-flex h-7 items-center rounded-full bg-adm-chip px-2.5 text-xs font-extrabold text-adm-muted">Inactivo</span>
+                    <span className="inline-flex h-7 items-center rounded-full bg-adm-chip px-2.5 text-xs font-extrabold text-adm-muted">{t.inactive}</span>
                   )}
                   <CopyButton
                     text={admin.email}
-                    label={`Copiar email de ${admin.name}`}
+                    label={t.copyEmailOf(admin.name)}
                     className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-adm-line text-adm-muted transition-colors hover:text-adm-ink"
                   />
                   <DeleteAdminButton admin={admin} onDeleted={() => { setAdmins(a => a.filter(x => x.id !== admin.id)) }} />
@@ -172,26 +179,26 @@ export function AdminsSection({ initialAdmins }: { initialAdmins: GymAdmin[] }) 
         )}
 
         <form onSubmit={handleCreate} aria-labelledby="invite-h" className="flex flex-col gap-3.5 bg-adm-subtle p-[22px]">
-          <h3 id="invite-h" className="text-sm font-extrabold">Invitar administrador</h3>
+          <h3 id="invite-h" className="text-sm font-extrabold">{t.invite}</h3>
           <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
             <div>
-              <label htmlFor="admin-name" className={labelClass}>Nombre</label>
-              <input id="admin-name" value={name} onChange={e => setName(e.target.value)} required disabled={isPending} placeholder="Juan García" className={inputClass} {...createHandlers('name')} />
+              <label htmlFor="admin-name" className={labelClass}>{t.name}</label>
+              <input id="admin-name" value={name} onChange={e => setName(e.target.value)} required disabled={isPending} placeholder={t.namePlaceholder} className={inputClass} {...createHandlers('name')} />
             </div>
             <div>
-              <label htmlFor="admin-email" className={labelClass}>Email</label>
-              <input id="admin-email" type="email" value={email} onChange={e => setEmail(e.target.value)} required disabled={isPending} placeholder="juan@email.com" className={inputClass} {...createHandlers('email')} />
+              <label htmlFor="admin-email" className={labelClass}>{t.email}</label>
+              <input id="admin-email" type="email" value={email} onChange={e => setEmail(e.target.value)} required disabled={isPending} placeholder={t.emailPlaceholder} className={inputClass} {...createHandlers('email')} />
             </div>
             <button
               type="submit"
               disabled={isPending || !name.trim() || !email.trim()}
               className="h-12 rounded-xl bg-adm-brand px-[18px] text-sm font-black text-adm-night transition-opacity hover:opacity-90 disabled:opacity-50"
             >
-              {isPending ? 'Enviando…' : 'Enviar invitación'}
+              {isPending ? t.sending : t.send}
             </button>
           </div>
           {error && <p role="alert" className="text-xs font-medium text-adm-bad-fg">{error}</p>}
-          <p className="text-[13px] text-adm-muted">Se genera una contraseña temporal: la ves al crear y también se le envía por correo.</p>
+          <p className="text-[13px] text-adm-muted">{t.inviteHint}</p>
         </form>
       </section>
     </div>

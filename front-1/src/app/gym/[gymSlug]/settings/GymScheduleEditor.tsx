@@ -3,21 +3,16 @@
 import { useState, useTransition } from 'react'
 import { toast } from 'sonner'
 import { updateGymScheduleAction } from './actions'
+import { useIntlLocale, useT } from '@/i18n/client'
+import { commonMessages } from '@/i18n/common'
+import { settingsMessages } from './messages'
 
 type DayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
 
 interface DayHours { open: string; close: string }
 type Schedule = Partial<Record<DayKey, DayHours | null>>
 
-const DAYS: { key: DayKey; label: string; short: string }[] = [
-  { key: 'mon', label: 'Lunes',     short: 'Lun' },
-  { key: 'tue', label: 'Martes',    short: 'Mar' },
-  { key: 'wed', label: 'Miércoles', short: 'Mié' },
-  { key: 'thu', label: 'Jueves',    short: 'Jue' },
-  { key: 'fri', label: 'Viernes',   short: 'Vie' },
-  { key: 'sat', label: 'Sábado',    short: 'Sáb' },
-  { key: 'sun', label: 'Domingo',   short: 'Dom' },
-]
+const DAY_KEYS: DayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 
 const DEFAULT_HOURS: DayHours = { open: '06:00', close: '22:00' }
 
@@ -35,6 +30,10 @@ interface Props {
 export function GymScheduleEditor({ gymSlug, gymId, defaultSchedule }: Props) {
   const [schedule, setSchedule] = useState<Schedule>(defaultSchedule)
   const [isPending, startTransition] = useTransition()
+  const t = useT(settingsMessages).schedule
+  const tc = useT(commonMessages)
+  const intlLocale = useIntlLocale()
+  const DAYS = DAY_KEYS.map(key => ({ key, label: tc.weekdays[key], short: tc.weekdaysShort[key] }))
 
   function toggleDay(key: DayKey) {
     setSchedule(prev => {
@@ -65,7 +64,7 @@ export function GymScheduleEditor({ gymSlug, gymId, defaultSchedule }: Props) {
       for (const { key } of DAYS) payload[key] = schedule[key] ?? null
       const res = await updateGymScheduleAction(gymSlug, gymId, payload)
       if (res.error) toast.error(res.error)
-      else toast.success('Horario guardado')
+      else toast.success(t.saved)
     })
   }
 
@@ -80,9 +79,9 @@ export function GymScheduleEditor({ gymSlug, gymId, defaultSchedule }: Props) {
     <section aria-labelledby="schedule-h" className="flex flex-col gap-[18px] rounded-[20px] border border-adm-line bg-adm-surface p-[22px]">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <h2 id="schedule-h" className="text-[17px] font-extrabold">Horario semanal</h2>
+          <h2 id="schedule-h" className="text-[17px] font-extrabold">{t.title}</h2>
           <p className="font-admin-mono text-[13px] text-adm-muted">
-            {openDays} {openDays === 1 ? 'día' : 'días'} · {weeklyHours.toLocaleString('es')} h por semana
+            {t.summary(openDays, weeklyHours.toLocaleString(intlLocale))}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -92,7 +91,7 @@ export function GymScheduleEditor({ gymSlug, gymId, defaultSchedule }: Props) {
             disabled={isPending}
             className="h-10 rounded-[10px] border border-adm-line px-3.5 text-[13px] font-bold transition-colors hover:bg-adm-chip disabled:opacity-50"
           >
-            Copiar lunes a días hábiles
+            {t.copyMonday}
           </button>
           <button
             type="button"
@@ -100,7 +99,7 @@ export function GymScheduleEditor({ gymSlug, gymId, defaultSchedule }: Props) {
             disabled={isPending}
             className="h-10 rounded-[10px] bg-adm-brand px-4 text-[13px] font-black text-adm-night transition-opacity hover:opacity-90 disabled:opacity-50"
           >
-            {isPending ? 'Guardando…' : 'Guardar horario'}
+            {isPending ? tc.saving : t.save}
           </button>
         </div>
       </div>
@@ -130,17 +129,17 @@ export function GymScheduleEditor({ gymSlug, gymId, defaultSchedule }: Props) {
                   type="button"
                   role="switch"
                   aria-checked={enabled}
-                  aria-label={enabled ? `Cerrar ${label}` : `Abrir ${label}`}
+                  aria-label={enabled ? t.closeDay(label) : t.openDay(label)}
                   onClick={() => toggleDay(key)}
                   className={`h-10 rounded-[10px] text-xs font-extrabold transition-colors ${
                     enabled ? 'border border-adm-line bg-adm-subtle text-adm-ink' : 'border border-dashed border-adm-line text-adm-muted hover:text-adm-ink'
                   }`}
                 >
-                  {enabled ? 'Abierto' : 'Cerrado'}
+                  {enabled ? t.open : t.closed}
                 </button>
                 {enabled ? (
                   <div className="flex flex-col gap-1">
-                    <label className="sr-only" htmlFor={`open-${key}`}>Apertura {label}</label>
+                    <label className="sr-only" htmlFor={`open-${key}`}>{t.opening(label)}</label>
                     <input
                       id={`open-${key}`}
                       type="time"
@@ -148,7 +147,7 @@ export function GymScheduleEditor({ gymSlug, gymId, defaultSchedule }: Props) {
                       onChange={e => updateHour(key, 'open', e.target.value)}
                       className="h-9 w-full rounded-lg border border-adm-line bg-adm-ground px-1 text-center font-admin-mono text-[13px] font-bold text-adm-ink outline-none [color-scheme:dark] focus:border-adm-brand"
                     />
-                    <label className="sr-only" htmlFor={`close-${key}`}>Cierre {label}</label>
+                    <label className="sr-only" htmlFor={`close-${key}`}>{t.closing(label)}</label>
                     <input
                       id={`close-${key}`}
                       type="time"
@@ -166,7 +165,7 @@ export function GymScheduleEditor({ gymSlug, gymId, defaultSchedule }: Props) {
         </div>
       </div>
       <p className="text-[13px] text-adm-muted">
-        Se usa para mostrar si el gimnasio está abierto y para calcular días perdidos en planes con días por semana.
+        {t.hint}
       </p>
     </section>
   )

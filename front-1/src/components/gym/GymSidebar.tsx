@@ -26,12 +26,14 @@ import {
   LifeBuoy,
   QrCode,
   Search,
+  Compass,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logoutAction } from '@/lib/logout'
 import { useTheme } from '@/components/providers/ThemeProvider'
 import { GymMark, initials } from '@/components/admin/ui'
+import { TOUR_START_EVENT } from '@/components/gym/GymTour'
 
 type NavItem = { label: string; icon: LucideIcon; path: string }
 type NavGroup = { label: string; items: NavItem[]; storeItem?: NavItem }
@@ -162,7 +164,7 @@ function NavContent({
         </Link>
       )}
 
-      <form role="search" onSubmit={handleSearch} className="mx-0.5 mb-[18px]">
+      <form role="search" onSubmit={handleSearch} data-tour="search" className="mx-0.5 mb-[18px]">
         <label className="flex min-h-10 items-center gap-2.5 rounded-lg border border-[#2a2a2c] bg-[#141416] px-3 text-[13px] text-[#a3a39d] focus-within:border-[#85857f]">
           <Search className="size-4 shrink-0" aria-hidden="true" />
           <span className="sr-only">Buscar miembro</span>
@@ -198,6 +200,7 @@ function NavContent({
                     key={path}
                     href={href}
                     onClick={onClose}
+                    data-tour={`nav-${path}`}
                     aria-current={active ? 'page' : undefined}
                     className={cn(
                       'flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm transition-colors',
@@ -224,6 +227,16 @@ function NavContent({
           <p className="text-[13px] font-semibold">{ROLE_LABEL[userRole ?? ''] ?? 'Mi cuenta'}</p>
           <p className="truncate text-xs text-[#85857f]">{userEmail}</p>
         </div>
+        <button
+          type="button"
+          data-tour="tour-button"
+          onClick={() => { onClose?.(); window.dispatchEvent(new Event(TOUR_START_EVENT)) }}
+          aria-label="Ver recorrido guiado"
+          title="Recorrido guiado"
+          className="flex size-8 items-center justify-center rounded-lg text-[#a3a39d] hover:bg-[#232326] hover:text-white"
+        >
+          <Compass className="size-4" />
+        </button>
         <button
           type="button"
           onClick={toggle}

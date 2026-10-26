@@ -4,6 +4,9 @@ import { cookies } from 'next/headers'
 import { updateTag } from 'next/cache'
 import { z } from 'zod'
 import { apiFetch, apiFetchWithError } from '@/lib/api'
+import { getT } from '@/i18n/server'
+import { commonMessages } from '@/i18n/common'
+import { settingsMessages } from './messages'
 
 const API_URL = process.env.API_URL ?? 'http://localhost:3001/api/v1'
 const BACKEND_URL = API_URL.replace(/\/api\/v\d+$/, '')
@@ -29,7 +32,8 @@ export async function uploadGymLogoAction(
   gymSlug: string,
   formData: FormData,
 ): Promise<{ error?: string; logoUrl?: string }> {
-  if (!gymId) return { error: 'ID de gimnasio no disponible. Recargá la página.' }
+  const t = (await getT(settingsMessages)).actions
+  if (!gymId) return { error: t.noGymId }
   const store = await cookies()
   const token = store.get('session')?.value ?? ''
 
@@ -42,12 +46,12 @@ export async function uploadGymLogoAction(
     })
   } catch (err) {
     console.error('[uploadGymLogoAction] fetch error:', err)
-    return { error: 'No se pudo conectar con el servidor' }
+    return { error: (await getT(commonMessages)).serverUnreachable }
   }
 
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    let msg = 'Error al subir el logo'
+    let msg = t.logoUploadFailed
     try { msg = (JSON.parse(text) as { message?: string }).message ?? msg } catch { /* noop */ }
     return { error: msg }
   }
@@ -63,7 +67,7 @@ export async function updateGymSettingsAction(
   gymId?: string,
 ): Promise<{ error?: string; newSlug?: string }> {
   const parsed = settingsSchema.safeParse(data)
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
+  if (!parsed.success) return { error: (await getT(commonMessages)).invalidData }
 
   const token = await getToken()
   const endpoint = gymId ? `/gyms/${gymId}` : `/gyms`
@@ -105,7 +109,7 @@ export async function changePasswordAction(
   newPassword: string,
 ): Promise<{ error?: string }> {
   const parsed = changePasswordSchema.safeParse({ currentPassword, newPassword })
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
+  if (!parsed.success) return { error: (await getT(commonMessages)).invalidData }
   const token = await getToken()
   const result = await apiFetchWithError('/auth/change-password', token, {
     method: 'PATCH',
@@ -139,7 +143,7 @@ export async function createGymAdminAction(
   email: string,
 ): Promise<{ error?: string; tempPassword?: string }> {
   const parsed = gymAdminSchema.safeParse({ name, email })
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
+  if (!parsed.success) return { error: (await getT(commonMessages)).invalidData }
   const token = await getToken()
   const result = await apiFetchWithError<{ id: string; tempPassword: string }>('/gyms/staff', token, {
     method: 'POST',

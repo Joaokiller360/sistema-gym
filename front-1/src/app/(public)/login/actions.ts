@@ -4,6 +4,8 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { verifyToken } from '@/lib/auth'
+import { isLocale } from '@/i18n/config'
+import { setLocaleCookie } from '@/i18n/server'
 
 const schema = z.object({
   email: z.string().email(),
@@ -22,6 +24,7 @@ export async function loginAction(data: LoginInput): Promise<{ error: string }> 
 
   let token: string
   let gymSlugFromBody: string | null = null
+  let language: unknown = null
   try {
     const res = await fetch(`${apiUrl}/auth/login`, {
       method: 'POST',
@@ -43,6 +46,7 @@ export async function loginAction(data: LoginInput): Promise<{ error: string }> 
 
     // Cache gym slug from response body as fallback if JWT doesn't include it
     gymSlugFromBody = body.gym?.slug ?? body.gymSlug ?? null
+    language = body.user?.language
   } catch {
     return { error: 'Error de conexión. Verificá tu internet e intentá de nuevo.' }
   }
@@ -74,6 +78,7 @@ export async function loginAction(data: LoginInput): Promise<{ error: string }> 
     path: '/',
     maxAge: Math.max(60, session.exp - Math.floor(Date.now() / 1000)),
   })
+  if (isLocale(language)) await setLocaleCookie(language)
 
   if (session.role === 'SUPER_ADMIN') {
     redirect('/admin/dashboard')

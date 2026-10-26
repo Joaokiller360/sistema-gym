@@ -6,6 +6,12 @@ import { verifyToken } from '@/lib/auth'
 import { apiFetch } from '@/lib/api'
 import { GymSidebar } from '@/components/gym/GymSidebar'
 import { FooterBar } from '@/components/shared/FooterBar'
+import { GymTour } from '@/components/gym/GymTour'
+import { shellMessages } from '@/components/gym/messages'
+import { LocaleProvider } from '@/i18n/client'
+import { isLocale } from '@/i18n/config'
+import { LocaleSync } from '@/i18n/LocaleSync'
+import { getLocale } from '@/i18n/server'
 import { Gym } from '@/types'
 
 interface PlatformSettings { saasName: string }
@@ -50,9 +56,15 @@ export default async function GymLayout({ children, params }: Props) {
   const gymRoles = ['GYM_OWNER', 'GYM_ADMIN', 'TRAINER', 'RECEPTIONIST']
   if (!isSuperAdmin && !gymRoles.includes(session.role)) notFound()
 
-  const gym = await apiFetch<Gym>(`/gyms/${gymSlug}`, token, {
-    next: { tags: [`gym-${gymSlug}`] },
-  })
+  const [gym, me, locale] = await Promise.all([
+    apiFetch<Gym>(`/gyms/${gymSlug}`, token, {
+      next: { tags: [`gym-${gymSlug}`] },
+    }),
+    apiFetch<{ tourCompletedAt?: string | null; language?: string }>('/auth/me', token, { silent: true }),
+    getLocale(),
+  ])
+  const t = shellMessages[locale]
+  const localeOutOfSync = isLocale(me?.language) && me.language !== locale
 
   if (!gym) notFound()
   // Use gymId (not slug) so auth survives slug renames without re-login
@@ -64,21 +76,24 @@ export default async function GymLayout({ children, params }: Props) {
   const gymLogo = gym.logoUrl
     ? gym.logoUrl.replace(/^https?:\/\/[^/]+/, '')
     : undefined
+  // New gym owners/admins get the guided tour once; anyone can replay it from the sidebar.
+  const autoTour = ['GYM_OWNER', 'GYM_ADMIN'].includes(session.role) && me?.tourCompletedAt === null
   const trialDaysLeft = isTrial && gym.trialEndsAt
     ? Math.max(0, Math.ceil((new Date(gym.trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
     : null
 
   return (
-    <>
+    <LocaleProvider locale={locale}>
+      {localeOutOfSync && <LocaleSync />}
       {/* Full-width top banner */}
       {isTrial && (
         <div className="fixed inset-x-0 top-0 z-50 flex h-8 items-center justify-center gap-1.5 border-b border-adm-warn-line bg-adm-warn-bg px-4 font-admin text-adm-warn-fg">
-          <span className="text-xs font-semibold tracking-wide">Prueba gratuita</span>
+          <span className="text-xs font-semibold tracking-wide">{t.trial}</span>
           {trialDaysLeft !== null && (
             <>
               <span className="text-xs opacity-60">·</span>
               <span className="font-admin-mono text-xs font-bold">
-                {trialDaysLeft === 0 ? 'último día' : `${trialDaysLeft} día${trialDaysLeft !== 1 ? 's' : ''} restante${trialDaysLeft !== 1 ? 's' : ''}`}
+                {trialDaysLeft === 0 ? t.trialLastDay : t.trialDaysLeft(trialDaysLeft)}
               </span>
             </>
           )}
@@ -86,13 +101,13 @@ export default async function GymLayout({ children, params }: Props) {
       )}
       {!isTrial && (gym.demoEnabled ?? false) && (
         <div className="fixed inset-x-0 top-0 z-50 flex h-8 items-center justify-center gap-1.5 border-b border-adm-info-line bg-adm-info-bg px-4 font-admin text-adm-info-fg">
-          <span className="text-xs font-semibold tracking-wide">Demo habilitada</span>
+          <span className="text-xs font-semibold tracking-wide">{t.demoEnabled}</span>
           <span className="text-xs opacity-60">·</span>
-          <span className="text-xs">Datos de ejemplo activos</span>
+          <span className="text-xs">{t.demoData}</span>
         </div>
       )}
 
-      <div className={`flex h-screen overflow-hidden bg-background${hasBanner ? ' pt-8' : ''}`}>
+      <div lang={locale} className={`flex h-screen overflow-hidden bg-background${hasBanner ? ' pt-8' : ''}`}>
         <GymSidebar
           gymSlug={gymSlug}
           gymName={gymName}
@@ -106,6 +121,7 @@ export default async function GymLayout({ children, params }: Props) {
           userRole={session.role}
           storeEnabled={gym.storeEnabled}
         />
+        <GymTour gymSlug={gymSlug} autoStart={autoTour} storeEnabled={gym.storeEnabled} />
         <main className={`flex-1 overflow-y-auto lg:pt-0 flex flex-col ${hasBanner ? 'pt-14' : 'pt-14'}`}>
           <div className="flex-1">
             {children}
@@ -113,6 +129,6 @@ export default async function GymLayout({ children, params }: Props) {
           <FooterBar />
         </main>
       </div>
-    </>
+    </LocaleProvider>
   )
 }

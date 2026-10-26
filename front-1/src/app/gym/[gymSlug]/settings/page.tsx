@@ -7,15 +7,16 @@ import { ChangePasswordForm } from './ChangePasswordForm'
 import { AdminsSection } from './AdminsSection'
 import { GymScheduleEditor } from './GymScheduleEditor'
 import { getGymAdminsAction } from './actions'
+import { settingsMessages } from './messages'
+import { LanguageSwitcher } from '@/components/gym/LanguageSwitcher'
+import { getT } from '@/i18n/server'
 
 interface CountryOption { code: string; label: string; timezone: string; utcOffset: string }
 interface GymStatus { timezone: string; localTime: string; isOpen: boolean | null }
 type Tab = 'gimnasio' | 'equipo'
 
-const TABS: { key: Tab; label: string }[] = [
-  { key: 'gimnasio', label: 'Gimnasio' },
-  { key: 'equipo', label: 'Equipo y acceso' },
-]
+// URL keys stay stable across languages; only the labels are translated.
+const TAB_KEYS: Tab[] = ['gimnasio', 'equipo']
 
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
 
@@ -40,6 +41,8 @@ export default async function SettingsPage({ params, searchParams }: Props) {
   const tab: Tab = rawTab === 'equipo' ? 'equipo' : 'gimnasio'
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value ?? ''
+  const t = (await getT(settingsMessages)).page
+  const tabLabel: Record<Tab, string> = { gimnasio: t.tabGym, equipo: t.tabTeam }
 
   const [gym, admins, countries, status] = await Promise.all([
     apiFetch<Gym>(`/gyms/${gymSlug}`, token, { next: { tags: [`gym-${gymSlug}`] } }),
@@ -55,8 +58,8 @@ export default async function SettingsPage({ params, searchParams }: Props) {
   const statusLabel = status?.isOpen == null
     ? null
     : status.isOpen
-      ? `Abierto${hours ? ` · cierra ${hours.close}` : ''}`
-      : `Cerrado${hours ? ` · abre ${hours.open}` : ''}`
+      ? `${t.open}${hours ? ` · ${t.closesAt(hours.close)}` : ''}`
+      : `${t.closed}${hours ? ` · ${t.opensAt(hours.open)}` : ''}`
 
   return (
     <div className="dark admin-surface min-h-full bg-adm-ground px-4 pb-14 pt-8 text-adm-ink sm:px-8">
@@ -70,7 +73,7 @@ export default async function SettingsPage({ params, searchParams }: Props) {
               : initials}
           </div>
           <div className="flex min-w-[220px] flex-1 flex-col gap-2">
-            <p className="font-admin-mono text-xs uppercase text-adm-muted">Configuración · /{gymSlug}</p>
+            <p className="font-admin-mono text-xs uppercase text-adm-muted">{t.eyebrow} · /{gymSlug}</p>
             <h1 className="text-[28px] font-black leading-tight tracking-[-0.02em] sm:text-[34px]">{gym?.name ?? '—'}</h1>
             <div className="flex flex-wrap gap-2">
               {statusLabel && (
@@ -86,24 +89,24 @@ export default async function SettingsPage({ params, searchParams }: Props) {
               </span>
               {gym?.subscriptionPlan && (
                 <span className="inline-flex h-[30px] items-center rounded-full border border-adm-line px-3 text-[13px] font-bold capitalize">
-                  Plan {gym.subscriptionPlan.toLowerCase()}
+                  {t.plan(gym.subscriptionPlan.toLowerCase())}
                 </span>
               )}
             </div>
           </div>
-          <nav aria-label="Secciones de configuración" className="flex gap-1 rounded-[14px] border border-adm-line bg-adm-ground p-1">
-            {TABS.map(t => {
-              const on = t.key === tab
+          <nav aria-label={t.tabsLabel} className="flex gap-1 rounded-[14px] border border-adm-line bg-adm-ground p-1">
+            {TAB_KEYS.map(key => {
+              const on = key === tab
               return (
                 <Link
-                  key={t.key}
-                  href={t.key === 'gimnasio' ? '?' : `?tab=${t.key}`}
+                  key={key}
+                  href={key === 'gimnasio' ? '?' : `?tab=${key}`}
                   aria-current={on ? 'page' : undefined}
                   className={`inline-flex h-11 items-center rounded-[10px] px-4 text-sm transition-colors ${
                     on ? 'bg-adm-ink font-extrabold text-adm-ground' : 'font-bold text-adm-muted hover:text-adm-ink'
                   }`}
                 >
-                  {t.label}
+                  {tabLabel[key]}
                 </Link>
               )
             })}
@@ -138,7 +141,8 @@ export default async function SettingsPage({ params, searchParams }: Props) {
             <div className="min-w-0 flex-[999_1_640px]">
               <AdminsSection initialAdmins={admins} />
             </div>
-            <div className="min-w-0 flex-[1_1_380px]">
+            <div className="flex min-w-0 flex-[1_1_380px] flex-col gap-5">
+              <LanguageSwitcher />
               <ChangePasswordForm />
             </div>
           </div>
