@@ -125,11 +125,12 @@ export class ReportsService {
 
     const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
 
-    const [membershipsSold, storeSales, storeCredits, activeMemberships, newMembers, churned, expiringNext7Days, attendancesSample, attendancesWeek] =
+    const [payments, storeSales, storeCredits, activeMemberships, newMembers, churned, expiringNext7Days, attendancesSample, attendancesWeek] =
       await Promise.all([
-        this.prisma.membership.findMany({
+        // Real money in: deleted payments (e.g. a cancelled membership) drop out
+        this.prisma.payment.findMany({
           where: { gymId, createdAt: { gte: startDate, lte: endDate } },
-          select: { createdAt: true, plan: { select: { price: true } } },
+          select: { amount: true, createdAt: true },
         }),
         this.prisma.productSale.findMany({
           where: { gymId, createdAt: { gte: startDate, lte: endDate } },
@@ -160,10 +161,9 @@ export class ReportsService {
         }),
       ]);
 
-    // revenueTrend — memberships sold in period, using plan price as revenue amount
+    // revenueTrend — member payments registered in period
     const rangeDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000));
-    const membershipPayments = membershipsSold.map(m => ({ amount: Number(m.plan.price), createdAt: m.createdAt }));
-    const revenueTrend = buildRevenueTrend(membershipPayments, startDate, endDate, rangeDays, query.granularity);
+    const revenueTrend = buildRevenueTrend(payments, startDate, endDate, rangeDays, query.granularity);
 
     // store trends
     const storeSalesPayments = storeSales.map(s => ({ amount: s.total, createdAt: s.createdAt }));

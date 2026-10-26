@@ -43,7 +43,7 @@ function NightDelta({ n }: { n: number | null }) {
   )
 }
 
-/** Membership revenue per bucket: current period in brand yellow, previous month (monthly view) in grey. */
+/** Member payments per bucket: current period in brand yellow, previous month (monthly view) in grey. */
 function HeroBars({ cur, prev, fmt }: {
   cur: { label: string; amount: number }[]
   prev: { label: string; amount: number }[] | null
@@ -182,7 +182,7 @@ export function AdvancedReports({ gymSlug, defaultMonth, view, gymTimezone, adva
 
   const currency = advancedCurrent?.currency ?? advancedPrevious?.currency ?? 'ARS'
   const fmt = (n: number) => `${currency} ${n.toLocaleString('es-AR')}`
-  // Revenue from memberships sold in period (plan price × count, via revenueTrend)
+  // Member payments registered in period (via revenueTrend); deleted payments drop out
   const curRevTotal = advancedCurrent?.revenueTrend.reduce((s, d) => s + d.amount, 0) ?? 0
   const prevRevTotal = advancedPrevious?.revenueTrend.reduce((s, d) => s + d.amount, 0) ?? 0
   // Store totals arrive in cents (not covered by the money interceptor)
