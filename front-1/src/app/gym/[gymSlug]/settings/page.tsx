@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { apiFetch } from '@/lib/api'
 import { Gym } from '@/types'
@@ -6,130 +7,142 @@ import { ChangePasswordForm } from './ChangePasswordForm'
 import { AdminsSection } from './AdminsSection'
 import { GymScheduleEditor } from './GymScheduleEditor'
 import { getGymAdminsAction } from './actions'
-import { Building2, Lock, Users, Clock, Globe, BadgeCheck } from 'lucide-react'
 
 interface CountryOption { code: string; label: string; timezone: string; utcOffset: string }
+interface GymStatus { timezone: string; localTime: string; isOpen: boolean | null }
+type Tab = 'gimnasio' | 'equipo'
+
+const TABS: { key: Tab; label: string }[] = [
+  { key: 'gimnasio', label: 'Gimnasio' },
+  { key: 'equipo', label: 'Equipo y acceso' },
+]
+
+const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
 
 const resolveLogoUrl = (url: string | null | undefined): string | null =>
   url ? url.replace(/^https?:\/\/[^/]+/, '') : null
 
-function SectionHeader({ icon: Icon, title, description }: {
-  icon: React.ElementType; title: string; description: string
-}) {
-  return (
-    <div className="flex items-center gap-3 pb-4 border-b border-zinc-100">
-      <div className="h-9 w-9 rounded-xl bg-zinc-100 flex items-center justify-center shrink-0">
-        <Icon className="h-4 w-4 text-zinc-500" />
-      </div>
-      <div>
-        <h2 className="text-sm font-bold text-zinc-800">{title}</h2>
-        <p className="text-xs text-zinc-400">{description}</p>
-      </div>
-    </div>
-  )
+/** Today's opening hours in the gym's timezone, from its saved weekly schedule. */
+function todayHours(schedule: Gym['schedule'], tz: string) {
+  const weekday = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(new Date()).toLowerCase().slice(0, 3)
+  const key = DAY_KEYS.find(k => k === weekday)
+  return key ? schedule?.[key] ?? null : null
 }
 
 interface Props {
   params: Promise<{ gymSlug: string }>
+  searchParams: Promise<{ tab?: string }>
 }
 
-export default async function SettingsPage({ params }: Props) {
+export default async function SettingsPage({ params, searchParams }: Props) {
   const { gymSlug } = await params
+  const { tab: rawTab } = await searchParams
+  const tab: Tab = rawTab === 'equipo' ? 'equipo' : 'gimnasio'
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value ?? ''
 
-  const [gym, admins, countries] = await Promise.all([
+  const [gym, admins, countries, status] = await Promise.all([
     apiFetch<Gym>(`/gyms/${gymSlug}`, token, { next: { tags: [`gym-${gymSlug}`] } }),
-    getGymAdminsAction(),
+    tab === 'equipo' ? getGymAdminsAction() : Promise.resolve([]),
     apiFetch<CountryOption[]>('/gyms/countries', token, { next: { revalidate: 86400 } }),
+    apiFetch<GymStatus>(`/gyms/${gymSlug}/status`, token, { silent: true }),
   ])
 
   const logoUrl = resolveLogoUrl(gym?.logoUrl)
   const initials = (gym?.name ?? 'G').split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
+  const tz = status?.timezone ?? gym?.timezone ?? 'UTC'
+  const hours = todayHours(gym?.schedule ?? null, tz)
+  const statusLabel = status?.isOpen == null
+    ? null
+    : status.isOpen
+      ? `Abierto${hours ? ` · cierra ${hours.close}` : ''}`
+      : `Cerrado${hours ? ` · abre ${hours.open}` : ''}`
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Configuración</h1>
-        <p className="text-muted-foreground text-sm mt-1">Ajustes generales, horarios y accesos del gimnasio</p>
-      </div>
+    <div className="dark admin-surface min-h-full bg-adm-ground px-4 pb-14 pt-8 text-adm-ink sm:px-8">
+      <div className="mx-auto flex max-w-[1360px] flex-col gap-5">
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-
-        {/* ── Left column (2/3) ── */}
-        <div className="lg:col-span-2 space-y-6">
-
-          {/* General */}
-          <div className="rounded-2xl border border-zinc-200 bg-white p-6 space-y-5">
-            <SectionHeader icon={Building2} title="General" description="Nombre, logo, dirección y moneda" />
-            <GymSettingsForm
-              gymSlug={gymSlug}
-              gymId={gym?.id ?? ''}
-              defaultName={gym?.name ?? ''}
-              defaultLogoUrl={logoUrl}
-              defaultCurrency={gym?.currency ?? 'USD'}
-              defaultAddress={gym?.address ?? null}
-              defaultCountry={gym?.country ?? null}
-              defaultTimezone={gym?.timezone ?? 'UTC'}
-              countries={countries ?? []}
-            />
+        <header className="flex flex-wrap items-center gap-5 rounded-[22px] border border-adm-line bg-adm-surface p-5 sm:p-6">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[20px] bg-adm-brand text-2xl font-black text-adm-night sm:h-[88px] sm:w-[88px] sm:rounded-3xl sm:text-[30px]">
+            {logoUrl
+              // eslint-disable-next-line @next/next/no-img-element
+              ? <img src={logoUrl} alt="" className="h-full w-full object-cover" />
+              : initials}
           </div>
-
-          {/* Schedule */}
-          <div className="rounded-2xl border border-zinc-200 bg-white p-6 space-y-5">
-            <SectionHeader icon={Clock} title="Horario del gimnasio" description="Días y horas de apertura" />
-            <GymScheduleEditor
-              gymSlug={gymSlug}
-              gymId={gym?.id ?? ''}
-              defaultSchedule={(gym?.schedule as any) ?? {}}
-            />
-          </div>
-
-        </div>
-
-        {/* ── Right column (1/3) ── */}
-        <div className="space-y-6">
-
-          {/* Gym summary card */}
-          <div className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-2xl bg-[#fffb00] flex items-center justify-center shrink-0 overflow-hidden">
-                {logoUrl
-                  ? <img src={logoUrl} alt="Logo" className="h-full w-full object-cover" />
-                  : <span className="text-sm font-black text-black">{initials}</span>
-                }
-              </div>
-              <div className="min-w-0">
-                <p className="font-bold text-sm text-zinc-800 truncate">{gym?.name ?? '—'}</p>
-                <p className="text-xs text-zinc-400 truncate">/{gymSlug}</p>
-              </div>
-            </div>
-            <div className="space-y-2 border-t border-zinc-100 pt-3">
-              <div className="flex items-center gap-2 text-xs text-zinc-500">
-                <Globe className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
-                <span className="truncate">{gym?.timezone ?? 'UTC'}</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-zinc-500">
-                <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
-                <span className="capitalize">{gym?.subscriptionPlan?.toLowerCase() ?? '—'}</span>
-              </div>
+          <div className="flex min-w-[220px] flex-1 flex-col gap-2">
+            <p className="font-admin-mono text-xs uppercase text-adm-muted">Configuración · /{gymSlug}</p>
+            <h1 className="text-[28px] font-black leading-tight tracking-[-0.02em] sm:text-[34px]">{gym?.name ?? '—'}</h1>
+            <div className="flex flex-wrap gap-2">
+              {statusLabel && (
+                <span className={`inline-flex h-[30px] items-center gap-1.5 rounded-full px-3 text-[13px] font-bold ${
+                  status?.isOpen ? 'bg-adm-ok-bg text-adm-ok-fg' : 'bg-adm-chip text-adm-muted'
+                }`}>
+                  <span className={`h-[7px] w-[7px] rounded-full ${status?.isOpen ? 'bg-[#2cc4b2]' : 'bg-adm-muted'}`} />
+                  {statusLabel}
+                </span>
+              )}
+              <span className="inline-flex h-[30px] items-center rounded-full bg-adm-chip px-3 font-admin-mono text-xs font-semibold text-adm-ink">
+                {tz}{status?.localTime ? ` · ${status.localTime}` : ''}
+              </span>
+              {gym?.subscriptionPlan && (
+                <span className="inline-flex h-[30px] items-center rounded-full border border-adm-line px-3 text-[13px] font-bold capitalize">
+                  Plan {gym.subscriptionPlan.toLowerCase()}
+                </span>
+              )}
             </div>
           </div>
+          <nav aria-label="Secciones de configuración" className="flex gap-1 rounded-[14px] border border-adm-line bg-adm-ground p-1">
+            {TABS.map(t => {
+              const on = t.key === tab
+              return (
+                <Link
+                  key={t.key}
+                  href={t.key === 'gimnasio' ? '?' : `?tab=${t.key}`}
+                  aria-current={on ? 'page' : undefined}
+                  className={`inline-flex h-11 items-center rounded-[10px] px-4 text-sm transition-colors ${
+                    on ? 'bg-adm-ink font-extrabold text-adm-ground' : 'font-bold text-adm-muted hover:text-adm-ink'
+                  }`}
+                >
+                  {t.label}
+                </Link>
+              )
+            })}
+          </nav>
+        </header>
 
-          {/* Seguridad */}
-          <div className="rounded-2xl border border-zinc-200 bg-white p-6 space-y-5">
-            <SectionHeader icon={Lock} title="Seguridad" description="Cambiar contraseña" />
-            <ChangePasswordForm />
+        {tab === 'gimnasio' ? (
+          <div className="flex flex-wrap items-start gap-5">
+            <div className="flex min-w-0 flex-[1_1_420px] flex-col gap-5">
+              <GymSettingsForm
+                gymSlug={gymSlug}
+                gymId={gym?.id ?? ''}
+                defaultName={gym?.name ?? ''}
+                defaultLogoUrl={logoUrl}
+                defaultCurrency={gym?.currency ?? 'USD'}
+                defaultAddress={gym?.address ?? null}
+                defaultCountry={gym?.country ?? null}
+                defaultTimezone={gym?.timezone ?? 'UTC'}
+                countries={countries ?? []}
+              />
+            </div>
+            <div className="min-w-0 flex-[999_1_640px]">
+              <GymScheduleEditor
+                gymSlug={gymSlug}
+                gymId={gym?.id ?? ''}
+                defaultSchedule={gym?.schedule ?? {}}
+              />
+            </div>
           </div>
-
-          {/* Administradores */}
-          <div className="rounded-2xl border border-zinc-200 bg-white p-6 space-y-5">
-            <SectionHeader icon={Users} title="Administradores" description="Acceso completo al panel" />
-            <AdminsSection initialAdmins={admins} />
+        ) : (
+          <div className="flex flex-wrap items-start gap-5">
+            <div className="min-w-0 flex-[999_1_640px]">
+              <AdminsSection initialAdmins={admins} />
+            </div>
+            <div className="min-w-0 flex-[1_1_380px]">
+              <ChangePasswordForm />
+            </div>
           </div>
-
-        </div>
+        )}
       </div>
     </div>
   )

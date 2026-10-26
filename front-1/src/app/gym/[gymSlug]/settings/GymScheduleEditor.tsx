@@ -21,6 +21,11 @@ const DAYS: { key: DayKey; label: string; short: string }[] = [
 
 const DEFAULT_HOURS: DayHours = { open: '06:00', close: '22:00' }
 
+function toMinutes(t: string) {
+  const [h, m] = t.split(':').map(Number)
+  return (h || 0) * 60 + (m || 0)
+}
+
 interface Props {
   gymSlug: string
   gymId: string
@@ -45,6 +50,15 @@ export function GymScheduleEditor({ gymSlug, gymId, defaultSchedule }: Props) {
     }))
   }
 
+  function copyMondayToWeekdays() {
+    setSchedule(prev => {
+      const mon = prev.mon ?? null
+      const next = { ...prev }
+      for (const key of ['tue', 'wed', 'thu', 'fri'] as const) next[key] = mon ? { ...mon } : null
+      return next
+    })
+  }
+
   function handleSave() {
     startTransition(async () => {
       const payload: Record<string, DayHours | null> = {}
@@ -55,70 +69,105 @@ export function GymScheduleEditor({ gymSlug, gymId, defaultSchedule }: Props) {
     })
   }
 
+  const openDays = DAYS.filter(d => schedule[d.key]).length
+  const weeklyMinutes = DAYS.reduce((sum, { key }) => {
+    const h = schedule[key]
+    return h ? sum + Math.max(0, toMinutes(h.close) - toMinutes(h.open)) : sum
+  }, 0)
+  const weeklyHours = Math.round(weeklyMinutes / 6) / 10
+
   return (
-    <div className="space-y-3">
-      <div className="rounded-2xl border border-zinc-200 overflow-hidden">
-        {DAYS.map(({ key, label, short }, i) => {
-          const enabled = !!schedule[key]
-          const hours = schedule[key] ?? DEFAULT_HOURS
-          return (
-            <div
-              key={key}
-              className={`flex items-center gap-3 px-4 py-3 transition-colors ${i !== 0 ? 'border-t border-zinc-100' : ''} ${enabled ? 'bg-white' : 'bg-zinc-50'}`}
-            >
-              {/* Toggle */}
-              <button
-                type="button"
-                onClick={() => toggleDay(key)}
-                aria-label={enabled ? `Desactivar ${label}` : `Activar ${label}`}
-                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${
-                  enabled ? 'bg-[#1fad9d]' : 'bg-zinc-200'
-                }`}
-              >
-                <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow ring-0 transition-transform ${enabled ? 'translate-x-4' : 'translate-x-0'}`} />
-              </button>
-
-              {/* Day label */}
-              <span className={`w-20 text-sm font-semibold hidden sm:block ${enabled ? 'text-zinc-800' : 'text-zinc-400'}`}>
-                {label}
-              </span>
-              <span className={`w-8 text-xs font-bold sm:hidden ${enabled ? 'text-zinc-800' : 'text-zinc-400'}`}>
-                {short}
-              </span>
-
-              {/* Time inputs */}
-              {enabled ? (
-                <div className="flex items-center gap-2 flex-1">
-                  <input
-                    type="time"
-                    value={hours.open}
-                    onChange={e => updateHour(key, 'open', e.target.value)}
-                    className="rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1fad9d]/40 focus:border-[#1fad9d] transition-all"
-                  />
-                  <span className="text-xs text-zinc-400 font-medium">—</span>
-                  <input
-                    type="time"
-                    value={hours.close}
-                    onChange={e => updateHour(key, 'close', e.target.value)}
-                    className="rounded-lg border border-zinc-200 bg-white px-2 py-1.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#1fad9d]/40 focus:border-[#1fad9d] transition-all"
-                  />
-                </div>
-              ) : (
-                <span className="flex-1 text-xs text-zinc-400">Cerrado</span>
-              )}
-            </div>
-          )
-        })}
+    <section aria-labelledby="schedule-h" className="flex flex-col gap-[18px] rounded-[20px] border border-adm-line bg-adm-surface p-[22px]">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <h2 id="schedule-h" className="text-[17px] font-extrabold">Horario semanal</h2>
+          <p className="font-admin-mono text-[13px] text-adm-muted">
+            {openDays} {openDays === 1 ? 'día' : 'días'} · {weeklyHours.toLocaleString('es')} h por semana
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={copyMondayToWeekdays}
+            disabled={isPending}
+            className="h-10 rounded-[10px] border border-adm-line px-3.5 text-[13px] font-bold transition-colors hover:bg-adm-chip disabled:opacity-50"
+          >
+            Copiar lunes a días hábiles
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isPending}
+            className="h-10 rounded-[10px] bg-adm-brand px-4 text-[13px] font-black text-adm-night transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            {isPending ? 'Guardando…' : 'Guardar horario'}
+          </button>
+        </div>
       </div>
 
-      <button
-        type="button"
-        onClick={handleSave}
-        disabled={isPending}
-        className="rounded-xl bg-black px-6 py-2.5 text-sm font-bold text-white hover:bg-zinc-800 disabled:opacity-50 transition-all"
-      >
-        {isPending ? 'Guardando…' : 'Guardar horario'}
-      </button>
-    </div>
+      <div className="-mx-1 overflow-x-auto px-1 pb-1">
+        <div className="grid min-w-[640px] grid-cols-[36px_repeat(7,minmax(0,1fr))] gap-2">
+          <div className="flex h-[260px] flex-col justify-between pt-[34px] font-admin-mono text-[11px] text-adm-muted" aria-hidden="true">
+            <span>00</span><span>06</span><span>12</span><span>18</span><span>24</span>
+          </div>
+          {DAYS.map(({ key, label, short }) => {
+            const enabled = !!schedule[key]
+            const hours = schedule[key] ?? DEFAULT_HOURS
+            const top = (toMinutes(hours.open) / 1440) * 100
+            const height = Math.max(0, ((toMinutes(hours.close) - toMinutes(hours.open)) / 1440) * 100)
+            return (
+              <div key={key} className="flex min-w-0 flex-col gap-2">
+                <p className="flex h-[26px] items-center justify-center text-[13px] font-extrabold uppercase tracking-[0.06em] text-adm-ink">{short}</p>
+                <div className="relative h-[226px] overflow-hidden rounded-xl border border-adm-line bg-adm-ground" aria-hidden="true">
+                  {enabled && (
+                    <div
+                      className={`absolute inset-x-1.5 rounded-lg ${key === 'mon' ? 'bg-adm-brand' : 'border border-adm-muted/40 bg-adm-line'}`}
+                      style={{ top: `${top}%`, height: `${height}%` }}
+                    />
+                  )}
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={enabled}
+                  aria-label={enabled ? `Cerrar ${label}` : `Abrir ${label}`}
+                  onClick={() => toggleDay(key)}
+                  className={`h-10 rounded-[10px] text-xs font-extrabold transition-colors ${
+                    enabled ? 'border border-adm-line bg-adm-subtle text-adm-ink' : 'border border-dashed border-adm-line text-adm-muted hover:text-adm-ink'
+                  }`}
+                >
+                  {enabled ? 'Abierto' : 'Cerrado'}
+                </button>
+                {enabled ? (
+                  <div className="flex flex-col gap-1">
+                    <label className="sr-only" htmlFor={`open-${key}`}>Apertura {label}</label>
+                    <input
+                      id={`open-${key}`}
+                      type="time"
+                      value={hours.open}
+                      onChange={e => updateHour(key, 'open', e.target.value)}
+                      className="h-9 w-full rounded-lg border border-adm-line bg-adm-ground px-1 text-center font-admin-mono text-[13px] font-bold text-adm-ink outline-none [color-scheme:dark] focus:border-adm-brand"
+                    />
+                    <label className="sr-only" htmlFor={`close-${key}`}>Cierre {label}</label>
+                    <input
+                      id={`close-${key}`}
+                      type="time"
+                      value={hours.close}
+                      onChange={e => updateHour(key, 'close', e.target.value)}
+                      className="h-9 w-full rounded-lg border border-adm-line bg-adm-ground px-1 text-center font-admin-mono text-[13px] font-bold text-adm-ink outline-none [color-scheme:dark] focus:border-adm-brand"
+                    />
+                  </div>
+                ) : (
+                  <p className="flex h-[76px] items-center justify-center font-admin-mono text-[13px] text-adm-muted">—</p>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+      <p className="text-[13px] text-adm-muted">
+        Se usa para mostrar si el gimnasio está abierto y para calcular días perdidos en planes con días por semana.
+      </p>
+    </section>
   )
 }
