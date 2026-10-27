@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef, useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { Plus, Trash2, Check, X, GripVertical, Star, Tag } from 'lucide-react'
 import { updateSubscriptionPlanAction, deleteSubscriptionPlanAction, createSubscriptionPlanAction, setSubscriptionPlanDiscountAction, toggleSubscriptionPlanDiscountAction } from './actions'
 import { createBlockHandlers } from '@/lib/input-validation'
@@ -275,7 +274,6 @@ function PlanEditorPanel({
   plan: SubscriptionPlan | null
   onClose: () => void
 }) {
-  const router = useRouter()
   const ref = useRef<HTMLElement>(null)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -307,7 +305,7 @@ function PlanEditorPanel({
         ? await updateSubscriptionPlanAction(plan.id, { ...common, isActive: fields.isActive }, plan.key)
         : await createSubscriptionPlanAction({ ...common, key: planKey.toUpperCase().replace(/\s+/g, '_') })
       if (res.error) { setError(res.error) }
-      else { onClose(); router.refresh() }
+      else onClose()
     })
   }
 
@@ -346,7 +344,6 @@ function PlanCard({
   editing: boolean
   onEdit: () => void
 }) {
-  const router = useRouter()
   const [discountOpen, setDiscountOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -359,7 +356,6 @@ function PlanCard({
     startTransition(async () => {
       await deleteSubscriptionPlanAction(plan.id)
       setDeleteOpen(false)
-      router.refresh()
     })
   }
 
@@ -367,7 +363,6 @@ function PlanCard({
     setDiscountActive(v => !v)
     startTransition(async () => {
       await toggleSubscriptionPlanDiscountAction(plan.id)
-      router.refresh()
     })
   }
 
@@ -378,7 +373,6 @@ function PlanCard({
     startTransition(async () => {
       const res = await setSubscriptionPlanDiscountAction(plan.id, { discountPercent: pct, ...(yearlyValue !== undefined && { yearlyPrice: yearlyValue }) })
       if (res.error) { setDiscountError(res.error); return }
-      router.refresh()
       setDiscountOpen(false)
     })
   }

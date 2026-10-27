@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
+import { canAccessSection, gymHomePath } from '@/lib/gym-access'
 
 const PUBLIC_PATHS = ['/login', '/unauthorized', '/inicio', '/terminos']
 
@@ -29,12 +30,17 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
-  const gymSlugMatch = pathname.match(/^\/gym\/([^/]+)/)
+  const gymSlugMatch = pathname.match(/^\/gym\/([^/]+)\/?(.*)$/)
   if (gymSlugMatch) {
     const urlSlug = gymSlugMatch[1]
     if (session.role === 'SUPER_ADMIN') return NextResponse.next()
     if (!GYM_ROLES.includes(session.role as typeof GYM_ROLES[number]) || session.gymSlug !== urlSlug) {
       return NextResponse.redirect(new URL('/unauthorized', request.url))
+    }
+    // Front-desk roles only get their sections; anything else sends them to their home
+    const home = gymHomePath(session.role, urlSlug)
+    if (!canAccessSection(session.role, gymSlugMatch[2]) && pathname !== home) {
+      return NextResponse.redirect(new URL(home, request.url))
     }
   }
 

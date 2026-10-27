@@ -27,6 +27,8 @@ import {
   QrCode,
   Search,
   Compass,
+  Banknote,
+  UserCog,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -34,17 +36,19 @@ import { logoutAction } from '@/lib/logout'
 import { useTheme } from '@/components/providers/ThemeProvider'
 import { GymMark, initials } from '@/components/admin/ui'
 import { TOUR_START_EVENT } from '@/components/gym/GymTour'
+import { canAccessSection, isStaffRole } from '@/lib/gym-access'
 import { useT } from '@/i18n/client'
 import { shellMessages } from './messages'
 
 type NavKey = keyof (typeof shellMessages)['es']['nav']
-type NavItem = { label: NavKey; icon: LucideIcon; path: string }
+type NavItem = { label: NavKey; icon: LucideIcon; path: string; staffOnly?: boolean }
 type NavGroup = { label: NavKey; items: NavItem[]; storeItem?: NavItem }
 
 const BASE_NAV_GROUPS: NavGroup[] = [
   {
     label: 'main',
     items: [
+      { label: 'charge', icon: Banknote, path: 'payments/new', staffOnly: true },
       { label: 'dashboard', icon: LayoutDashboard, path: 'dashboard' },
       { label: 'members', icon: Users, path: 'members' },
       { label: 'memberships', icon: CreditCard, path: 'memberships' },
@@ -70,6 +74,7 @@ const BASE_NAV_GROUPS: NavGroup[] = [
       { label: 'communications', icon: MessageSquare, path: 'communications' },
       { label: 'settings', icon: Settings, path: 'settings' },
       { label: 'support', icon: LifeBuoy, path: 'support' },
+      { label: 'account', icon: UserCog, path: 'account', staffOnly: true },
     ],
   },
 ]
@@ -180,9 +185,11 @@ function NavContent({
 
       <nav aria-label={t.nav.main} className="flex flex-1 flex-col gap-[18px] overflow-y-auto">
         {BASE_NAV_GROUPS.map((group) => {
-          const items = group.storeItem && storeEnabled
+          const items = (group.storeItem && storeEnabled
             ? [group.items[0], group.storeItem, ...group.items.slice(1)]
             : group.items
+          ).filter(i => canAccessSection(userRole, i.path) && (!i.staffOnly || isStaffRole(userRole)))
+          if (items.length === 0) return null
           return (
             <div key={group.label} className="flex flex-col gap-0.5">
               <p className="px-3 pb-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-[#85857f]">{t.nav[group.label]}</p>
@@ -266,7 +273,7 @@ export function GymSidebar({ gymSlug, gymName, gymLogo, gymPlan, hasBanner, user
   // ⌘K / Ctrl+K focuses the member search (opens the drawer on small screens).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() !== 'k' || !(e.metaKey || e.ctrlKey)) return
+      if (e.key?.toLowerCase() !== 'k' || !(e.metaKey || e.ctrlKey)) return
       e.preventDefault()
       const input = searchRef.current
       if (input && input.offsetParent !== null) input.focus()

@@ -78,7 +78,6 @@ export function MemberPanel({
             : t.daysLeft(name, res.visitsRemaining),
       )
       setData(d => d && { ...d, checkIns: [new Date().toISOString(), ...d.checkIns] })
-      router.refresh()
     })
   }
 

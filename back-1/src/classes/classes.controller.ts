@@ -24,14 +24,14 @@ export class ClassesController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.GYM_OWNER)
   create(@Req() req: any, @Body() body: CreateClassDto) {
     return this.classesService.create(req.gymId, body);
   }
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.GYM_OWNER)
   update(@Param('id') id: string, @Req() req: any, @Body() body: UpdateClassDto) {
     return this.classesService.update(id, req.gymId, body);
   }

@@ -1,7 +1,6 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { Plus, Search, Download, ChevronLeft, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
@@ -70,7 +69,6 @@ function PaymentDialog({
   open: boolean
   onClose: () => void
 }) {
-  const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [gymId, setGymId] = useState(initialGymId ?? '')
   const [method, setMethod] = useState<Method>('CASH')
@@ -98,7 +96,6 @@ function PaymentDialog({
       } else {
         toast.success('Pago registrado y suscripción renovada.')
         onClose()
-        router.refresh()
       }
     })
   }

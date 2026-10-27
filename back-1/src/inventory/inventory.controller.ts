@@ -24,14 +24,14 @@ export class InventoryController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.GYM_OWNER)
   create(@Req() req: any, @Body() body: CreateInventoryItemDto) {
     return this.inventoryService.create(req.gymId, body);
   }
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.GYM_OWNER)
   update(@Param('id') id: string, @Req() req: any, @Body() body: UpdateInventoryItemDto) {
     return this.inventoryService.update(id, req.gymId, body);
   }
@@ -45,7 +45,7 @@ export class InventoryController {
 
   @Patch(':id/maintenance')
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.GYM_OWNER)
   registerMaintenance(@Param('id') id: string, @Req() req: any, @Body() body: CreateMaintenanceDto) {
     return this.inventoryService.registerMaintenance(id, req.gymId, body);
   }

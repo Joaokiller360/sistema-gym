@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { LogIn, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { checkInAction } from './actions'
@@ -22,7 +21,6 @@ interface Props {
 
 export function CheckInPanel({ gymSlug, members, groups, checkedIn = {}, onSuccess }: Props) {
   const safeHandlers = createHandlers('search')
-  const router = useRouter()
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Member | null>(null)
   const [selectedGroup, setSelectedGroup] = useState<string>('')
@@ -57,7 +55,6 @@ export function CheckInPanel({ gymSlug, members, groups, checkedIn = {}, onSucce
         }
         setSearch('')
         setSelected(null)
-        router.refresh()
         onSuccess?.()
       }
     })

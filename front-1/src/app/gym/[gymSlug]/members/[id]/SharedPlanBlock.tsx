@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { Users } from 'lucide-react'
 import { toast } from 'sonner'
 import type { MembershipWithRelations } from '@/types'
@@ -19,7 +18,6 @@ interface Props {
 }
 
 export function SharedPlanBlock({ gymSlug, membership, candidates, busyIds }: Props) {
-  const router = useRouter()
   const [picked, setPicked] = useState<string[]>([])
   const [isPending, startTransition] = useTransition()
   const t = useT(membersMessages).shared
@@ -38,7 +36,6 @@ export function SharedPlanBlock({ gymSlug, membership, candidates, busyIds }: Pr
       if (res.error) { toast.error(res.error); return }
       toast.success(t.added)
       setPicked([])
-      router.refresh()
     })
   }
 

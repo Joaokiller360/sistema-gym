@@ -24,21 +24,21 @@ export class StoreController {
 
   @Post('products')
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.GYM_OWNER)
   createProduct(@Req() req: any, @Body() body: CreateProductDto) {
     return this.storeService.createProduct(req.gymId, body);
   }
 
   @Patch('products/:id')
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.GYM_OWNER)
   updateProduct(@Param('id') id: string, @Req() req: any, @Body() body: UpdateProductDto) {
     return this.storeService.updateProduct(id, req.gymId, body);
   }
 
   @Delete('products/:id')
   @UseGuards(RolesGuard)
-  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER)
   deleteProduct(@Param('id') id: string, @Req() req: any) {
     return this.storeService.deleteProduct(id, req.gymId);
   }
@@ -56,7 +56,7 @@ export class StoreController {
 
   @Delete('sales/:id')
   @UseGuards(RolesGuard)
-  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER)
   deleteSale(@Param('id') id: string, @Req() req: any) {
     return this.storeService.deleteSale(id, req.gymId);
   }
@@ -68,6 +68,8 @@ export class StoreController {
   }
 
   @Get('cuts/monthly')
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER)
   getMonthlyCut(@Req() req: any, @Query('month') month: string) {
     const now = new Date();
     const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -82,21 +84,21 @@ export class StoreController {
 
   @Post('categories')
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.GYM_OWNER)
   createCategory(@Req() req: any, @Body() body: CreateCategoryDto) {
     return this.storeService.createCategory(req.gymId, body);
   }
 
   @Patch('categories/:id')
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.GYM_OWNER)
   updateCategory(@Param('id') id: string, @Req() req: any, @Body() body: UpdateCategoryDto) {
     return this.storeService.updateCategory(id, req.gymId, body);
   }
 
   @Delete('categories/:id')
   @UseGuards(RolesGuard)
-  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER)
   deleteCategory(@Param('id') id: string, @Req() req: any) {
     return this.storeService.deleteCategory(id, req.gymId);
   }

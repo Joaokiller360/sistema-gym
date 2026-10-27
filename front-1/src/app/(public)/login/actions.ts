@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { verifyToken } from '@/lib/auth'
 import { isLocale } from '@/i18n/config'
 import { setLocaleCookie } from '@/i18n/server'
+import { gymHomePath } from '@/lib/gym-access'
 
 const schema = z.object({
   email: z.string().email(),
@@ -87,5 +88,5 @@ export async function loginAction(data: LoginInput): Promise<{ error: string }> 
   const gymSlug = session.gymSlug ?? gymSlugFromBody
   if (!gymSlug) return { error: 'No se encontró el gimnasio asociado a tu cuenta' }
 
-  redirect(`/gym/${gymSlug}/dashboard`)
+  redirect(gymHomePath(session.role, gymSlug))
 }

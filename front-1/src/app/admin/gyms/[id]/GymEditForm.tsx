@@ -107,7 +107,6 @@ export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, plan
 
       setOpen(false)
       setNewOwnerPassword('')
-      router.refresh()
     })
   }
 

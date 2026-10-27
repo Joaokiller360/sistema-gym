@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Inbox, Search } from 'lucide-react'
 import { updateTicketAction } from './actions'
@@ -48,7 +47,6 @@ function timeAgo(iso: string) {
 }
 
 function TicketDetail({ ticket }: { ticket: SupportTicket }) {
-  const router = useRouter()
   const [status, setStatus] = useState(ticket.status)
   const [adminNotes, setAdminNotes] = useState(ticket.adminNotes ?? '')
   const [isPending, startTransition] = useTransition()
@@ -61,7 +59,6 @@ function TicketDetail({ ticket }: { ticket: SupportTicket }) {
         toast.error(res.error)
       } else {
         toast.success('Ticket actualizado')
-        router.refresh()
       }
     })
   }

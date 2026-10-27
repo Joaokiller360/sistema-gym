@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { Plus, Trash2 } from 'lucide-react'
 import { createTrainerAction, deleteTrainerAction } from './actions'
 import { createHandlers } from '@/lib/input-validation'
@@ -25,7 +24,6 @@ interface Props {
 }
 
 export function TrainerCreateButton({ gymSlug }: Props) {
-  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -61,7 +59,6 @@ export function TrainerCreateButton({ gymSlug }: Props) {
       } else {
         setOpen(false)
         setForm({ firstName: '', lastName: '', email: '', phone: '', specialty: '' })
-        router.refresh()
       }
     })
   }
@@ -135,7 +132,6 @@ export function TrainerCreateButton({ gymSlug }: Props) {
 }
 
 export function DeleteTrainerButton({ gymSlug, trainerId }: { gymSlug: string; trainerId: string }) {
-  const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const t = useT(trainersMessages)
@@ -145,7 +141,6 @@ export function DeleteTrainerButton({ gymSlug, trainerId }: { gymSlug: string; t
     startTransition(async () => {
       await deleteTrainerAction(gymSlug, trainerId)
       setDeleteOpen(false)
-      router.refresh()
     })
   }
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { ArrowLeft, ArrowRight, X } from 'lucide-react'
 import { completeTourAction } from '@/lib/tour'
+import { canAccessSection, isStaffRole } from '@/lib/gym-access'
 import { useT } from '@/i18n/client'
 import { tourMessages } from './tourMessages'
 
@@ -17,11 +18,17 @@ interface TourStep {
   /** Section opened behind the overlay, relative to /gym/[slug] */
   path?: string
   storeOnly?: boolean
+  /** Only for front-desk roles (owners already reach it from the dashboard) */
+  staffOnly?: boolean
+  /** Owner-only intro/outro; front-desk roles get the `<id>Staff` variant */
+  ownerOnly?: boolean
 }
 
 // Texts live in tourMessages, keyed by id.
 const STEPS: TourStep[] = [
-  { id: 'welcome', path: 'dashboard' },
+  { id: 'welcome', path: 'dashboard', ownerOnly: true },
+  { id: 'welcomeStaff', path: 'attendance', staffOnly: true },
+  { id: 'charge', target: 'nav-payments/new', path: 'payments/new', staffOnly: true },
   { id: 'dashboard', target: 'nav-dashboard', path: 'dashboard' },
   { id: 'settings', target: 'nav-settings', path: 'settings' },
   { id: 'plans', target: 'nav-plans', path: 'plans' },
@@ -39,7 +46,8 @@ const STEPS: TourStep[] = [
   { id: 'support', target: 'nav-support', path: 'support' },
   { id: 'search', target: 'search' },
   { id: 'tourButton', target: 'tour-button' },
-  { id: 'done', path: 'settings' },
+  { id: 'done', path: 'settings', ownerOnly: true },
+  { id: 'doneStaff', path: 'attendance', staffOnly: true },
 ]
 
 const CARD_W = 360
@@ -56,13 +64,18 @@ interface Props {
   gymSlug: string
   autoStart: boolean
   storeEnabled?: boolean
+  userRole?: string
 }
 
-export function GymTour({ gymSlug, autoStart, storeEnabled }: Props) {
+export function GymTour({ gymSlug, autoStart, storeEnabled, userRole }: Props) {
   const router = useRouter()
   const pathname = usePathname()
   const t = useT(tourMessages)
-  const steps = STEPS.filter(s => !s.storeOnly || storeEnabled).map(s => ({ ...s, ...t.steps[s.id] }))
+  const staff = isStaffRole(userRole)
+  // Only the sections this role can open (same rules as the sidebar and the proxy)
+  const steps = STEPS
+    .filter(s => (!s.storeOnly || storeEnabled) && (staff ? !s.ownerOnly : !s.staffOnly) && (!s.path || canAccessSection(userRole, s.path)))
+    .map(s => ({ ...s, ...t.steps[s.id] }))
 
   const [open, setOpen] = useState(autoStart)
   const [index, setIndex] = useState(0)
@@ -241,7 +254,7 @@ export function GymTour({ gymSlug, autoStart, storeEnabled }: Props) {
               onClick={() => (last ? close() : goTo(index + 1))}
               className="inline-flex h-10 items-center gap-1.5 rounded-[10px] bg-adm-brand px-4 text-sm font-black text-adm-night hover:opacity-90"
             >
-              {index === 0 ? t.start : last ? t.finish : t.next}
+              {index === 0 ? t.start : last ? (staff ? t.finishStaff : t.finish) : t.next}
               {!last && <ArrowRight className="size-4" strokeWidth={2.6} />}
             </button>
           </div>

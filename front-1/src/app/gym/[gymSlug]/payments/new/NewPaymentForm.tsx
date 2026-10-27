@@ -143,10 +143,10 @@ export function NewPaymentForm({
           return (
             <div key={label} className="flex items-center gap-2">
               {i > 0 && <ChevronRight className="h-3 w-3 text-zinc-300" />}
-              <span className={`flex items-center gap-1.5 ${active ? 'text-black' : done ? 'text-[#1fad9d]' : 'text-zinc-400'}`}>
+              <span className={`flex items-center gap-1.5 ${active ? 'text-black dark:text-foreground' : done ? 'text-[#1fad9d]' : 'text-zinc-400'}`}>
                 {done
                   ? <CheckCircle2 className="h-3.5 w-3.5" />
-                  : <span className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-black border-2 ${active ? 'border-black bg-black text-white' : 'border-zinc-300 text-zinc-400'}`}>{n}</span>
+                  : <span className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-black border-2 ${active ? 'border-black bg-black text-white dark:border-foreground dark:bg-foreground dark:text-background' : 'border-zinc-300 text-zinc-400'}`}>{n}</span>
                 }
                 {label}
               </span>
@@ -156,7 +156,7 @@ export function NewPaymentForm({
       </div>
 
       {/* Step 1 — Select member */}
-      <div className={`rounded-2xl border bg-white overflow-hidden transition-all ${step === 1 ? 'border-black' : 'border-zinc-200'}`}>
+      <div className={`rounded-2xl border bg-white overflow-hidden transition-all ${step === 1 ? 'border-black dark:border-foreground' : 'border-zinc-200'}`}>
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-100">
           <span className="text-sm font-bold">{t.step1}</span>
           {selectedMember && (
@@ -222,7 +222,7 @@ export function NewPaymentForm({
 
       {/* Step 2 — Select plan */}
       {step >= 2 && (
-        <div className={`rounded-2xl border bg-white overflow-hidden transition-all ${step === 2 ? 'border-black' : 'border-zinc-200'}`}>
+        <div className={`rounded-2xl border bg-white overflow-hidden transition-all ${step === 2 ? 'border-black dark:border-foreground' : 'border-zinc-200'}`}>
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-100">
             <span className="text-sm font-bold">{t.step2}</span>
             {selectedPlan && (
@@ -278,7 +278,7 @@ export function NewPaymentForm({
 
       {/* Step 3 — Vigencia + payment method */}
       {step === 3 && selectedPlan && (
-        <div className="rounded-2xl border border-black bg-white overflow-hidden">
+        <div className="rounded-2xl border border-black bg-white overflow-hidden dark:border-foreground">
           <div className="px-5 py-3.5 border-b border-zinc-100">
             <span className="text-sm font-bold">{t.step3}</span>
           </div>
@@ -324,8 +324,8 @@ export function NewPaymentForm({
               {endDate && (
                 <div className="rounded-xl bg-[#1fad9d]/8 border border-[#1fad9d]/20 px-4 py-3 flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-widest text-[#0e7a70] mb-1">{t.validity}</p>
-                    <p className="text-sm font-semibold text-[#0e7a70]">
+                    <p className="text-xs font-bold uppercase tracking-widest text-[#0e7a70] dark:text-[#5eead4] mb-1">{t.validity}</p>
+                    <p className="text-sm font-semibold text-[#0e7a70] dark:text-[#5eead4]">
                       {fmtDate(new Date(startDate), intl)} → {fmtDate(endDate, intl)}
                     </p>
                   </div>
@@ -368,7 +368,7 @@ export function NewPaymentForm({
                     disabled={isPending}
                     className={`rounded-xl py-2.5 text-xs font-semibold border-2 transition-all ${
                       method === m
-                        ? 'border-black bg-black text-white'
+                        ? 'border-black bg-black text-white dark:border-foreground dark:bg-foreground dark:text-background'
                         : 'border-zinc-200 text-zinc-600 hover:border-zinc-300'
                     }`}
                   >
@@ -391,7 +391,7 @@ export function NewPaymentForm({
             <button
               type="submit"
               disabled={isPending}
-              className="w-full rounded-xl bg-black py-3 text-sm font-bold text-white hover:bg-zinc-800 disabled:opacity-50 transition-all active:scale-[0.98]"
+              className="w-full rounded-xl bg-black py-3 text-sm font-bold text-white hover:bg-zinc-800 dark:bg-foreground dark:text-background dark:hover:bg-foreground/85 disabled:opacity-50 transition-all active:scale-[0.98]"
             >
               {isPending ? t.registering : t.submit}
             </button>

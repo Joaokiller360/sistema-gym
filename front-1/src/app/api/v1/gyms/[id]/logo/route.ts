@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { verifyToken } from '@/lib/auth'
 
 const BACKEND = process.env.API_URL ?? 'http://localhost:3001/api/v1'
@@ -35,8 +36,12 @@ export async function POST(
     return NextResponse.json({ error: msg }, { status: res.status })
   }
 
-  const data = (await res.json().catch(() => ({}))) as { logoUrl?: string; url?: string }
+  const data = (await res.json().catch(() => ({}))) as { logoUrl?: string; url?: string; slug?: string }
   const raw = data.logoUrl ?? data.url ?? ''
   const logoUrl = raw.startsWith('/') ? `${BACKEND_BASE}${raw}` : raw
+  // Expire now so the gym sidebar and the admin lists show the new logo on the next render
+  if (data.slug) revalidateTag(`gym-${data.slug}`, { expire: 0 })
+  revalidateTag('admin-gyms', { expire: 0 })
+  revalidateTag(`admin-gym-${id}`, { expire: 0 })
   return NextResponse.json({ logoUrl })
 }

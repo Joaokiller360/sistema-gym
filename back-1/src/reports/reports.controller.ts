@@ -13,7 +13,7 @@ import { AdvancedReportsGuard } from './guards/advanced-reports.guard';
 @SkipThrottle()
 @Controller('reports')
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
-@Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN)
+@Roles(Role.SUPER_ADMIN, Role.GYM_OWNER)
 export class ReportsController {
   constructor(
     private readonly reportsService: ReportsService,

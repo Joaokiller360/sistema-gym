@@ -5,7 +5,7 @@ import { apiFetch } from '@/lib/api'
 import { AdminSidebar, type AdminNavCounts } from '@/components/admin/AdminSidebar'
 import { FooterBar } from '@/components/shared/FooterBar'
 
-interface PlatformSettings { saasName: string }
+interface PlatformSettings { saasName: string; logoUrl?: string | null }
 interface DashboardStats { totalGyms: number }
 interface WithStatus { status: string }
 type ListResponse<T> = T[] | { data: T[] }
@@ -50,7 +50,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="admin-shell flex h-screen overflow-hidden">
-      <AdminSidebar user={{ email: session.email }} saasName={saasName} counts={counts} />
+      <AdminSidebar user={{ email: session.email }} saasName={saasName} logoUrl={platform?.logoUrl} counts={counts} />
       <main className="flex flex-1 flex-col overflow-y-auto pt-14 lg:pt-0">
         <div className="flex-1">{children}</div>
         <FooterBar />

@@ -115,7 +115,6 @@ export function MemberModal({
       setIsOpen(false)
       setTimeout(() => {
         router.push(`/gym/${gymSlug}/members`)
-        router.refresh()
       }, 120)
     })
   }

@@ -44,7 +44,7 @@ export default async function PlansPage({ params, searchParams }: Props) {
   const featured = plans.find(p => p.isFeatured && p.isActive) ?? null
 
   return (
-    <div className="dark admin-surface min-h-full bg-adm-ground px-4 pb-14 pt-8 text-adm-ink sm:px-8 sm:pt-9">
+    <div className="admin-surface min-h-full bg-adm-ground px-4 pb-14 pt-8 text-adm-ink sm:px-8 sm:pt-9">
       <div className="mx-auto flex max-w-[1360px] flex-col gap-5">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-baseline gap-x-3.5 gap-y-1">

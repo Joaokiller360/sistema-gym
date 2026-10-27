@@ -79,6 +79,8 @@ export const settingsMessages = defineMessages({
       password: 'Contraseña',
       copyEmail: 'Copiar email',
       copyPassword: 'Copiar contraseña',
+      emailSent: (email: string) => `Le enviamos estas credenciales a ${email}.`,
+      emailFailed: 'No pudimos enviar el correo. Comparte estas credenciales a mano.',
       gotIt: 'Entendido',
     },
     password: {
@@ -182,6 +184,8 @@ export const settingsMessages = defineMessages({
       password: 'Password',
       copyEmail: 'Copy email',
       copyPassword: 'Copy password',
+      emailSent: (email: string) => `We emailed these credentials to ${email}.`,
+      emailFailed: 'We couldn’t send the email. Share these credentials by hand.',
       gotIt: 'Got it',
     },
     password: {

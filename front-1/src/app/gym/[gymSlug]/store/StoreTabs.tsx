@@ -12,7 +12,7 @@ import { useIntlLocale, useT } from '@/i18n/client'
 import { commonMessages } from '@/i18n/common'
 import { storeMessages } from './messages'
 
-interface Category {
+export interface Category {
   id: string
   name: string
   imageUrl: string | null
@@ -26,7 +26,7 @@ interface Member {
 }
 
 
-interface Product {
+export interface Product {
   id: string
   name: string
   description: string | null
@@ -68,7 +68,7 @@ interface CreditPeriodItem {
   product: { name: string }
 }
 
-interface CutSummary {
+export interface CutSummary {
   salesCount: number
   total: number
   byMethod: { method: string; count: number; total: number }[]
@@ -98,7 +98,6 @@ interface Props {
   gymSlug: string
   gymName: string
   products: Product[]
-  categories: Category[]
   dailyCut: CutSummary | null
   monthlyCut: CutSummary | null
   activeTab: string
@@ -106,8 +105,9 @@ interface Props {
   monthParam: string
   members: Member[]
   pendingCredits: PendingCredit[]
-  canDelete?: boolean
   canDeleteSales?: boolean
+  /** Monthly totals are owner-only; front-desk staff work with the daily cut */
+  showMonthly?: boolean
 }
 
 const METHODS = ['CASH', 'CARD', 'TRANSFER', 'OTHER']
@@ -117,12 +117,10 @@ const METHOD_COLORS: Record<string, string> = {
   CASH: 'var(--accent)', CARD: '#5EEAD4', TRANSFER: '#FFFFFF', OTHER: '#A7C9C4',
 }
 
-// Labels live in storeMessages.tabs
+// Labels live in storeMessages.tabs. Products and categories are managed under Inventory.
 const TABS = [
   { id: 'sell', icon: ShoppingCart },
   { id: 'credits', icon: CreditCard },
-  { id: 'products', icon: Package },
-  { id: 'categories', icon: Tag },
   { id: 'daily', icon: Calendar },
   { id: 'monthly', icon: BarChart2 },
 ] as const
@@ -193,7 +191,7 @@ function niceCeil(n: number) {
   return (s <= 1 ? 1 : s <= 2 ? 2 : s <= 2.5 ? 2.5 : s <= 5 ? 5 : 10) * p
 }
 
-export function StoreTabs({ gymSlug, gymName, products, categories, dailyCut, monthlyCut, activeTab, dateParam, monthParam, members, pendingCredits, canDelete = false, canDeleteSales = false }: Props) {
+export function StoreTabs({ gymSlug, gymName, products, dailyCut, monthlyCut, activeTab, dateParam, monthParam, members, pendingCredits, canDeleteSales = false, showMonthly = true }: Props) {
   const router = useRouter()
   const { t } = useStoreText()
   const [tab, setTab] = useState(activeTab)
@@ -203,7 +201,8 @@ export function StoreTabs({ gymSlug, gymName, products, categories, dailyCut, mo
     router.push(`?tab=${id}`)
   }
 
-  const current = TABS.find(x => x.id === tab) ?? TABS[0]
+  const tabs = showMonthly ? TABS : TABS.filter(x => x.id !== 'monthly')
+  const current = tabs.find(x => x.id === tab) ?? tabs[0]
   const creditMembers = new Set(pendingCredits.map(c => c.memberId)).size
 
   return (
@@ -214,7 +213,7 @@ export function StoreTabs({ gymSlug, gymName, products, categories, dailyCut, mo
           <h1 className="text-4xl font-black leading-none tracking-tight">{t.tabs[current.id]}</h1>
         </div>
         <nav aria-label={t.sections} className="flex flex-wrap gap-1 rounded-2xl border border-zinc-200 bg-white p-1">
-          {TABS.map(({ id, icon: Icon }) => {
+          {tabs.map(({ id, icon: Icon }) => {
             const active = current.id === id
             const label = t.tabs[id]
             return (
@@ -248,12 +247,11 @@ export function StoreTabs({ gymSlug, gymName, products, categories, dailyCut, mo
           cut={dailyCut}
           dateParam={dateParam}
           pendingTotal={pendingCredits.reduce((s, c) => s + c.unitPrice * c.quantity, 0)}
+          showMonthly={showMonthly}
           onNavigate={changeTab}
         />
       )}
       {current.id === 'credits' && <CreditsTab gymSlug={gymSlug} pendingCredits={pendingCredits} onNavigate={changeTab} />}
-      {current.id === 'products' && <ProductsTab gymSlug={gymSlug} products={products} categories={categories} canDelete={canDelete} />}
-      {current.id === 'categories' && <CategoriesTab gymSlug={gymSlug} categories={categories} products={products} monthlyCut={monthlyCut} monthParam={monthParam} canDelete={canDelete} />}
       {current.id === 'daily' && <DailyCutTab cut={dailyCut} dateParam={dateParam} gymSlug={gymSlug} canDelete={canDeleteSales} onNavigate={changeTab} />}
       {current.id === 'monthly' && <MonthlyCutTab cut={monthlyCut} monthParam={monthParam} gymSlug={gymSlug} canDelete={canDeleteSales} onNavigate={changeTab} />}
     </div>
@@ -403,7 +401,7 @@ function MethodPicker({ value, onChange, dark }: { value: string; onChange: (v: 
         const label = tc.methods[v]
         const active = value === v
         const cls = dark
-          ? active ? 'border-white bg-white text-[#111111] font-bold' : 'border-[#3A3A3A] text-[#E4E5E6] hover:border-[#5A5A5A]'
+          ? active ? 'border-white bg-[#ffffff] text-[#111111] font-bold' : 'border-[#3A3A3A] text-[#E4E5E6] hover:border-[#5A5A5A]'
           : active ? 'border-black bg-black text-white hover:bg-zinc-800 font-bold' : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300'
         return (
           <button key={v} type="button" onClick={() => onChange(v)} aria-pressed={active}
@@ -418,7 +416,7 @@ function MethodPicker({ value, onChange, dark }: { value: string; onChange: (v: 
 }
 
 // ── Sell Tab ────────────────────────────────────────────────
-function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pendingTotal, onNavigate }: {
+function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pendingTotal, showMonthly, onNavigate }: {
   gymSlug: string
   products: Product[]
   lowStock: Product[]
@@ -426,9 +424,9 @@ function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pending
   cut: CutSummary | null
   dateParam: string
   pendingTotal: number
+  showMonthly: boolean
   onNavigate: (t: TabId) => void
 }) {
-  const router = useRouter()
   const [cart, setCart] = useState<CartItem[]>([])
   const [mode, setMode] = useState<'sell' | 'credito'>('sell')
   const [method, setMethod] = useState('CASH')
@@ -499,7 +497,6 @@ function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pending
       toast.success(t.sold)
       setCart([])
       setNotes('')
-      router.refresh()
     })
   }
 
@@ -517,7 +514,6 @@ function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pending
       setNotes('')
       setMemberId('')
       setMemberSearch('')
-      router.refresh()
     })
   }
 
@@ -536,7 +532,7 @@ function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pending
         bars={methodBars(cut, text)}
         actions={
           <>
-            <BandButton onClick={() => onNavigate('monthly')}>{t.seeMonthCut}</BandButton>
+            {showMonthly && <BandButton onClick={() => onNavigate('monthly')}>{t.seeMonthCut}</BandButton>}
             <BandButton primary onClick={() => onNavigate('daily')}>{t.seeDayCut}</BandButton>
           </>
         }
@@ -624,7 +620,7 @@ function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pending
 
           <div role="group" aria-label={t.opType} className="mx-[22px] grid grid-cols-2 gap-1 rounded-xl bg-[#262626] p-1">
             <button type="button" onClick={() => setMode('sell')} aria-pressed={mode === 'sell'}
-              className={`h-10 rounded-[9px] text-sm transition-colors ${mode === 'sell' ? 'bg-white font-bold text-[#111111]' : 'font-semibold text-[#D4D5D6] hover:text-white'}`}
+              className={`h-10 rounded-[9px] text-sm transition-colors ${mode === 'sell' ? 'bg-[#ffffff] font-bold text-[#111111]' : 'font-semibold text-[#D4D5D6] hover:text-white'}`}
             >
               {t.sale}
             </button>
@@ -777,7 +773,7 @@ function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pending
 // ── Products Tab ────────────────────────────────────────────
 type ProductStatusFilter = 'all' | 'low' | 'inactive'
 
-function ProductsTab({ gymSlug, products, categories, canDelete }: { gymSlug: string; products: Product[]; categories: Category[]; canDelete: boolean }) {
+export function ProductsTab({ gymSlug, products, categories, canDelete }: { gymSlug: string; products: Product[]; categories: Category[]; canDelete: boolean }) {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
   const [editProduct, setEditProduct] = useState<Product | null>(null)
@@ -811,7 +807,6 @@ function ProductsTab({ gymSlug, products, categories, canDelete }: { gymSlug: st
       setDeleteTarget(null)
       if (result.error) { toast.error(result.error); return }
       toast.success(t.productDeleted)
-      router.refresh()
     })
   }
 
@@ -1089,7 +1084,7 @@ function FormField({ label, name, type = 'text', defaultValue, placeholder, min,
 }
 
 // ── Categories Tab ──────────────────────────────────────────
-function CategoriesTab({ gymSlug, categories, products, monthlyCut, monthParam, canDelete }: {
+export function CategoriesTab({ gymSlug, categories, products, monthlyCut, monthParam, canDelete }: {
   gymSlug: string
   categories: Category[]
   products: Product[]
@@ -1119,7 +1114,6 @@ function CategoriesTab({ gymSlug, categories, products, monthlyCut, monthParam, 
       const result = await deleteCategoryAction(gymSlug, id)
       if (result.error) { toast.error(result.error); return }
       toast.success(t.categoryDeleted)
-      router.refresh()
     })
   }
 
@@ -1170,7 +1164,7 @@ function CategoriesTab({ gymSlug, categories, products, monthlyCut, monthParam, 
                         type="button"
                         aria-label={t.edit(c.name)}
                         onClick={() => { setEditCategory(c); setModalOpen(true) }}
-                        className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-white/85 text-[#111111] transition-colors hover:bg-white"
+                        className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-white/85 text-[#111111] transition-colors hover:bg-[#ffffff]"
                       >
                         <Edit2 className="h-3.5 w-3.5" />
                       </button>
@@ -1180,7 +1174,7 @@ function CategoriesTab({ gymSlug, categories, products, monthlyCut, monthParam, 
                           aria-label={t.delete(c.name)}
                           disabled={isPending}
                           onClick={() => handleDelete(c.id)}
-                          className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-white/85 text-[#9A3412] transition-colors hover:bg-white disabled:opacity-40"
+                          className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-white/85 text-[#9A3412] transition-colors hover:bg-[#ffffff] disabled:opacity-40"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -1224,7 +1218,6 @@ function CategoriesTab({ gymSlug, categories, products, monthlyCut, monthParam, 
 }
 
 function NewCategoryPanel({ gymSlug }: { gymSlug: string }) {
-  const router = useRouter()
   const [name, setName] = useState('')
   const [imageUrl, setImageUrl] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -1240,7 +1233,6 @@ function NewCategoryPanel({ gymSlug }: { gymSlug: string }) {
       toast.success(t.categoryCreated)
       setName('')
       setImageUrl('')
-      router.refresh()
     })
   }
 
@@ -1344,7 +1336,6 @@ function CreditsTab({ gymSlug, pendingCredits, onNavigate }: {
   pendingCredits: PendingCredit[]
   onNavigate: (t: TabId) => void
 }) {
-  const router = useRouter()
   const [search, setSearch] = useState('')
   const [onlyOld, setOnlyOld] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
@@ -1394,7 +1385,6 @@ function CreditsTab({ gymSlug, pendingCredits, onNavigate }: {
       setPayTarget(null)
       if (result.error) { toast.error(result.error); return }
       toast.success(t.creditsPaid)
-      router.refresh()
     })
   }
 
@@ -1574,7 +1564,6 @@ function PeriodStepper({ type, value, onChange }: { type: 'date' | 'month'; valu
 }
 
 function SalesPanel({ sales, gymSlug, canDelete, showDate }: { sales: Sale[]; gymSlug: string; canDelete: boolean; showDate?: boolean }) {
-  const router = useRouter()
   const [expanded, setExpanded] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Sale | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -1587,7 +1576,6 @@ function SalesPanel({ sales, gymSlug, canDelete, showDate }: { sales: Sale[]; gy
       setDeleteTarget(null)
       if (result.error) { toast.error(result.error); return }
       toast.success(t.saleDeleted)
-      router.refresh()
     })
   }
 

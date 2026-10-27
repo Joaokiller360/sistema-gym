@@ -22,6 +22,8 @@ export const shellMessages = defineMessages({
       communications: 'Comunicaciones',
       settings: 'Configuración',
       support: 'Soporte',
+      charge: 'Cobrar',
+      account: 'Mi cuenta',
     },
     roles: {
       SUPER_ADMIN: 'Super admin',
@@ -73,6 +75,8 @@ export const shellMessages = defineMessages({
       communications: 'Communications',
       settings: 'Settings',
       support: 'Support',
+      charge: 'Take payment',
+      account: 'My account',
     },
     roles: {
       SUPER_ADMIN: 'Super admin',

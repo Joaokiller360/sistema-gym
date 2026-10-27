@@ -235,8 +235,14 @@ export async function deletePaymentAction(
   const token = await getToken()
   const result = await apiFetch(`/payments/${paymentId}`, token, { method: 'DELETE', headers: { 'x-gym-slug': gymSlug } })
   if (result === null) return { error: (await messages()).deletePaymentFailed }
+  // Removing a membership's last payment also cancels it and drops its check-ins
   updateTag(`member-${memberId}-payments`)
+  updateTag(`member-${memberId}-memberships`)
+  updateTag(`member-${memberId}-wallet`)
+  updateTag(`member-${memberId}`)
   updateTag(`members-${gymSlug}`)
+  updateTag(`memberships-${gymSlug}`)
+  updateTag(`attendance-${gymSlug}`)
   return {}
 }
 

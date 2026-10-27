@@ -72,7 +72,7 @@ const STEPS: { fields: FieldPath<FormValues>[] }[] = [
 ]
 
 const LABEL = 'text-xs font-bold uppercase tracking-[0.08em] text-adm-muted'
-const INPUT = 'h-12 w-full rounded-xl border border-adm-line bg-adm-ground px-3.5 text-base font-bold text-adm-ink outline-none transition-colors placeholder:font-normal placeholder:text-adm-muted focus:border-adm-brand disabled:opacity-50'
+const INPUT = 'h-12 w-full rounded-xl border border-adm-line bg-adm-ground px-3.5 text-base font-bold text-adm-ink outline-none transition-colors placeholder:font-normal placeholder:text-adm-muted focus:border-adm-ink dark:focus:border-adm-brand disabled:opacity-50'
 
 function FieldError({ msg }: { msg?: string }) {
   if (!msg) return null
@@ -81,7 +81,7 @@ function FieldError({ msg }: { msg?: string }) {
 
 function choice(on: boolean) {
   return on
-    ? 'border-2 border-adm-brand bg-adm-subtle text-adm-ink'
+    ? 'border-2 border-adm-ink dark:border-adm-brand bg-adm-subtle text-adm-ink'
     : 'border border-adm-line bg-transparent text-adm-ink hover:border-adm-muted'
 }
 
@@ -185,7 +185,6 @@ export function PlanDrawer({ gymSlug, plan, members, featured }: Props) {
       const res = isEdit ? await updatePlanAction(gymSlug, plan.id, data) : await createPlanAction(gymSlug, data)
       if (res?.error) { setServerError(res.error); return }
       toast.success(isEdit ? t.updated : t.created)
-      router.refresh()
       close()
     })
   }
@@ -206,7 +205,6 @@ export function PlanDrawer({ gymSlug, plan, members, featured }: Props) {
     startTransition(async () => {
       await deletePlanAction(gymSlug, plan.id)
       toast.success(t.deleted)
-      router.refresh()
       close()
     })
   }
@@ -219,7 +217,7 @@ export function PlanDrawer({ gymSlug, plan, members, featured }: Props) {
         <SheetContent
           side="right"
           showCloseButton={false}
-          className="dark admin-surface w-full gap-0 border-adm-line bg-adm-surface p-0 text-adm-ink sm:max-w-[640px] data-[side=right]:w-full data-[side=right]:sm:max-w-[640px]"
+          className="admin-surface w-full gap-0 border-adm-line bg-adm-surface p-0 text-adm-ink sm:max-w-[640px] data-[side=right]:w-full data-[side=right]:sm:max-w-[640px]"
         >
           <form onSubmit={onSubmit} className="flex h-full min-h-0 flex-col">
             <header className="flex flex-col gap-[18px] border-b border-adm-line px-5 pb-[18px] pt-[22px] sm:px-7">
@@ -401,7 +399,7 @@ export function PlanDrawer({ gymSlug, plan, members, featured }: Props) {
                         value={DURATION_PRESETS.includes(values.durationDays) ? '' : values.durationDays || ''}
                         onChange={e => setValue('durationDays', parseInt(e.target.value, 10) || 0, { shouldValidate: true })}
                         {...numberHandlers}
-                        className="h-10 w-[72px] rounded-[10px] border border-adm-line bg-adm-ground px-2.5 font-admin-mono text-sm font-bold text-adm-ink outline-none focus:border-adm-brand"
+                        className="h-10 w-[72px] rounded-[10px] border border-adm-line bg-adm-ground px-2.5 font-admin-mono text-sm font-bold text-adm-ink outline-none focus:border-adm-ink dark:focus:border-adm-brand"
                       />
                     </label>
                     <FieldError msg={errors.durationDays?.message} />
@@ -430,7 +428,7 @@ export function PlanDrawer({ gymSlug, plan, members, featured }: Props) {
                           maxLength={3}
                           {...register('visitLimit')}
                           {...numberHandlers}
-                          className="h-12 w-[88px] rounded-xl border border-adm-line bg-adm-ground px-3 font-admin-mono text-base font-bold text-adm-ink outline-none focus:border-adm-brand"
+                          className="h-12 w-[88px] rounded-xl border border-adm-line bg-adm-ground px-3 font-admin-mono text-base font-bold text-adm-ink outline-none focus:border-adm-ink dark:focus:border-adm-brand"
                         />
                       </div>
                       <FieldError msg={errors.visitLimit?.message} />
@@ -486,7 +484,7 @@ export function PlanDrawer({ gymSlug, plan, members, featured }: Props) {
                               disabled={isPending}
                               {...register(`benefits.${index}.value`)}
                               {...nameHandlers}
-                              className="h-11 flex-1 rounded-[10px] border border-adm-line bg-adm-ground px-3 text-sm text-adm-ink outline-none placeholder:text-adm-muted focus:border-adm-brand"
+                              className="h-11 flex-1 rounded-[10px] border border-adm-line bg-adm-ground px-3 text-sm text-adm-ink outline-none placeholder:text-adm-muted focus:border-adm-ink dark:focus:border-adm-brand"
                             />
                             <button
                               type="button"
@@ -504,7 +502,7 @@ export function PlanDrawer({ gymSlug, plan, members, featured }: Props) {
                     <button
                       type="button"
                       onClick={() => append({ value: '' })}
-                      className="flex h-11 items-center justify-center gap-1.5 rounded-[10px] border-[1.5px] border-dashed border-adm-line text-sm font-bold text-adm-muted transition-colors hover:border-adm-brand hover:text-adm-ink"
+                      className="flex h-11 items-center justify-center gap-1.5 rounded-[10px] border-[1.5px] border-dashed border-adm-line text-sm font-bold text-adm-muted transition-colors hover:border-adm-ink dark:hover:border-adm-brand hover:text-adm-ink"
                     >
                       <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                       {t.addBenefit}
@@ -562,7 +560,7 @@ export function PlanDrawer({ gymSlug, plan, members, featured }: Props) {
                 {compareTo && diffPct !== null && (
                   <div className="flex shrink-0 flex-col gap-0.5 text-right">
                     <span className="max-w-[140px] truncate text-xs text-adm-muted">{t.vs(compareTo.name)}</span>
-                    <span className="font-admin-mono text-[15px] font-bold text-adm-brand">
+                    <span className="font-admin-mono text-[15px] font-bold text-adm-ink dark:text-adm-brand">
                       {t.perDayDiff(`${diffPct > 0 ? '+' : ''}${diffPct}`)}
                     </span>
                   </div>

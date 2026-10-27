@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { Plus, Minus, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { assignCreditsAction, payCreditsAction } from '../../store/actions'
@@ -41,7 +40,6 @@ interface Props {
 const METHODS = ['CASH', 'CARD', 'TRANSFER', 'OTHER']
 
 export function MemberCredits({ gymSlug, memberId, products, credits }: Props) {
-  const router = useRouter()
   const t = useT(membersMessages).credits
   const tc = useT(commonMessages)
   const intl = useIntlLocale()
@@ -84,7 +82,6 @@ export function MemberCredits({ gymSlug, memberId, products, credits }: Props) {
       setCart([])
       setNotes('')
       setShowAssign(false)
-      router.refresh()
     })
   }
 
@@ -100,7 +97,6 @@ export function MemberCredits({ gymSlug, memberId, products, credits }: Props) {
       if (result.error) { toast.error(result.error); return }
       toast.success(t.settled)
       setSelectedIds([])
-      router.refresh()
     })
   }
 
@@ -152,7 +148,7 @@ export function MemberCredits({ gymSlug, memberId, products, credits }: Props) {
                   type="button"
                   onClick={() => setPayMethod(v)}
                   className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all ${
-                    payMethod === v ? 'border-black bg-black text-white' : 'border-amber-200 text-amber-700 hover:border-amber-400'
+                    payMethod === v ? 'border-black bg-black text-white dark:border-foreground dark:bg-foreground dark:text-background' : 'border-amber-200 text-amber-700 hover:border-amber-400'
                   }`}
                 >
                   {tc.methods[v]}

@@ -121,7 +121,7 @@ export default async function GymLayout({ children, params }: Props) {
           userRole={session.role}
           storeEnabled={gym.storeEnabled}
         />
-        <GymTour gymSlug={gymSlug} autoStart={autoTour} storeEnabled={gym.storeEnabled} />
+        <GymTour gymSlug={gymSlug} autoStart={autoTour} storeEnabled={gym.storeEnabled} userRole={session.role} />
         <main className={`flex-1 overflow-y-auto lg:pt-0 flex flex-col ${hasBanner ? 'pt-14' : 'pt-14'}`}>
           <div className="flex-1">
             {children}

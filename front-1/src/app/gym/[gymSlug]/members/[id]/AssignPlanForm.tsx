@@ -2,7 +2,6 @@
 
 import { planAccessSummary } from '@/lib/plans'
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { Plus, X } from 'lucide-react'
 import { Plan } from '@/types'
 import { assignPlanAction } from './actions'
@@ -23,7 +22,6 @@ interface Props {
 }
 
 export function AssignPlanForm({ memberId, gymSlug, plans, activeMembershipId, candidates = [], busyIds }: Props) {
-  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [planId, setPlanId] = useState('')
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0])
@@ -59,7 +57,6 @@ export function AssignPlanForm({ memberId, gymSlug, plans, activeMembershipId, c
         setOpen(false)
         setPlanId('')
         setCompanionIds([])
-        router.refresh()
       }
     })
   }

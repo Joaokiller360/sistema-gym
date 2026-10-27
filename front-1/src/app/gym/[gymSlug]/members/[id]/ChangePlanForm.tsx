@@ -2,7 +2,6 @@
 
 import { planAccessSummary } from '@/lib/plans'
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { ArrowRightLeft, CheckCircle2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { changeMemberPlanAction, ProratedResult } from './actions'
@@ -60,7 +59,6 @@ export function ChangePlanForm({
   currentPlanId?: string
   plans: Plan[]
 }) {
-  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [selectedPlanId, setSelectedPlanId] = useState('')
@@ -96,7 +94,6 @@ export function ChangePlanForm({
       } else {
         setProration(res.proration ?? null)
         toast.success(t.changed)
-        router.refresh()
       }
     })
   }
@@ -151,7 +148,7 @@ export function ChangePlanForm({
                   type="button"
                   onClick={() => setSelectedPlanId(p.id)}
                   className={`w-full flex items-center justify-between rounded-xl border-2 px-4 py-3 text-left transition-all ${
-                    selectedPlanId === p.id ? 'border-black bg-zinc-50' : 'border-zinc-200 hover:border-zinc-300'
+                    selectedPlanId === p.id ? 'border-black bg-zinc-50 dark:border-foreground' : 'border-zinc-200 hover:border-zinc-300'
                   }`}
                 >
                   <div>
@@ -178,7 +175,7 @@ export function ChangePlanForm({
                   onClick={() => setMethod(m)}
                   disabled={isPending}
                   className={`rounded-xl py-2 text-xs font-semibold border-2 transition-all ${
-                    method === m ? 'border-black bg-black text-white' : 'border-zinc-200 text-zinc-600 hover:border-zinc-300'
+                    method === m ? 'border-black bg-black text-white dark:border-foreground dark:bg-foreground dark:text-background' : 'border-zinc-200 text-zinc-600 hover:border-zinc-300'
                   }`}
                 >
                   {tc.methods[m]}

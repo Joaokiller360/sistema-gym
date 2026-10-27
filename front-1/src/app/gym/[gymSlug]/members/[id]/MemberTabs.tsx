@@ -1,7 +1,6 @@
 'use client'
 
 import { useTransition, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { MessageSquare, Trash2, XCircle } from 'lucide-react'
@@ -80,7 +79,6 @@ interface MemberTabsProps {
 }
 
 export function MemberTabs({ memberId, gymSlug, memberships, payments, attendance, plans, memberIsActive = true, storeProducts = [], memberCredits = [], candidates = [], busyIds }: MemberTabsProps) {
-  const router = useRouter()
   const t = useT(membersMessages).tabs
   const tc = useT(commonMessages)
   const intl = useIntlLocale()
@@ -102,7 +100,6 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
     startDeleteTransition(async () => {
       await deletePaymentAction(gymSlug, memberId, id)
       setDeletingId(null)
-      router.refresh()
     })
   }
 
@@ -115,7 +112,6 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
         toast.error(result.error)
       } else {
         toast.success(t.cancelled)
-        router.refresh()
       }
     })
   }

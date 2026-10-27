@@ -92,7 +92,6 @@ export function MembershipPanel({
       if (res.error) { toast.error(res.error); return }
       toast.success(t.dayReturned(member.firstName))
       setReload(r => r + 1)
-      router.refresh()
     })
   }
 

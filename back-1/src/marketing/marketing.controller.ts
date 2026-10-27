@@ -9,7 +9,7 @@ import { CreateTemplateDto, UpdateTemplateDto, CreateCampaignDto, ScheduleCampai
 
 @Controller('marketing')
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
-@Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+@Roles(Role.GYM_OWNER)
 export class MarketingController {
   constructor(private readonly marketingService: MarketingService) {}
 

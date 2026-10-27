@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { Plus, X } from 'lucide-react'
 import { AttendanceGroup } from '@/types'
 import { createGroupAction, deleteGroupAction } from './actions'
@@ -18,7 +17,6 @@ interface Props {
 }
 
 export function GroupsCard({ gymSlug, groups, counts, isToday }: Props) {
-  const router = useRouter()
   const [newGroupName, setNewGroupName] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [nameError, setNameError] = useState<string | null>(null)
@@ -41,7 +39,7 @@ export function GroupsCard({ gymSlug, groups, counts, isToday }: Props) {
     startTransition(async () => {
       const res = await createGroupAction(gymSlug, newGroupName)
       if (res.error) setNameError(res.error)
-      else { closeModal(); router.refresh() }
+      else closeModal()
     })
   }
 
@@ -50,7 +48,6 @@ export function GroupsCard({ gymSlug, groups, counts, isToday }: Props) {
     startTransition(async () => {
       const res = await deleteGroupAction(gymSlug, groupId)
       if (res.error) setError(res.error)
-      else router.refresh()
     })
   }
 

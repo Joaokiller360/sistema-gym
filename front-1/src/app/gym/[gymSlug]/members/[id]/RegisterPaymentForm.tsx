@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { Plus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { registerPaymentAction } from './actions'
@@ -25,7 +24,6 @@ const CURRENCIES = [
 ]
 
 export function RegisterPaymentForm({ memberId, gymSlug, membershipId }: Props) {
-  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [amount, setAmount] = useState('')
   const [currency, setCurrency] = useState('USD')
@@ -60,7 +58,6 @@ export function RegisterPaymentForm({ memberId, gymSlug, membershipId }: Props) 
         setOpen(false)
         setAmount('')
         setNotes('')
-        router.refresh()
       }
     })
   }
@@ -124,7 +121,7 @@ export function RegisterPaymentForm({ memberId, gymSlug, membershipId }: Props) 
               onClick={() => setMethod(m)}
               className={`rounded-xl py-2 text-xs font-semibold border-2 transition-all ${
                 method === m
-                  ? 'border-black bg-black text-white'
+                  ? 'border-black bg-black text-white dark:border-foreground dark:bg-foreground dark:text-background'
                   : 'border-zinc-200 text-zinc-600 hover:border-zinc-300'
               }`}
             >

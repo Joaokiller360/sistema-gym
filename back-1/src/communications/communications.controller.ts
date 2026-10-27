@@ -9,7 +9,7 @@ import { CreateCommunicationDto } from './dto/communication.dto';
 
 @Controller('communications')
 @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
-@Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+@Roles(Role.GYM_OWNER)
 export class CommunicationsController {
   constructor(private readonly communicationsService: CommunicationsService) {}
 

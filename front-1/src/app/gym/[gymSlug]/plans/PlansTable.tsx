@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Copy, Pencil, Star } from 'lucide-react'
 import { Plan } from '@/types'
@@ -23,7 +22,6 @@ type Sort = 'members' | 'price' | 'name'
 const FILTERS: Filter[] = ['all', 'time', 'visits', 'paused']
 
 export function PlansTable({ plans, memberCounts, gymSlug }: Props) {
-  const router = useRouter()
   const [filter, setFilter] = useState<Filter>('all')
   const [sort, setSort] = useState<Sort>('members')
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -60,7 +58,6 @@ export function PlansTable({ plans, memberCounts, gymSlug }: Props) {
     startTransition(async () => {
       await togglePlanActiveAction(gymSlug, plan.id, !plan.isActive)
       setBusyId(null)
-      router.refresh()
     })
   }
 
@@ -82,7 +79,7 @@ export function PlansTable({ plans, memberCounts, gymSlug }: Props) {
       })
       setBusyId(null)
       if (res.error) toast.error(res.error)
-      else { toast.success(t.duplicated); router.refresh() }
+      else toast.success(t.duplicated)
     })
   }
 
@@ -157,7 +154,7 @@ export function PlansTable({ plans, memberCounts, gymSlug }: Props) {
                         <div className="flex min-w-0 flex-col gap-0.5">
                           <span className="inline-flex items-center gap-2 text-[15px] font-extrabold">
                             <span className="truncate">{p.name}</span>
-                            {p.isFeatured && <Star className="h-3.5 w-3.5 shrink-0 fill-adm-brand text-adm-brand" role="img" aria-label={t.featured} />}
+                            {p.isFeatured && <Star className="h-3.5 w-3.5 shrink-0 fill-adm-brand text-[#8a8600] dark:text-adm-brand" role="img" aria-label={t.featured} />}
                           </span>
                           <span className="text-xs text-adm-muted">
                             {benefits ? t.benefits(benefits) : t.noBenefits}

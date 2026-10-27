@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { verifyToken } from '@/lib/auth'
 
 const BACKEND = process.env.API_URL ?? 'http://localhost:3001/api/v1'
@@ -33,5 +34,7 @@ export async function POST(request: Request) {
   const data = (await res.json().catch(() => ({}))) as { logoUrl?: string; url?: string }
   const raw = data.logoUrl ?? data.url ?? ''
   const logoUrl = raw.startsWith('/') ? `${BACKEND_BASE}${raw}` : raw
+  // Expire now so the sidebar and login show the new logo on the next render
+  revalidateTag('platform-settings', { expire: 0 })
   return NextResponse.json({ logoUrl })
 }

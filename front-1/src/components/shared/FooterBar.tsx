@@ -1,5 +1,7 @@
-import Image from 'next/image'
 import { apiFetch } from '@/lib/api'
+import { normalizeLogoUrl } from '@/lib/utils'
+import { defineMessages } from '@/i18n/config'
+import { getT } from '@/i18n/server'
 
 interface PlatformSettings {
   saasName: string
@@ -21,75 +23,82 @@ const DEFAULTS: PlatformSettings = {
   creatorUrl: null,
 }
 
+const footerMessages = defineMessages({
+  es: { poweredBy: 'Desarrollado por', createdBy: 'Creado por', links: 'Enlaces del pie de página' },
+  en: { poweredBy: 'Powered by', createdBy: 'Created by', links: 'Footer links' },
+})
+
 export async function FooterBar() {
-  const settings = await apiFetch<PlatformSettings>('/platform-settings', '', {
-    next: { tags: ['platform-settings'], revalidate: 300 },
-    // Optional chrome with defaults: an unreachable API shouldn't spam the console
-    silent: true,
-  }).catch(() => null) ?? DEFAULTS
+  const [fetched, t] = await Promise.all([
+    apiFetch<PlatformSettings>('/platform-settings', '', {
+      next: { tags: ['platform-settings'], revalidate: 300 },
+      // Optional chrome with defaults: an unreachable API shouldn't spam the console
+      silent: true,
+    }).catch(() => null),
+    getT(footerMessages),
+  ])
+  const settings = { ...DEFAULTS, ...fetched, footerLinks: fetched?.footerLinks ?? [] }
 
-  const hasContent =
-    settings.footerShowPoweredBy ||
-    !!settings.footerText ||
-    settings.footerLinks.length > 0 ||
-    !!settings.creatorName
-
-  if (!hasContent) return null
+  // Uploads are proxied to the API by a rewrite, which the image optimizer can't fetch
+  const logoSrc = normalizeLogoUrl(settings.logoUrl)
+  const hasMeta = settings.footerLinks.length > 0 || !!settings.footerText
+  if (!settings.footerShowPoweredBy && !settings.creatorName && !hasMeta) return null
 
   return (
-    <footer className="shrink-0 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-6 py-3 text-xs text-zinc-400 dark:text-zinc-500 flex items-center justify-between gap-4 flex-wrap">
-      <div className="flex items-center gap-4 flex-wrap">
-        {settings.footerShowPoweredBy && (
-          <span className="flex items-center gap-1.5">
-            {settings.logoUrl && (
-              <Image src={settings.logoUrl} alt={settings.saasName} width={16} height={16} className="rounded object-cover" />
-            )}
-            Desarrollado por{' '}
-            <span className="font-semibold text-zinc-600 dark:text-zinc-400">
-              {settings.saasName}
+    // Same night tone as the sidebar, so it reads as panel chrome on light and dark pages alike
+    <footer className="adm-night shrink-0 border-t border-white/10 bg-adm-night px-4 py-3.5 font-admin text-xs text-[#85857f] sm:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          {settings.footerShowPoweredBy && (
+            <span className="inline-flex items-center gap-2">
+              {logoSrc && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={logoSrc} alt="" width={18} height={18} className="size-[18px] rounded object-cover" />
+              )}
+              {t.poweredBy}
+              <span className="font-bold text-[#e7e7e2]">{settings.saasName}</span>
             </span>
-          </span>
-        )}
-        {settings.creatorName && (
-          <span>
-            Creado por{' '}
-            {settings.creatorUrl ? (
-              <a
-                href={settings.creatorUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-semibold text-zinc-600 dark:text-zinc-400 hover:text-[#1fad9d] transition-colors"
-              >
-                {settings.creatorName}
-              </a>
-            ) : (
-              <span className="font-semibold text-zinc-600 dark:text-zinc-400">{settings.creatorName}</span>
-            )}
-          </span>
-        )}
-      </div>
-
-      <div>
-        {settings.footerText && (
-          <span className='font-semibold text-zinc-500 dark:text-zinc-400'>@ {settings.footerText}</span>
-        )}
-      </div>
-
-      {settings.footerLinks.length > 0 && (
-        <div className="flex items-center gap-4 flex-wrap">
-          {settings.footerLinks.map((link, i) => (
-            <a
-              key={i}
-              href={link.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
-            >
-              {link.label}
-            </a>
-          ))}
+          )}
+          {settings.creatorName && (
+            <span className="inline-flex items-center gap-1">
+              {t.createdBy}
+              {settings.creatorUrl ? (
+                <a
+                  href={settings.creatorUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-bold text-[#e7e7e2] transition-colors hover:text-adm-brand"
+                >
+                  {settings.creatorName}
+                </a>
+              ) : (
+                <span className="font-bold text-[#e7e7e2]">{settings.creatorName}</span>
+              )}
+            </span>
+          )}
         </div>
-      )}
+
+        {hasMeta && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+            {settings.footerLinks.length > 0 && (
+              <nav aria-label={t.links} className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                {settings.footerLinks.map((link, i) => (
+                  <a
+                    key={i}
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="transition-colors hover:text-white"
+                  >
+                    {link.label}
+                  </a>
+                ))}
+              </nav>
+            )}
+            {settings.footerText && <span>© {settings.footerText}</span>}
+          </div>
+        )}
+      </div>
     </footer>
   )
 }

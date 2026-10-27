@@ -89,7 +89,6 @@ export function EditMemberModal({ gymSlug, member }: Props) {
         params.delete('edit')
         const str = params.toString()
         router.push(str ? `?${str}` : '?')
-        router.refresh()
       }, 120)
     })
   }

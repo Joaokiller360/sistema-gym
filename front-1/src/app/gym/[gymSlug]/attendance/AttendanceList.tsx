@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { Trash2, Users } from 'lucide-react'
 import { Attendance, AttendanceGroup } from '@/types'
 import { deleteAttendanceAction } from './actions'
@@ -28,7 +27,6 @@ function memberName(r: AttendanceWithMember) {
 }
 
 export function AttendanceList({ gymSlug, records, groups, timezone, date }: Props) {
-  const router = useRouter()
   const [filter, setFilter] = useState<string>('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -71,7 +69,6 @@ export function AttendanceList({ gymSlug, records, groups, timezone, date }: Pro
       const res = await deleteAttendanceAction(gymSlug, id)
       setDeletingId(null)
       if (res.error) setError(res.error)
-      else router.refresh()
     })
   }
 

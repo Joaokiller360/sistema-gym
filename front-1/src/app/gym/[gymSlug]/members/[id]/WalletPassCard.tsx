@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Copy, ExternalLink, Mail, RefreshCw, Wallet } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -23,7 +22,6 @@ export function WalletPassCard({
   pass: WalletPassInfo | null
   canRevoke: boolean
 }) {
-  const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [sendEmail, setSendEmail] = useState(true)
   const t = useT(membersMessages).wallet
@@ -47,7 +45,6 @@ export function WalletPassCard({
       const res = await issueWalletPassAction(gymSlug, memberId, sendEmail)
       if (res.error) { toast.error(res.error); return }
       toast.success(res.emailSent ? t.createdSent(memberEmail) : t.created)
-      router.refresh()
     })
   }
 
@@ -65,7 +62,6 @@ export function WalletPassCard({
       const res = await revokeWalletPassAction(gymSlug, memberId)
       if (res.error) { toast.error(res.error); return }
       toast.success(t.revoked)
-      router.refresh()
     })
   }
 

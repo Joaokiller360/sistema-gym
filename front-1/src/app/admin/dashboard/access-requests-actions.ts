@@ -1,5 +1,6 @@
 'use server'
 
+import { refresh } from 'next/cache'
 import { cookies } from 'next/headers'
 import { apiFetch, apiFetchWithError } from '@/lib/api'
 import { sanitize } from '@/lib/input-validation'
@@ -34,6 +35,8 @@ export async function updateAccessRequestStatusAction(
     body: JSON.stringify({ status }),
   })
   if (!result) return { error: 'Error al actualizar el estado' }
+  // Re-render the current page in this same round trip
+  refresh()
   return {}
 }
 
@@ -52,6 +55,8 @@ export async function convertToGymAction(
     body: JSON.stringify({ gymName: clean }),
   })
   if ('error' in result) return { error: result.error }
+  // Re-render the current page in this same round trip
+  refresh()
   return { gymSlug: result.data?.gymSlug }
 }
 

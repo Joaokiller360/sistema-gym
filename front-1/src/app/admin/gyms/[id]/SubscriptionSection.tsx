@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Plus, Trash2, ArrowRightLeft, X } from 'lucide-react'
 import { registerSubscriptionPaymentAction, deleteSubscriptionPaymentAction, changeGymPlanAction, type SubscriptionInfo, type BillingRecord, type PaymentInput, type ProratedResult } from '../actions'
@@ -121,7 +120,6 @@ export function SubscriptionSection({
   planCurrency: string
   subPlans: SubscriptionPlan[]
 }) {
-  const router = useRouter()
   const [mode, setMode] = useState<'idle' | 'pay' | 'change'>('idle')
   const [isPending, startTransition] = useTransition()
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
@@ -159,7 +157,6 @@ export function SubscriptionSection({
         toast.error(res.error)
       } else {
         toast.success('Pago eliminado. Estado de suscripción actualizado.')
-        router.refresh()
       }
     })
   }
@@ -181,7 +178,6 @@ export function SubscriptionSection({
       } else {
         toast.success('Pago registrado y suscripción renovada.')
         setMode('idle')
-        router.refresh()
       }
     })
   }
@@ -200,7 +196,6 @@ export function SubscriptionSection({
       } else {
         setChangePlanProration(res.proration ?? null)
         toast.success('Plan de suscripción cambiado correctamente')
-        router.refresh()
       }
     })
   }

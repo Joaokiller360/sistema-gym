@@ -58,6 +58,7 @@ export async function cancelMembershipWithPaymentsAction(
   updateTag(`member-${memberId}`)
   updateTag(`member-${memberId}-payments`)
   updateTag(`member-${memberId}-memberships`)
+  updateTag(`attendance-${gymSlug}`)
   return {}
 }
 

@@ -1,5 +1,6 @@
 'use server'
 
+import { refresh } from 'next/cache'
 import { cookies } from 'next/headers'
 import { z } from 'zod'
 import { apiFetch, apiFetchWithError } from '@/lib/api'
@@ -41,6 +42,8 @@ export async function updateAdminProfileAction(
     body: JSON.stringify(parsed.data),
   })
   if ('error' in result) return { error: result.error }
+  // Re-render the current page in this same round trip
+  refresh()
   return {}
 }
 

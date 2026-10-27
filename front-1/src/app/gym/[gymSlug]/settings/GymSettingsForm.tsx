@@ -41,7 +41,7 @@ interface Props {
   countries: CountryOption[]
 }
 
-const inputClass = 'h-12 w-full rounded-xl border border-adm-line bg-adm-ground px-3.5 text-[15px] text-adm-ink outline-none transition-colors placeholder:text-adm-muted focus:border-adm-brand disabled:opacity-50'
+const inputClass = 'h-12 w-full rounded-xl border border-adm-line bg-adm-ground px-3.5 text-[15px] text-adm-ink outline-none transition-colors placeholder:text-adm-muted focus:border-adm-ink dark:focus:border-adm-brand disabled:opacity-50'
 const labelClass = 'mb-2 block text-xs font-bold uppercase tracking-[0.08em] text-adm-muted'
 const cardClass = 'flex flex-col gap-[18px] rounded-[20px] border border-adm-line bg-adm-surface p-[22px]'
 const saveClass = 'h-10 rounded-[10px] bg-adm-brand px-4 text-[13px] font-black text-adm-night transition-opacity hover:opacity-90 disabled:opacity-50'
@@ -142,6 +142,7 @@ export function GymSettingsForm({
         toast.error(res.error)
       } else if (res.logoUrl) {
         setLogoUrl(res.logoUrl)
+        // The logo is already saved: refresh so the sidebar shows it
       }
     })
   }
@@ -195,7 +196,7 @@ export function GymSettingsForm({
             onDragLeave={() => setDragging(false)}
             onDrop={handleDrop}
             className={`flex w-full items-center gap-4 rounded-2xl border-[1.5px] border-dashed bg-adm-ground p-4 text-left transition-colors disabled:opacity-60 ${
-              dragging ? 'border-adm-brand' : 'border-adm-line hover:border-adm-muted'
+              dragging ? 'border-adm-ink dark:border-adm-brand' : 'border-adm-line hover:border-adm-muted'
             }`}
           >
             <span className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-adm-brand text-lg font-black text-adm-night">
