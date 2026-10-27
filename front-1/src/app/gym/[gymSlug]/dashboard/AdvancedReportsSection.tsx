@@ -1,5 +1,7 @@
 import { BarChart2 } from 'lucide-react'
 import { EmptyState, Meter, Panel, PanelLink, SectionLabel, Stat } from '@/components/admin/ui'
+import { getIntlLocale, getT } from '@/i18n/server'
+import { dashboardMessages } from './messages'
 
 export interface AdvancedReport {
   revenueTrend: { label: string; amount: number }[]
@@ -23,8 +25,8 @@ interface Props {
   data: AdvancedReport | null
 }
 
-function fmt(n: number, currency: string) {
-  return `${currency} ${n.toLocaleString('es-AR')}`
+function fmt(n: number, currency: string, intl: string) {
+  return `${currency} ${n.toLocaleString(intl)}`
 }
 
 /** Bar chart on the dark night surface; the last bar is highlighted in brand yellow. */
@@ -54,12 +56,14 @@ function NightBars({ data, title }: { data: { label: string; value: number; tool
   )
 }
 
-export function AdvancedReportsSection({ gymSlug, data }: Props) {
+export async function AdvancedReportsSection({ gymSlug, data }: Props) {
+  const [messages, intl] = await Promise.all([getT(dashboardMessages), getIntlLocale()])
+  const t = messages.adv
   if (!data) {
     return (
-      <Panel title="Reportes avanzados" id="adv-h">
+      <Panel title={t.title} id="adv-h">
         <EmptyState icon={<BarChart2 className="size-8" aria-hidden="true" />}>
-          Sin datos de reportes avanzados disponibles.
+          {t.empty}
         </EmptyState>
       </Panel>
     )
@@ -70,15 +74,15 @@ export function AdvancedReportsSection({ gymSlug, data }: Props) {
   return (
     <section aria-labelledby="adv-h" className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <SectionLabel id="adv-h">Reportes avanzados · últimos 30 días</SectionLabel>
-        <PanelLink href={`/gym/${gymSlug}/reports`}>Ver reportes completos</PanelLink>
+        <SectionLabel id="adv-h">{t.heading}</SectionLabel>
+        <PanelLink href={`/gym/${gymSlug}/reports`}>{t.fullReports}</PanelLink>
       </div>
 
       <div className="flex flex-wrap gap-3">
-        <Stat label="Nuevos este mes" value={data.newMembers} />
-        <Stat label="Bajas este mes" value={data.churned} hint={data.churned > 0 ? 'Revisar retención' : undefined} hintTone="bad" />
-        <Stat label="Vencen en 7 días" value={data.expiringNext7Days} hint={data.expiringNext7Days > 0 ? 'Contactar para renovar' : undefined} hintTone="warn" />
-        <Stat label="Hora pico" value={data.peakHour ?? '—'} hint={data.peakDay ?? undefined} />
+        <Stat label={t.newThisMonth} value={data.newMembers} />
+        <Stat label={t.churnThisMonth} value={data.churned} hint={data.churned > 0 ? t.checkRetention : undefined} hintTone="bad" />
+        <Stat label={t.expiring7} value={data.expiringNext7Days} hint={data.expiringNext7Days > 0 ? t.contactToRenew : undefined} hintTone="warn" />
+        <Stat label={t.peakHour} value={data.peakHour ?? '—'} hint={data.peakDay ?? undefined} />
       </div>
 
       <div className="flex flex-wrap gap-3">
@@ -86,20 +90,20 @@ export function AdvancedReportsSection({ gymSlug, data }: Props) {
           <section aria-labelledby="adv-rev-h" className="min-w-0 flex-[2_1_480px] rounded-2xl border border-adm-line bg-adm-night p-6 text-white">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <h3 id="adv-rev-h" className="text-[15px] font-bold">Tendencia de ingresos</h3>
+                <h3 id="adv-rev-h" className="text-[15px] font-bold">{t.revenueTrend}</h3>
                 <p className="mt-1 text-[13px] text-[#a3a39d]">{data.currency}</p>
               </div>
-              <span className="font-admin-mono text-[13px] font-bold text-adm-brand">{fmt(revenueTotal, data.currency)}</span>
+              <span className="font-admin-mono text-[13px] font-bold text-adm-brand">{fmt(revenueTotal, data.currency, intl)}</span>
             </div>
             <NightBars
-              title={`Tendencia de ingresos, total ${fmt(revenueTotal, data.currency)}`}
-              data={data.revenueTrend.map(d => ({ label: d.label, value: d.amount, tooltip: `${d.label}: ${fmt(d.amount, data.currency)}` }))}
+              title={t.revenueTrendAria(fmt(revenueTotal, data.currency, intl))}
+              data={data.revenueTrend.map(d => ({ label: d.label, value: d.amount, tooltip: `${d.label}: ${fmt(d.amount, data.currency, intl)}` }))}
             />
           </section>
         )}
 
         {data.membersByPlan.length > 0 && (
-          <Panel title="Distribución por plan" id="adv-plan-h" className="min-w-0 flex-[1_1_280px]" bodyClassName="flex flex-col gap-4 p-5">
+          <Panel title={t.byPlan} id="adv-plan-h" className="min-w-0 flex-[1_1_280px]" bodyClassName="flex flex-col gap-4 p-5">
             {data.membersByPlan.map(p => (
               <div key={p.planName} className="flex flex-col gap-1.5">
                 <div className="flex justify-between gap-3 text-[13px]">
@@ -117,15 +121,15 @@ export function AdvancedReportsSection({ gymSlug, data }: Props) {
         <section aria-labelledby="adv-att-h" className="rounded-2xl border border-adm-line bg-adm-night p-6 text-white">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h3 id="adv-att-h" className="text-[15px] font-bold">Asistencia últimos 7 días</h3>
-              <p className="mt-1 text-[13px] text-[#a3a39d]">Entradas por día</p>
+              <h3 id="adv-att-h" className="text-[15px] font-bold">{t.attendance7}</h3>
+              <p className="mt-1 text-[13px] text-[#a3a39d]">{t.perDay}</p>
             </div>
             <span className="font-admin-mono text-[13px] text-[#a3a39d]">
-              {data.attendanceTrend.reduce((s, d) => s + d.count, 0)} entradas
+              {messages.entries(data.attendanceTrend.reduce((s, d) => s + d.count, 0))}
             </span>
           </div>
           <NightBars
-            title="Asistencia de los últimos 7 días"
+            title={t.attendance7Aria}
             data={data.attendanceTrend.map(d => ({ label: d.label, value: d.count, tooltip: `${d.label}: ${d.count}` }))}
           />
         </section>
