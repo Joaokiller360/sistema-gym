@@ -54,13 +54,14 @@ function fmtDay(iso: string) {
 }
 
 function displayName(c: { alias: string | null; contactName: string | null; gym: { name: string } | null; phone: string }) {
-  return c.alias || c.gym?.name || c.contactName || fmtPhone(c.phone)
+  // A linked gym already identifies the number; the alias is only for unknown ones
+  return c.gym?.name || c.alias || c.contactName || fmtPhone(c.phone)
 }
 
 /** Secondary line under the name: whatever displayName didn't already show. */
 function subtitle(c: { alias: string | null; contactName: string | null; gym: { name: string } | null; phone: string }) {
   const name = displayName(c)
-  return [fmtPhone(c.phone), c.gym?.name, c.contactName].filter((v, i, all) => v && v !== name && all.indexOf(v) === i).join(' · ')
+  return [fmtPhone(c.phone), c.gym ? null : c.alias, c.contactName].filter((v, i, all) => v && v !== name && all.indexOf(v) === i).join(' · ')
 }
 
 function TagChip({ children, onRemove }: { children: string; onRemove?: () => void }) {
@@ -120,6 +121,7 @@ function ContactEditor({ thread, allTags, onChanged }: { thread: CrmThread; allT
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-adm-line-soft p-3.5">
+      {!thread.gym && (
       <div>
         <label htmlFor={`crm-alias-${thread.id}`} className={field.label}>Nombre del contacto</label>
         <input
@@ -129,10 +131,11 @@ function ContactEditor({ thread, allTags, onChanged }: { thread: CrmThread; allT
           onBlur={saveAlias}
           onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
           maxLength={80}
-          placeholder={thread.contactName ?? thread.gym?.name ?? 'Ej. Juan · interesado en plan Pro'}
+          placeholder={thread.contactName ?? 'Ej. Juan · interesado en plan Pro'}
           className={field.input}
         />
       </div>
+      )}
       <div>
         <label htmlFor={`crm-tag-${thread.id}`} className={field.label}>Etiquetas</label>
         {tags.length > 0 && (
@@ -545,7 +548,7 @@ function Details({ thread, allTags, onChanged }: { thread: CrmThread; allTags: s
         </div>
       ) : (
         <p className="rounded-xl border border-adm-warn-line bg-adm-warn-bg px-3.5 py-3 text-[13px] text-adm-warn-fg">
-          Este número no coincide con ningún gimnasio. Ponele un nombre y etiquetas arriba para identificarlo, o cargalo como WhatsApp del dueño en el gimnasio para vincularlo.
+          Este número no coincide con ningún gimnasio. Ponele un nombre arriba para identificarlo, o cargalo como WhatsApp del dueño en el gimnasio para vincularlo.
         </p>
       )}
 
