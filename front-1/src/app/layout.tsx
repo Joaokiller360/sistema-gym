@@ -3,6 +3,8 @@ import { Archivo, JetBrains_Mono, Roboto } from "next/font/google"
 import { Toaster } from "@/components/ui/sonner"
 import { ThemeProvider } from "@/components/providers/ThemeProvider"
 import { ThemeScript } from "@/components/providers/ThemeScript"
+import { apiFetch } from "@/lib/api"
+import { normalizeLogoUrl } from "@/lib/utils"
 import "./globals.css"
 
 const roboto = Roboto({
@@ -26,9 +28,20 @@ const jetbrains = JetBrains_Mono({
   preload: false,
 })
 
-export const metadata: Metadata = {
-  title: "GymOS",
-  description: "Gestión profesional para tu gimnasio",
+interface PlatformSettings { saasName?: string; logoUrl?: string | null }
+
+// The uploaded platform logo is the browser tab icon; favicon.ico is the fallback.
+export async function generateMetadata(): Promise<Metadata> {
+  const platform = await apiFetch<PlatformSettings>("/platform-settings", "", {
+    next: { tags: ["platform-settings"], revalidate: 300 },
+    silent: true,
+  }).catch(() => null)
+  const logo = normalizeLogoUrl(platform?.logoUrl)
+  return {
+    title: platform?.saasName ?? "GymOS",
+    description: "Gestión profesional para tu gimnasio",
+    icons: logo ? { icon: logo, apple: logo } : { icon: "/favicon.ico" },
+  }
 }
 
 export default function RootLayout({

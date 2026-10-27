@@ -13,8 +13,9 @@ import { isLocale } from '@/i18n/config'
 import { LocaleSync } from '@/i18n/LocaleSync'
 import { getLocale } from '@/i18n/server'
 import { Gym } from '@/types'
+import { normalizeLogoUrl } from '@/lib/utils'
 
-interface PlatformSettings { saasName: string }
+interface PlatformSettings { saasName: string; logoUrl?: string | null }
 
 interface Props {
   children: React.ReactNode
@@ -39,7 +40,9 @@ export async function generateMetadata({ params }: { params: Promise<{ gymSlug: 
   ])
   const saasName = platform?.saasName ?? 'GymOS'
   const name = gym?.name ?? gymSlug
-  return { title: `${saasName} | ${name}` }
+  // Tab icon: the gym's own logo, else the platform logo, else favicon.ico
+  const icon = normalizeLogoUrl(gym?.logoUrl) ?? normalizeLogoUrl(platform?.logoUrl) ?? '/favicon.ico'
+  return { title: `${saasName} | ${name}`, icons: { icon, apple: icon } }
 }
 
 export default async function GymLayout({ children, params }: Props) {

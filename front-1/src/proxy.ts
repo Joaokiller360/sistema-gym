@@ -48,5 +48,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/).*)'],
+  // uploads/ only holds public logos (also used as favicons on logged-out pages)
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/|uploads/).*)'],
 }
