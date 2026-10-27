@@ -31,6 +31,10 @@ export const commonMessages = defineMessages({
     serverUnreachable: 'No se pudo conectar con el servidor',
     invalidResponse: 'Respuesta inválida del servidor',
     errorStatus: (status: number) => `Error ${status}`,
+    status: {
+      ACTIVE: 'Activo', EXPIRED: 'Vencido', SUSPENDED: 'Suspendido', FROZEN: 'Congelado', CANCELLED: 'Cancelado',
+      active: 'Activo', inactive: 'Inactivo',
+    } as Record<string, string>,
     weekdays: { sun: 'Domingo', mon: 'Lunes', tue: 'Martes', wed: 'Miércoles', thu: 'Jueves', fri: 'Viernes', sat: 'Sábado' },
     weekdaysShort: { sun: 'Dom', mon: 'Lun', tue: 'Mar', wed: 'Mié', thu: 'Jue', fri: 'Vie', sat: 'Sáb' },
   },
@@ -63,6 +67,10 @@ export const commonMessages = defineMessages({
     serverUnreachable: 'Could not reach the server',
     invalidResponse: 'Invalid server response',
     errorStatus: (status: number) => `Error ${status}`,
+    status: {
+      ACTIVE: 'Active', EXPIRED: 'Expired', SUSPENDED: 'Suspended', FROZEN: 'Frozen', CANCELLED: 'Cancelled',
+      active: 'Active', inactive: 'Inactive',
+    },
     weekdays: { sun: 'Sunday', mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday' },
     weekdaysShort: { sun: 'Sun', mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat' },
   },
