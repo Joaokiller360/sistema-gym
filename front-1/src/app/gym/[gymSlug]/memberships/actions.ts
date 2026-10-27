@@ -3,6 +3,10 @@
 import { cookies } from 'next/headers'
 import { updateTag } from 'next/cache'
 import { apiFetch, apiFetchWithError } from '@/lib/api'
+import { getT } from '@/i18n/server'
+import { membershipsMessages } from './messages'
+
+const messages = async () => (await getT(membershipsMessages)).actions
 
 async function getToken() {
   const store = await cookies()
@@ -26,7 +30,7 @@ export async function cancelMembershipAction(gymSlug: string, id: string): Promi
   console.log('[cancelMembershipAction] id:', id, 'gymSlug:', gymSlug, 'hasToken:', !!token)
   const res = await apiFetch(`/memberships/${id}/cancel`, token, { method: 'PATCH' })
   console.log('[cancelMembershipAction] response:', JSON.stringify(res))
-  if (res === null) return { error: 'Error al cancelar la membresía' }
+  if (res === null) return { error: (await messages()).cancelFailed }
   updateTag(`memberships-${gymSlug}`)
   return {}
 }
@@ -39,7 +43,7 @@ export async function cancelMembershipWithPaymentsAction(
   const token = await getToken()
 
   const cancelResult = await apiFetch(`/memberships/${membershipId}/cancel`, token, { method: 'PATCH' })
-  if (cancelResult === null) return { error: 'Error al cancelar la membresía' }
+  if (cancelResult === null) return { error: (await messages()).cancelFailed }
 
   type PaymentRef = { id: string; membershipId: string | null }
   const payments = await apiFetch<PaymentRef[] | { data: PaymentRef[] }>(`/payments?memberId=${memberId}&membershipId=${membershipId}`, token)
@@ -75,7 +79,7 @@ export async function changePlanAction(
     token,
     { method: 'POST', body: JSON.stringify({ planId, method }) },
   )
-  if (res === null) return { error: 'Error al cambiar el plan' }
+  if (res === null) return { error: (await messages()).changeFailed }
   updateTag(`memberships-${gymSlug}`)
   return {}
 }
@@ -156,7 +160,7 @@ export async function restoreVisitDayAction(
   day: Pick<MembershipVisitDay, 'attendanceId' | 'extraIds'>,
 ): Promise<{ error?: string }> {
   const ids = [...day.extraIds, day.attendanceId]
-  if (!ids.every(id => UUID_RE.test(id))) return { error: 'Registro inválido' }
+  if (!ids.every(id => UUID_RE.test(id))) return { error: (await messages()).badRecord }
   const token = await getToken()
   const headers = { 'x-gym-slug': gymSlug }
   // Re-entries first: deleting the consuming check-in last is what returns the visit

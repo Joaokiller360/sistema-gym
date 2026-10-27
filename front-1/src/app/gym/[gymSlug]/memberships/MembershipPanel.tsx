@@ -21,22 +21,10 @@ import {
   type MembershipDetail,
   type MembershipVisitDay,
 } from './actions'
+import { useIntlLocale, useLocale, useT } from '@/i18n/client'
+import { commonMessages } from '@/i18n/common'
+import { membershipsMessages } from './messages'
 
-const METHOD_LABELS: Record<string, string> = {
-  CASH: 'Efectivo', CARD: 'Tarjeta', TRANSFER: 'Transferencia', OTHER: 'Otro',
-}
-
-function fmtDay(iso: string) {
-  return new Date(iso).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })
-}
-
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
-}
-
-function money(amount: number, currency: string) {
-  return `${currency} ${amount.toLocaleString('es-AR')}`
-}
 
 export function MembershipPanel({
   gymSlug,
@@ -61,6 +49,14 @@ export function MembershipPanel({
   const [confirmCancel, setConfirmCancel] = useState(false)
   const [newPlanId, setNewPlanId] = useState('')
   const [isPending, startTransition] = useTransition()
+  const t = useT(membershipsMessages).panel
+  const tc = useT(commonMessages)
+  const locale = useLocale()
+  const intl = useIntlLocale()
+  const fmtDay = (iso: string) => new Date(iso).toLocaleDateString(intl, { weekday: 'short', day: 'numeric', month: 'short' })
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString(intl, { hour: '2-digit', minute: '2-digit' })
+  const fmtDate = (iso: string) => fmtLong(iso, locale)
+  const money = (amount: number, currency: string) => `${currency} ${amount.toLocaleString(intl)}`
 
   const { member, plan, status } = membership
   const name = `${member.firstName} ${member.lastName}`
@@ -82,7 +78,7 @@ export function MembershipPanel({
         setNewPlanId('')
         router.refresh()
       } catch {
-        toast.error('Error inesperado. Intentá de nuevo.')
+        toast.error(t.unexpected)
       }
     })
   }
@@ -94,7 +90,7 @@ export function MembershipPanel({
       const res = await restoreVisitDayAction(gymSlug, member.id, target)
       setRestoreTarget(null)
       if (res.error) { toast.error(res.error); return }
-      toast.success(`Día devuelto a ${member.firstName}`)
+      toast.success(t.dayReturned(member.firstName))
       setReload(r => r + 1)
       router.refresh()
     })
@@ -108,7 +104,7 @@ export function MembershipPanel({
 
   return (
     <aside
-      aria-label={`Membresía de ${name}`}
+      aria-label={t.membershipOf(name)}
       className={cn('flex flex-col', !bare && 'overflow-hidden rounded-2xl border border-zinc-200 bg-white')}
     >
       {/* Identity */}
@@ -122,7 +118,7 @@ export function MembershipPanel({
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <StatusBadge status={status} />
             <Link href={`/gym/${gymSlug}/members/${member.id}`} className="inline-flex items-center gap-1 text-[13px] font-semibold text-[#0e7a70] hover:underline">
-              <UserRound className="h-3.5 w-3.5" /> Ver perfil
+              <UserRound className="h-3.5 w-3.5" /> {t.viewProfile}
             </Link>
           </div>
         </div>
@@ -133,13 +129,13 @@ export function MembershipPanel({
         <div className="flex items-baseline justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate text-base font-bold">{plan.name}</p>
-            <p className="text-[13px] text-zinc-500">{plan.currency} {Number(plan.price).toLocaleString('es-AR')}</p>
+            <p className="text-[13px] text-zinc-500">{plan.currency} {Number(plan.price).toLocaleString(intl)}</p>
           </div>
           <p className={cn('shrink-0 text-right text-sm font-bold', view.expiring ? 'text-amber-700' : 'text-zinc-800')}>{view.remainingLabel}</p>
         </div>
 
         {visitsTotal != null && visitsTotal <= 31 ? (
-          <div role="img" aria-label={`Usó ${membership.visitsUsed} de ${visitsTotal} días`} className="flex gap-1">
+          <div role="img" aria-label={t.usedOf(membership.visitsUsed, visitsTotal)} className="flex gap-1">
             {Array.from({ length: visitsTotal }, (_, i) => (
               <span key={i} className={cn('h-2.5 flex-1 rounded-full', i < membership.visitsUsed ? 'bg-zinc-300' : 'bg-[#1fad9d]')} />
             ))}
@@ -152,22 +148,22 @@ export function MembershipPanel({
 
         <dl className="grid grid-cols-2 gap-3 text-sm">
           <div>
-            <dt className="text-xs text-zinc-500">Inicio</dt>
-            <dd className="font-semibold">{fmtLong(membership.startDate)}</dd>
+            <dt className="text-xs text-zinc-500">{t.start}</dt>
+            <dd className="font-semibold">{fmtDate(membership.startDate)}</dd>
           </div>
           <div>
-            <dt className="text-xs text-zinc-500">Vence</dt>
-            <dd className="font-semibold">{fmtLong(membership.endDate)}</dd>
+            <dt className="text-xs text-zinc-500">{t.end}</dt>
+            <dd className="font-semibold">{fmtDate(membership.endDate)}</dd>
           </div>
           {status === 'FROZEN' && membership.frozenAt && (
             <div className="col-span-2">
-              <dt className="text-xs text-zinc-500">Congelada desde</dt>
-              <dd className="font-semibold text-blue-700">{fmtLong(membership.frozenAt)}</dd>
+              <dt className="text-xs text-zinc-500">{t.frozenSince}</dt>
+              <dd className="font-semibold text-blue-700">{fmtDate(membership.frozenAt)}</dd>
             </div>
           )}
           {(membership.group?.length ?? 0) > 0 && (
             <div className="col-span-2">
-              <dt className="text-xs text-zinc-500">Comparte el plan con</dt>
+              <dt className="text-xs text-zinc-500">{t.sharedWith}</dt>
               <dd className="font-semibold">{membership.group!.map(g => `${g.member.firstName} ${g.member.lastName}`).join(', ')}</dd>
             </div>
           )}
@@ -180,15 +176,15 @@ export function MembershipPanel({
         <section className="space-y-3 border-b border-zinc-100 p-5">
           <div className="flex items-center gap-2">
             <CalendarCheck className="h-4 w-4 text-zinc-500" />
-            <h3 className="text-sm font-extrabold">Días usados</h3>
-            <span className="ml-auto text-xs text-zinc-500">{membership.visitsUsed} de {visitsTotal}</span>
+            <h3 className="text-sm font-extrabold">{t.daysUsed}</h3>
+            <span className="ml-auto text-xs text-zinc-500">{t.ofTotal(membership.visitsUsed, visitsTotal)}</span>
           </div>
           {!detail ? (
             <div className="space-y-2" aria-hidden="true">
               {[0, 1].map(i => <div key={i} className="h-11 animate-pulse rounded-xl bg-zinc-100" />)}
             </div>
           ) : detail.visits.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-zinc-200 px-3 py-4 text-center text-[13px] text-zinc-500">Todavía no usó ningún día.</p>
+            <p className="rounded-xl border border-dashed border-zinc-200 px-3 py-4 text-center text-[13px] text-zinc-500">{t.noDaysUsed}</p>
           ) : (
             <ul className="divide-y divide-zinc-100 rounded-xl border border-zinc-200">
               {detail.visits.map(v => (
@@ -196,7 +192,7 @@ export function MembershipPanel({
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-semibold capitalize">{fmtDay(v.checkIn)}</span>
                     <span className="block text-xs text-zinc-500">
-                      Entró {fmtTime(v.checkIn)}{v.extraIds.length > 0 && ` · ${v.extraIds.length + 1} entradas ese día`}
+                      {t.entered(fmtTime(v.checkIn))}{v.extraIds.length > 0 && t.entriesThatDay(v.extraIds.length + 1)}
                     </span>
                   </span>
                   {canManage && (
@@ -206,7 +202,7 @@ export function MembershipPanel({
                       onClick={() => setRestoreTarget(v)}
                       className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-zinc-200 px-3 text-[13px] font-semibold text-zinc-700 transition-colors hover:border-zinc-300 hover:text-zinc-900 disabled:opacity-50"
                     >
-                      <RotateCcw className="h-3.5 w-3.5" /> Devolver día
+                      <RotateCcw className="h-3.5 w-3.5" /> {t.returnDay}
                     </button>
                   )}
                 </li>
@@ -214,7 +210,7 @@ export function MembershipPanel({
             </ul>
           )}
           {canManage && (detail?.visits.length ?? 0) > 0 && (
-            <p className="text-xs text-zinc-500">¿Le descontaron un día que no vino? Devolvelo: se borra esa entrada y el pago queda igual.</p>
+            <p className="text-xs text-zinc-500">{t.returnHint}</p>
           )}
         </section>
       )}
@@ -223,7 +219,7 @@ export function MembershipPanel({
       <section className="space-y-3 border-b border-zinc-100 p-5">
         <div className="flex items-center gap-2">
           <Wallet className="h-4 w-4 text-zinc-500" />
-          <h3 className="text-sm font-extrabold">Pagos de esta membresía</h3>
+          <h3 className="text-sm font-extrabold">{t.payments}</h3>
           {detail && detail.payments.length > 0 && (
             <span className="ml-auto text-xs font-semibold text-zinc-700">{money(paidTotal, detail.payments[0].currency)}</span>
           )}
@@ -231,49 +227,49 @@ export function MembershipPanel({
         {!detail ? (
           <div className="h-11 animate-pulse rounded-xl bg-zinc-100" aria-hidden="true" />
         ) : detail.payments.length === 0 ? (
-          <p className="text-[13px] text-zinc-500">Sin pagos asociados.</p>
+          <p className="text-[13px] text-zinc-500">{t.noPayments}</p>
         ) : (
           <ul className="divide-y divide-zinc-100 rounded-xl border border-zinc-200">
             {detail.payments.map(p => (
               <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
                 <span>
-                  <span className="block font-semibold">{fmtLong(p.createdAt)}</span>
-                  <span className="block text-xs text-zinc-500">{METHOD_LABELS[p.method] ?? p.method}</span>
+                  <span className="block font-semibold">{fmtDate(p.createdAt)}</span>
+                  <span className="block text-xs text-zinc-500">{tc.methods[p.method] ?? p.method}</span>
                 </span>
                 <span className="font-bold">{money(p.amount, p.currency)}</span>
               </li>
             ))}
           </ul>
         )}
-        <p className="text-xs text-zinc-500">Devolver días, congelar, suspender o cancelar no modifica estos pagos ni la caja.</p>
+        <p className="text-xs text-zinc-500">{t.paymentsHint}</p>
       </section>
 
       {/* Actions */}
       {canManage && canAct && (
         <section className="space-y-3 p-5">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500">Acciones</h3>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500">{t.actions}</h3>
 
           {status === 'ACTIVE' && otherPlans.length > 0 && (
             <div className="flex gap-2">
-              <label className="sr-only" htmlFor={`change-plan-${membership.id}`}>Cambiar plan</label>
+              <label className="sr-only" htmlFor={`change-plan-${membership.id}`}>{t.changePlan}</label>
               <select
                 id={`change-plan-${membership.id}`}
                 value={newPlanId}
                 onChange={e => setNewPlanId(e.target.value)}
                 className="h-10 min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1fad9d]"
               >
-                <option value="">Cambiar a otro plan…</option>
+                <option value="">{t.changeTo}</option>
                 {otherPlans.map(p => (
-                  <option key={p.id} value={p.id}>{p.name} — {p.currency} {Number(p.price).toLocaleString('es-AR')}</option>
+                  <option key={p.id} value={p.id}>{p.name} — {p.currency} {Number(p.price).toLocaleString(intl)}</option>
                 ))}
               </select>
               <button
                 type="button"
                 disabled={!newPlanId || isPending}
-                onClick={() => run(() => changePlanAction(gymSlug, membership.id, newPlanId), 'Plan cambiado')}
+                onClick={() => run(() => changePlanAction(gymSlug, membership.id, newPlanId), t.planChanged)}
                 className="h-10 shrink-0 rounded-lg bg-[#1fad9d] px-3 text-sm font-semibold text-white transition-colors hover:bg-[#0e7a70] disabled:opacity-50"
               >
-                Cambiar
+                {t.change}
               </button>
             </div>
           )}
@@ -282,25 +278,25 @@ export function MembershipPanel({
             {status === 'ACTIVE' && (
               <>
                 <button type="button" disabled={isPending}
-                  onClick={() => run(() => freezeMembershipAction(gymSlug, membership.id), 'Membresía congelada')}
+                  onClick={() => run(() => freezeMembershipAction(gymSlug, membership.id), t.frozen)}
                   className="h-10 min-w-[110px] flex-1 rounded-lg border border-blue-200 bg-blue-50 px-3 text-[13px] font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-50"
                 >
-                  Congelar
+                  {t.freeze}
                 </button>
                 <button type="button" disabled={isPending}
-                  onClick={() => run(() => suspendMembershipAction(gymSlug, membership.id), 'Membresía suspendida')}
+                  onClick={() => run(() => suspendMembershipAction(gymSlug, membership.id), t.suspended)}
                   className="h-10 min-w-[110px] flex-1 rounded-lg border border-amber-200 bg-amber-50 px-3 text-[13px] font-semibold text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-50"
                 >
-                  Suspender
+                  {t.suspend}
                 </button>
               </>
             )}
             {status === 'FROZEN' && (
               <button type="button" disabled={isPending}
-                onClick={() => run(() => unfreezeMembershipAction(gymSlug, membership.id), 'Membresía descongelada')}
+                onClick={() => run(() => unfreezeMembershipAction(gymSlug, membership.id), t.unfrozen)}
                 className="h-10 flex-1 rounded-lg border border-[#1fad9d]/30 bg-[#1fad9d]/10 px-3 text-[13px] font-semibold text-[#0e7a70] transition-colors hover:bg-[#1fad9d]/20 disabled:opacity-50"
               >
-                Descongelar
+                {t.unfreeze}
               </button>
             )}
           </div>
@@ -309,22 +305,22 @@ export function MembershipPanel({
             <button type="button" disabled={isPending} onClick={() => setConfirmCancel(true)}
               className="h-10 w-full rounded-lg border border-red-200 bg-red-50 px-3 text-[13px] font-semibold text-red-600 transition-colors hover:bg-red-100 disabled:opacity-50"
             >
-              Cancelar membresía
+              {t.cancel}
             </button>
           ) : (
             <div className="space-y-2.5 rounded-xl border border-red-200 bg-red-50 p-3">
-              <p className="text-xs font-semibold text-red-700">¿Cancelar la membresía de {member.firstName}? No se puede deshacer. Los pagos no se borran.</p>
+              <p className="text-xs font-semibold text-red-700">{t.cancelConfirm(member.firstName)}</p>
               <div className="flex gap-2">
                 <button type="button" onClick={() => setConfirmCancel(false)}
                   className="h-9 flex-1 rounded-lg border border-zinc-200 bg-white text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
                 >
-                  No, volver
+                  {t.noGoBack}
                 </button>
                 <button type="button" disabled={isPending}
-                  onClick={() => run(() => cancelMembershipAction(gymSlug, membership.id), 'Membresía cancelada')}
+                  onClick={() => run(() => cancelMembershipAction(gymSlug, membership.id), t.cancelled)}
                   className="h-9 flex-1 rounded-lg bg-red-600 text-xs font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
                 >
-                  {isPending ? '…' : 'Sí, cancelar'}
+                  {isPending ? '…' : t.yesCancel}
                 </button>
               </div>
             </div>
@@ -335,23 +331,23 @@ export function MembershipPanel({
       <AlertDialog open={!!restoreTarget} onOpenChange={open => { if (!open) setRestoreTarget(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Devolver el día a {member.firstName}?</AlertDialogTitle>
+            <AlertDialogTitle>{t.returnTitle(member.firstName)}</AlertDialogTitle>
             <AlertDialogDescription>
-              Se borra la entrada del {restoreTarget ? fmtDay(restoreTarget.checkIn) : ''}
-              {restoreTarget && restoreTarget.extraIds.length > 0 && ` (y las otras ${restoreTarget.extraIds.length} de ese día)`}
-              {afterRestore != null && visitsTotal != null && ` y le van a quedar ${afterRestore} de ${visitsTotal} días`}.
-              {' '}El pago no se toca: la caja y los ingresos quedan igual.
+              {t.returnBody(restoreTarget ? fmtDay(restoreTarget.checkIn) : '')}
+              {restoreTarget && restoreTarget.extraIds.length > 0 && t.returnOthers(restoreTarget.extraIds.length)}
+              {afterRestore != null && visitsTotal != null && t.returnLeft(afterRestore, visitsTotal)}.
+              {' '}{t.returnPayment}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={isPending}>{tc.cancel}</AlertDialogCancel>
             <button
               type="button"
               onClick={confirmRestore}
               disabled={isPending}
               className="inline-flex items-center justify-center rounded-xl bg-[#1fad9d] px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-[#0e7a70] disabled:opacity-50"
             >
-              {isPending ? 'Devolviendo…' : 'Devolver día'}
+              {isPending ? t.returning : t.returnDay}
             </button>
           </AlertDialogFooter>
         </AlertDialogContent>
