@@ -12,6 +12,7 @@ const fileType = require('file-type') as { fromBuffer: (buf: Buffer) => Promise<
 import { GymsService } from './gyms.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { TenantGuard } from '../common/guards/tenant.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
 import { COUNTRY_TIMEZONES } from '../common/utils/timezone.util';
@@ -95,24 +96,31 @@ export class GymsController {
     return this.gymsService.updateLogo(id, `/uploads/logos/${file.filename}`, req.user?.userId, req.user?.role);
   }
 
+  // Staff routes resolve the gym through TenantGuard (req.gymId): a super admin has no gym
+  // in the token and must send x-gym-slug, otherwise admins were created without a gym.
   @Get('staff/list')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
   @Roles(Role.GYM_OWNER)
   getStaff(@Req() req: any) {
-    return this.gymsService.getStaff(req.user.gymId);
+    return this.gymsService.getStaff(this.requireGym(req));
   }
 
   @Post('staff')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
   @Roles(Role.GYM_OWNER)
   createStaff(@Req() req: any, @Body() body: { name: string; email: string }) {
-    return this.gymsService.createStaff(req.user.gymId, body.name, body.email);
+    return this.gymsService.createStaff(this.requireGym(req), body.name, body.email);
   }
 
   @Delete('staff/:userId')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, TenantGuard, RolesGuard)
   @Roles(Role.GYM_OWNER)
   removeStaff(@Req() req: any, @Param('userId') userId: string) {
-    return this.gymsService.removeStaff(req.user.gymId, userId);
+    return this.gymsService.removeStaff(this.requireGym(req), userId);
+  }
+
+  private requireGym(req: any): string {
+    if (!req.gymId) throw new BadRequestException('Falta indicar el gimnasio (x-gym-slug)');
+    return req.gymId;
   }
 }
