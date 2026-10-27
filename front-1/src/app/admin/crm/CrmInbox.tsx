@@ -367,8 +367,8 @@ export function CrmInbox({
         <p role="status" className="flex items-start gap-2 rounded-xl border border-adm-warn-line bg-adm-warn-bg px-4 py-3 text-[13px] text-adm-warn-fg">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <span>
-            {!config.enabled && 'No se pueden enviar mensajes: faltan WHATSAPP_TOKEN y WHATSAPP_PHONE_NUMBER_ID en el back. '}
-            {!config.webhookSigned && 'No se reciben mensajes: falta WHATSAPP_APP_SECRET y configurar el webhook en Meta. '}
+            {!config.enabled && 'No se pueden enviar mensajes: faltan ZERNIO_API_KEY y ZERNIO_WHATSAPP_ACCOUNT_ID en el back. '}
+            {!config.webhookSigned && 'No se reciben mensajes: falta ZERNIO_WEBHOOK_SECRET y configurar el webhook en Zernio. '}
             Ver back-1/docs/whatsapp-templates.md.
           </span>
         </p>

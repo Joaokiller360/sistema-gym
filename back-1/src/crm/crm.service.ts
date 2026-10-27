@@ -61,6 +61,39 @@ interface WaChangeValue {
   statuses?: WaStatus[];
 }
 
+// Shapes of the Zernio inbox webhooks we use (message.received / delivered / read / failed)
+export interface ZernioWebhookPayload {
+  event: string;
+  message?: {
+    conversationId: string;
+    platform: string;
+    platformMessageId: string;
+    direction: 'incoming' | 'outgoing';
+    text: string | null;
+    attachments?: { type: string }[];
+    sender?: { id: string; name?: string; phoneNumber?: string | null };
+    sentAt?: string;
+  };
+  account?: { accountId?: string };
+  error?: { code?: number; title?: string; message?: string } | null;
+}
+
+/** Provider-neutral inbound message, what the CRM actually stores */
+interface Inbound {
+  waMessageId: string;
+  from: string;
+  contactName?: string;
+  type: string;
+  body: string;
+  at: Date;
+  externalId?: string;
+}
+interface StatusUpdate {
+  waMessageId: string;
+  status: string;
+  error?: { title?: string; message?: string; code?: number };
+}
+
 const MEDIA_LABEL: Record<string, string> = {
   image: '📷 Imagen',
   video: '🎥 Video',
@@ -68,6 +101,7 @@ const MEDIA_LABEL: Record<string, string> = {
   voice: '🎤 Audio',
   document: '📄 Documento',
   sticker: 'Sticker',
+  file: '📄 Documento',
 };
 
 @Injectable()
@@ -82,7 +116,9 @@ export class CrmService {
   config() {
     return {
       enabled: this.whatsapp.enabled,
-      webhookSigned: !!process.env.WHATSAPP_APP_SECRET,
+      webhookSigned:
+        !!process.env.ZERNIO_WEBHOOK_SECRET ||
+        !!process.env.WHATSAPP_APP_SECRET,
     };
   }
 
@@ -255,7 +291,7 @@ export class CrmService {
     );
     if (!ok)
       throw new BadRequestException(
-        'Meta rechazó la plantilla. Revisá que esté aprobada (ver log del back).',
+        'WhatsApp rechazó la plantilla. Revisá que esté aprobada (ver log del back).',
       );
     return { ok: true };
   }
@@ -268,37 +304,94 @@ export class CrmService {
         const value = change.value;
         if (!value) continue;
         for (const m of value.messages ?? []) {
-          const name = value.contacts?.find((c) => c.wa_id === m.from)?.profile
-            ?.name;
-          await this.saveInbound(m, name).catch((e) =>
+          await this.saveInbound({
+            waMessageId: m.id,
+            from: m.from,
+            contactName: value.contacts?.find((c) => c.wa_id === m.from)
+              ?.profile?.name,
+            type: m.type,
+            body: inboundText(m),
+            at: new Date(Number(m.timestamp) * 1000 || Date.now()),
+          }).catch((e) =>
             this.logger.error(`[CRM] Inbound ${m.id} failed:`, e),
           );
         }
         for (const s of value.statuses ?? []) {
-          await this.saveStatus(s).catch((e) =>
-            this.logger.error(`[CRM] Status ${s.id} failed:`, e),
-          );
+          await this.saveStatus({
+            waMessageId: s.id,
+            status: s.status,
+            error: s.errors?.[0],
+          }).catch((e) => this.logger.error(`[CRM] Status ${s.id} failed:`, e));
         }
       }
     }
   }
 
-  private async saveInbound(m: WaInbound, contactName?: string) {
+  async handleZernioWebhook(payload: ZernioWebhookPayload) {
+    const m = payload.message;
+    if (!m || m.platform !== 'whatsapp') return;
+    // Only the number the CRM is wired to (the Zernio key may hold other accounts)
+    const accountId = process.env.ZERNIO_WHATSAPP_ACCOUNT_ID;
+    if (accountId && payload.account?.accountId !== accountId) return;
+
+    if (payload.event === 'message.received' && m.direction === 'incoming') {
+      // Users on a WhatsApp username may hide their number: sender.id is then a BSUID
+      const from =
+        m.sender?.phoneNumber ??
+        (/^\d+$/.test(m.sender?.id ?? '') ? m.sender?.id : undefined);
+      if (!from) {
+        this.logger.warn(
+          `[CRM] Zernio message ${m.platformMessageId} has no phone number, skipped`,
+        );
+        return;
+      }
+      const media = m.attachments?.[0]?.type;
+      const label = media && (MEDIA_LABEL[media] ?? `[${media}]`);
+      await this.saveInbound({
+        waMessageId: m.platformMessageId,
+        from,
+        contactName: m.sender?.name,
+        type: m.text ? 'text' : (media ?? 'text'),
+        body:
+          m.text && label
+            ? `${label}: ${m.text}`
+            : (m.text ?? `${label ?? '[mensaje]'} (abrilo en WhatsApp)`),
+        at: new Date(m.sentAt ?? Date.now()),
+        externalId: m.conversationId,
+      });
+      return;
+    }
+
+    const status = {
+      'message.delivered': 'delivered',
+      'message.read': 'read',
+      'message.failed': 'failed',
+    }[payload.event];
+    if (status) {
+      await this.saveStatus({
+        waMessageId: m.platformMessageId,
+        status,
+        error: payload.error ?? undefined,
+      });
+    }
+  }
+
+  private async saveInbound(m: Inbound) {
     const phone = normalizePhone(m.from);
     if (!phone) return;
-    // Meta retries webhooks: the unique waMessageId makes this idempotent
+    // Webhooks get retried: the unique waMessageId makes this idempotent
     if (
       await this.prisma.waMessage.findUnique({
-        where: { waMessageId: m.id },
+        where: { waMessageId: m.waMessageId },
         select: { id: true },
       })
     )
       return;
 
-    const at = new Date(Number(m.timestamp) * 1000 || Date.now());
+    const { at, contactName, externalId } = m;
     const existing = await this.prisma.waConversation.findUnique({
       where: { phone },
-      select: { id: true, gymId: true },
+      select: { id: true, gymId: true, externalId: true },
     });
     const gymId =
       existing?.gymId ??
@@ -314,6 +407,7 @@ export class CrmService {
       create: {
         phone,
         contactName,
+        externalId,
         gymId,
         status: 'OPEN',
         unreadCount: 1,
@@ -323,6 +417,7 @@ export class CrmService {
       update: {
         ...(contactName && { contactName }),
         ...(gymId && !existing?.gymId && { gymId }),
+        ...(externalId && !existing?.externalId && { externalId }),
         // A new message from the gym always needs our attention again
         status: 'OPEN',
         unreadCount: { increment: 1 },
@@ -337,16 +432,16 @@ export class CrmService {
         conversationId: conv.id,
         direction: 'IN',
         type: m.type,
-        body: inboundText(m),
-        waMessageId: m.id,
+        body: m.body,
+        waMessageId: m.waMessageId,
         createdAt: at,
       },
     });
   }
 
-  private async saveStatus(s: WaStatus) {
+  private async saveStatus(s: StatusUpdate) {
     const msg = await this.prisma.waMessage.findUnique({
-      where: { waMessageId: s.id },
+      where: { waMessageId: s.waMessageId },
       select: { id: true, status: true },
     });
     if (!msg) return;
@@ -356,7 +451,7 @@ export class CrmService {
       (STATUS_RANK[s.status] ?? 0) <= (STATUS_RANK[msg.status ?? ''] ?? 0)
     )
       return;
-    const err = s.errors?.[0];
+    const err = s.error;
     await this.prisma.waMessage.update({
       where: { id: msg.id },
       data: {

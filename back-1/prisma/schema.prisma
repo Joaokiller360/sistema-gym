@@ -835,6 +835,8 @@ model WaConversation {
   phone         String    @unique
   /// WhatsApp profile name of the contact
   contactName   String?
+  /// Zernio inbox conversation id (needed to reply through Zernio)
+  externalId    String?   @unique
   status        CrmStatus @default(OPEN)
   notes         String?
   unreadCount   Int       @default(0)
