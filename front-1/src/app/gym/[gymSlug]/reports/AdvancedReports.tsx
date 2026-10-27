@@ -8,6 +8,10 @@ import { type AdvancedReport } from '../dashboard/AdvancedReportsSection'
 import { AdminPage, btn } from '@/components/admin/ui'
 import { cn } from '@/lib/utils'
 import { emailMonthlyReport } from './actions'
+import { useIntlLocale, useT } from '@/i18n/client'
+import { reportsMessages } from './messages'
+
+type AdvMessages = (typeof reportsMessages)['es']['adv']
 
 interface Props {
   gymSlug: string
@@ -49,20 +53,22 @@ function HeroBars({ cur, prev, fmt }: {
   prev: { label: string; amount: number }[] | null
   fmt: (n: number) => string
 }) {
-  if (!cur.length) return <p className="py-16 text-center text-sm text-[#a3a39d]">Sin ventas de membresías en este período</p>
+  const t = useT(reportsMessages).adv
+  const intl = useIntlLocale()
+  if (!cur.length) return <p className="py-16 text-center text-sm text-[#a3a39d]">{t.noSales}</p>
   const max = Math.max(1, ...cur.map(d => d.amount), ...(prev ?? []).map(d => d.amount))
   const dense = cur.length > 10
   const every = dense ? Math.ceil(cur.length / 8) : 1
   return (
     <>
-      <div className={cn('flex h-[200px] items-end border-b border-[#2a2a2e]', dense ? 'gap-1' : 'gap-3.5')} role="img" aria-label="Ingresos de membresías por período">
+      <div className={cn('flex h-[200px] items-end border-b border-[#2a2a2e]', dense ? 'gap-1' : 'gap-3.5')} role="img" aria-label={t.revenueAria}>
         {cur.map((d, i) => {
           const p = prev?.[i]?.amount
           return (
             <div
               key={d.label}
               className="flex h-full min-w-0 flex-1 items-end justify-center gap-1"
-              title={`${d.label}: ${fmt(d.amount)}${p !== undefined ? ` · mes anterior ${fmt(p)}` : ''}`}
+              title={`${d.label}: ${fmt(d.amount)}${p !== undefined ? t.prevMonth(fmt(p)) : ''}`}
             >
               {prev && (
                 <div className="w-full max-w-[30px] rounded-t-md bg-[#3a3a3d]" style={{ height: `${Math.max(2, (p ?? 0) / max * 100)}%` }} />
@@ -76,7 +82,7 @@ function HeroBars({ cur, prev, fmt }: {
         {cur.map((d, i) => (
           <div key={d.label} className="flex min-w-0 flex-1 flex-col items-center gap-0.5 text-center font-admin-mono text-xs">
             <span className="truncate text-[#a3a39d]">{i % every === 0 ? d.label : ''}</span>
-            {!dense && <span className="truncate text-[#f2f2ee]">{d.amount.toLocaleString('es-AR')}</span>}
+            {!dense && <span className="truncate text-[#f2f2ee]">{d.amount.toLocaleString(intl)}</span>}
           </div>
         ))}
       </div>
@@ -122,6 +128,8 @@ async function exportToExcel(
   curRevTotal: number,
   prevRevTotal: number,
   view: 'daily' | 'monthly',
+  t: AdvMessages['xlsx'],
+  intl: string,
 ) {
   const XLSX = await import('xlsx')
   const wb = XLSX.utils.book_new()
@@ -129,39 +137,39 @@ async function exportToExcel(
 
   // KPIs
   const kpis = [
-    ['Métrica', 'Mes actual', 'Mes anterior'],
-    ['Ingresos', `${currency} ${curRevTotal.toLocaleString('es-AR')}`, `${currency} ${prevRevTotal.toLocaleString('es-AR')}`],
-    ['Nuevos miembros', current?.newMembers ?? '—', previous?.newMembers ?? '—'],
-    ['Bajas', current?.churned ?? '—', previous?.churned ?? '—'],
-    ['Vencen en 7 días', current?.expiringNext7Days ?? '—', ''],
-    ['Día pico', current?.peakDay ?? '—', ''],
-    ['Hora pico', current?.peakHour ?? '—', ''],
+    [t.metric, t.current, t.previous],
+    [t.revenue, `${currency} ${curRevTotal.toLocaleString(intl)}`, `${currency} ${prevRevTotal.toLocaleString(intl)}`],
+    [t.newMembers, current?.newMembers ?? '—', previous?.newMembers ?? '—'],
+    [t.churned, current?.churned ?? '—', previous?.churned ?? '—'],
+    [t.expiring7, current?.expiringNext7Days ?? '—', ''],
+    [t.peakDay, current?.peakDay ?? '—', ''],
+    [t.peakHour, current?.peakHour ?? '—', ''],
   ]
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(kpis), 'KPIs')
 
   // Revenue trend
   const revenueHeader = view === 'daily'
-    ? [['Día', `Ingresos (${currency})`]]
-    : [['Semana', `Ingresos ${monthStr} (${currency})`, `Ingresos ${prevMonthStr} (${currency})`]]
+    ? [[t.day, t.revenueIn('', currency)]]
+    : [[t.week, t.revenueIn(`${monthStr} `, currency), t.revenueIn(`${prevMonthStr} `, currency)]]
   const prevTrendMap = new Map((previous?.revenueTrend ?? []).map(d => [d.label, d.amount]))
   const revenueRows = view === 'daily'
     ? (current?.revenueTrend ?? []).map(d => [d.label, d.amount])
     : (current?.revenueTrend ?? []).map(d => [d.label, d.amount, prevTrendMap.get(d.label) ?? 0])
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([...revenueHeader, ...revenueRows]), 'Ingresos')
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([...revenueHeader, ...revenueRows]), t.sheetRevenue)
 
   // Members by plan
   if ((current?.membersByPlan.length ?? 0) > 0) {
-    const planRows = [['Plan', 'Membresías activas', '%'], ...current!.membersByPlan.map(p => [p.planName, p.count, `${p.percent}%`])]
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(planRows), 'Por plan')
+    const planRows = [[t.plan, t.activeMemberships, '%'], ...current!.membersByPlan.map(p => [p.planName, p.count, `${p.percent}%`])]
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(planRows), t.sheetByPlan)
   }
 
   // Attendance trend
   if ((current?.attendanceTrend.length ?? 0) > 0) {
-    const attRows = [['Día', 'Check-ins'], ...current!.attendanceTrend.map(d => [d.label, d.count])]
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(attRows), 'Asistencia')
+    const attRows = [[t.day, t.checkins], ...current!.attendanceTrend.map(d => [d.label, d.count])]
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(attRows), t.sheetAttendance)
   }
 
-  XLSX.writeFile(wb, `reportes-${monthStr.replace(/ /g, '-')}.xlsx`)
+  XLSX.writeFile(wb, t.fileName(monthStr.replace(/ /g, '-')))
 }
 
 export function AdvancedReports({ gymSlug, defaultMonth, view, gymTimezone, advancedCurrent, advancedPrevious }: Props) {
@@ -169,6 +177,8 @@ export function AdvancedReports({ gymSlug, defaultMonth, view, gymTimezone, adva
   const [sending, startSending] = useTransition()
   const [downloading, setDownloading] = useState(false)
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null)
+  const t = useT(reportsMessages).adv
+  const intl = useIntlLocale()
 
   const [curYear, curMonthNum] = defaultMonth
     ? defaultMonth.split('-').map(Number)
@@ -177,11 +187,11 @@ export function AdvancedReports({ gymSlug, defaultMonth, view, gymTimezone, adva
   const prevYear = curMonth0 === 0 ? curYear - 1 : curYear
   const prevMonth0 = curMonth0 === 0 ? 11 : curMonth0 - 1
   // Use local Date constructor (not ISO string) to avoid UTC→local offset shifting month display
-  const monthStr = new Date(curYear, curMonth0, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
-  const prevMonthStr = new Date(prevYear, prevMonth0, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+  const monthStr = new Date(curYear, curMonth0, 1).toLocaleDateString(intl, { month: 'long', year: 'numeric' })
+  const prevMonthStr = new Date(prevYear, prevMonth0, 1).toLocaleDateString(intl, { month: 'long', year: 'numeric' })
 
   const currency = advancedCurrent?.currency ?? advancedPrevious?.currency ?? 'ARS'
-  const fmt = (n: number) => `${currency} ${n.toLocaleString('es-AR')}`
+  const fmt = (n: number) => `${currency} ${n.toLocaleString(intl)}`
   // Member payments registered in period (via revenueTrend); deleted payments drop out
   const curRevTotal = advancedCurrent?.revenueTrend.reduce((s, d) => s + d.amount, 0) ?? 0
   const prevRevTotal = advancedPrevious?.revenueTrend.reduce((s, d) => s + d.amount, 0) ?? 0
@@ -206,7 +216,7 @@ export function AdvancedReports({ gymSlug, defaultMonth, view, gymTimezone, adva
   const attendanceTotal = attendance.reduce((s, d) => s + d.count, 0)
   const attendancePeak = Math.max(0, ...attendance.map(d => d.count))
   const groups = (advancedCurrent?.attendanceTrendByGroup ?? [])
-    .map(g => ({ name: g.groupName ?? 'Sin grupo', count: g.trend.reduce((s, d) => s + d.count, 0) }))
+    .map(g => ({ name: g.groupName ?? t.noGroup, count: g.trend.reduce((s, d) => s + d.count, 0) }))
 
   const go = (month: string, v = view) => router.push(`?month=${month}&view=${v}`)
   const nextMonth = shiftMonth(defaultMonth, 1)
@@ -217,7 +227,7 @@ export function AdvancedReports({ gymSlug, defaultMonth, view, gymTimezone, adva
       const res = await emailMonthlyReport(gymSlug, defaultMonth)
       setStatus('error' in res
         ? { ok: false, text: res.error }
-        : { ok: true, text: `Reporte enviado a ${res.sentTo}` })
+        : { ok: true, text: t.sentTo(res.sentTo) })
     })
   }
 
@@ -229,17 +239,17 @@ export function AdvancedReports({ gymSlug, defaultMonth, view, gymTimezone, adva
       const res = await fetch(`/gym/${gymSlug}/reports/pdf?month=${defaultMonth}`)
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string }
-        setStatus({ ok: false, text: body.error ?? 'No se pudo generar el PDF' })
+        setStatus({ ok: false, text: body.error ?? t.pdfFailed })
         return
       }
       const url = URL.createObjectURL(await res.blob())
       const a = document.createElement('a')
       a.href = url
-      a.download = `reporte-${gymSlug}-${defaultMonth}.pdf`
+      a.download = t.pdfName(gymSlug, defaultMonth)
       a.click()
       URL.revokeObjectURL(url)
     } catch {
-      setStatus({ ok: false, text: 'Error de conexión al descargar el PDF' })
+      setStatus({ ok: false, text: t.pdfConnection })
     } finally {
       setDownloading(false)
     }
@@ -250,15 +260,15 @@ export function AdvancedReports({ gymSlug, defaultMonth, view, gymTimezone, adva
       {/* Header */}
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-col gap-1.5">
-          <p className="font-admin-mono text-xs uppercase tracking-[0.08em] text-adm-muted">Reportes</p>
+          <p className="font-admin-mono text-xs uppercase tracking-[0.08em] text-adm-muted">{t.eyebrow}</p>
           <h1 className="text-[34px] font-black capitalize leading-none tracking-tight">{monthStr}</h1>
           <p className="text-sm text-adm-muted">
-            {monthly ? <>Comparado con <span className="capitalize">{prevMonthStr}</span></> : 'Detalle día por día'}
+            {monthly ? <>{t.comparedWith} <span className="capitalize">{prevMonthStr}</span></> : t.dayByDay}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex gap-1 rounded-full border border-adm-line bg-adm-surface p-1" role="group" aria-label="Vista">
+          <div className="flex gap-1 rounded-full border border-adm-line bg-adm-surface p-1" role="group" aria-label={t.view}>
             {(['monthly', 'daily'] as const).map(v => (
               <button
                 key={v}
@@ -270,18 +280,18 @@ export function AdvancedReports({ gymSlug, defaultMonth, view, gymTimezone, adva
                   view === v ? 'bg-adm-ink text-adm-surface' : 'text-adm-ink hover:bg-adm-chip',
                 )}
               >
-                {v === 'monthly' ? 'Mensual' : 'Diario'}
+                {v === 'monthly' ? t.monthly : t.daily}
               </button>
             ))}
           </div>
 
           <div className="flex items-center rounded-[10px] border border-adm-line bg-adm-surface">
-            <button type="button" aria-label="Mes anterior" onClick={() => go(shiftMonth(defaultMonth, -1))} className="flex size-11 items-center justify-center rounded-l-[10px] hover:bg-adm-chip">
+            <button type="button" aria-label={t.prevMonthBtn} onClick={() => go(shiftMonth(defaultMonth, -1))} className="flex size-11 items-center justify-center rounded-l-[10px] hover:bg-adm-chip">
               <ChevronLeft className="size-4" aria-hidden="true" />
             </button>
             <input
               type="month"
-              aria-label="Mes"
+              aria-label={t.month}
               value={defaultMonth}
               max={realCurrentMonth}
               onChange={e => { if (e.target.value) go(e.target.value) }}
@@ -289,7 +299,7 @@ export function AdvancedReports({ gymSlug, defaultMonth, view, gymTimezone, adva
             />
             <button
               type="button"
-              aria-label="Mes siguiente"
+              aria-label={t.nextMonthBtn}
               disabled={nextMonth > realCurrentMonth}
               onClick={() => go(nextMonth)}
               className="flex size-11 items-center justify-center rounded-r-[10px] hover:bg-adm-chip disabled:pointer-events-none disabled:opacity-35"
@@ -300,11 +310,11 @@ export function AdvancedReports({ gymSlug, defaultMonth, view, gymTimezone, adva
 
           <button type="button" onClick={handleDownload} disabled={downloading} className={btn.primary}>
             {downloading ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <FileText className="size-4" aria-hidden="true" />}
-            Descargar PDF
+            {t.downloadPdf}
           </button>
           <button
             type="button"
-            onClick={() => exportToExcel(advancedCurrent, advancedPrevious, monthStr, prevMonthStr, curRevTotal, prevRevTotal, view)}
+            onClick={() => exportToExcel(advancedCurrent, advancedPrevious, monthStr, prevMonthStr, curRevTotal, prevRevTotal, view, t.xlsx, intl)}
             className={cn(btn.line, 'min-h-11')}
           >
             <Download className="size-4" aria-hidden="true" />
@@ -312,7 +322,7 @@ export function AdvancedReports({ gymSlug, defaultMonth, view, gymTimezone, adva
           </button>
           <button type="button" onClick={handleEmail} disabled={sending} className={cn(btn.line, 'min-h-11')}>
             {sending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Mail className="size-4" aria-hidden="true" />}
-            Enviar al correo
+            {t.sendEmail}
           </button>
         </div>
       </header>
@@ -323,7 +333,7 @@ export function AdvancedReports({ gymSlug, defaultMonth, view, gymTimezone, adva
 
       {!advancedCurrent ? (
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-adm-line bg-adm-subtle p-12 text-center">
-          <p className="text-sm font-medium text-adm-muted">Sin datos para este período</p>
+          <p className="text-sm font-medium text-adm-muted">{t.noData}</p>
         </div>
       ) : (
         <>
@@ -332,13 +342,13 @@ export function AdvancedReports({ gymSlug, defaultMonth, view, gymTimezone, adva
             <div className="flex min-w-0 flex-[1_1_300px] flex-col gap-[18px]">
               <div className="flex flex-col gap-2">
                 <h2 id="hero-h" className="font-admin-mono text-xs font-medium uppercase tracking-[0.08em] text-[#a3a39d]">
-                  Ingresos totales {monthly ? 'del mes' : 'del período'}
+                  {monthly ? t.totalMonth : t.totalPeriod}
                 </h2>
                 <p className="text-[44px] font-black leading-none tracking-tight sm:text-[52px]">{fmt(curTotal)}</p>
                 {monthly && (
                   <div className="flex flex-wrap items-center gap-2.5">
                     <NightDelta n={totalDelta} />
-                    <span className="text-[13px] text-[#a3a39d]">{fmt(prevTotal)} en <span className="capitalize">{prevMonthStr}</span></span>
+                    <span className="text-[13px] text-[#a3a39d]">{fmt(prevTotal)} {t.inMonth} <span className="capitalize">{prevMonthStr}</span></span>
                   </div>
                 )}
               </div>
@@ -347,7 +357,7 @@ export function AdvancedReports({ gymSlug, defaultMonth, view, gymTimezone, adva
                 <div
                   className="flex h-2.5 gap-0.5 overflow-hidden rounded-full"
                   role="img"
-                  aria-label={`Membresías ${Math.round(share(curRevTotal))}%, tienda al contado ${Math.round(share(curStoreCash))}%, tienda en crédito ${Math.round(share(curStoreCredit))}%`}
+                  aria-label={t.shareAria(Math.round(share(curRevTotal)), Math.round(share(curStoreCash)), Math.round(share(curStoreCredit)))}
                 >
                   <div className="bg-adm-brand" style={{ width: `${share(curRevTotal)}%` }} />
                   <div className="bg-[#f2f2ee]" style={{ width: `${share(curStoreCash)}%` }} />
@@ -357,9 +367,9 @@ export function AdvancedReports({ gymSlug, defaultMonth, view, gymTimezone, adva
 
               <dl className="flex flex-col">
                 {[
-                  { label: 'Membresías', value: curRevTotal, swatch: 'bg-adm-brand' },
-                  { label: 'Tienda al contado', value: curStoreCash, swatch: 'bg-[#f2f2ee]' },
-                  { label: 'Tienda en crédito (por cobrar)', value: curStoreCredit, swatch: 'bg-[#6b6b66]' },
+                  { label: t.memberships, value: curRevTotal, swatch: 'bg-adm-brand' },
+                  { label: t.storeCash, value: curStoreCash, swatch: 'bg-[#f2f2ee]' },
+                  { label: t.storeCredit, value: curStoreCredit, swatch: 'bg-[#6b6b66]' },
                 ].map((row, i) => (
                   <div key={row.label} className={cn('flex items-center justify-between gap-3 py-2.5', i < 2 && 'border-b border-[#2a2a2e]')}>
                     <dt className="flex items-center gap-2 text-sm text-[#d6d6d0]">
@@ -374,7 +384,7 @@ export function AdvancedReports({ gymSlug, defaultMonth, view, gymTimezone, adva
 
             <div className="flex min-w-0 flex-[2_1_460px] flex-col gap-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 className="text-[15px] font-bold">Membresías {monthly ? 'por semana' : 'por día'}</h3>
+                <h3 className="text-[15px] font-bold">{monthly ? t.perWeek : t.perDay}</h3>
                 <div className="flex gap-4 text-[13px] text-[#a3a39d]">
                   <span className="flex items-center gap-1.5 capitalize"><span className="size-2.5 rounded-[3px] bg-adm-brand" aria-hidden="true" />{monthStr.split(' ')[0]}</span>
                   {monthly && (
@@ -387,27 +397,27 @@ export function AdvancedReports({ gymSlug, defaultMonth, view, gymTimezone, adva
           </section>
 
           {/* Members KPIs */}
-          <section aria-label="Socios" className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
+          <section aria-label={t.members} className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
             <KpiCard
-              label="Socios nuevos"
+              label={t.newMembers}
               value={advancedCurrent.newMembers}
               badge={membersDelta !== null && (membersDelta >= 0 ? <GoodBadge>+{membersDelta}%</GoodBadge> : <BadBadge>{membersDelta}%</BadBadge>)}
-              foot={monthly && advancedPrevious ? <>{advancedPrevious.newMembers} en <span className="capitalize">{prevMonthStr.split(' ')[0]}</span></> : undefined}
+              foot={monthly && advancedPrevious ? <>{advancedPrevious.newMembers} {t.inMonth} <span className="capitalize">{prevMonthStr.split(' ')[0]}</span></> : undefined}
             />
             <KpiCard
-              label="Bajas"
+              label={t.churned}
               value={advancedCurrent.churned}
-              badge={churnDiff !== null && churnDiff !== 0 && (churnDiff < 0 ? <GoodBadge>{-churnDiff} menos</GoodBadge> : <BadBadge>{churnDiff} más</BadBadge>)}
-              foot={monthly && advancedPrevious ? <>{advancedPrevious.churned} en <span className="capitalize">{prevMonthStr.split(' ')[0]}</span></> : undefined}
+              badge={churnDiff !== null && churnDiff !== 0 && (churnDiff < 0 ? <GoodBadge>{t.fewer(-churnDiff)}</GoodBadge> : <BadBadge>{t.more(churnDiff)}</BadBadge>)}
+              foot={monthly && advancedPrevious ? <>{advancedPrevious.churned} {t.inMonth} <span className="capitalize">{prevMonthStr.split(' ')[0]}</span></> : undefined}
             />
-            <KpiCard label="Crecimiento neto" value={net !== null && net > 0 ? `+${net}` : net ?? '—'} foot="nuevos menos bajas" />
+            <KpiCard label={t.netGrowth} value={net !== null && net > 0 ? `+${net}` : net ?? '—'} foot={t.netHint} />
             <KpiCard
               tone="warn"
-              label="Vencen en 7 días"
+              label={t.expiring7}
               value={advancedCurrent.expiringNext7Days}
               foot={
                 <Link href={`/gym/${gymSlug}/memberships?status=ACTIVE`} className="inline-flex min-h-6 items-center gap-1 font-bold hover:underline">
-                  Ver membresías <ArrowRight className="size-3.5" aria-hidden="true" />
+                  {t.seeMemberships} <ArrowRight className="size-3.5" aria-hidden="true" />
                 </Link>
               }
             />
@@ -417,11 +427,11 @@ export function AdvancedReports({ gymSlug, defaultMonth, view, gymTimezone, adva
             {/* Members by plan */}
             <section aria-labelledby="plans-h" className="flex min-w-0 flex-[1_1_400px] flex-col gap-[18px] rounded-2xl border border-adm-line bg-adm-surface p-[22px]">
               <div className="flex items-baseline justify-between gap-3">
-                <h2 id="plans-h" className="text-base font-extrabold">Membresías activas por plan</h2>
-                <span className="font-admin-mono text-[13px] text-adm-muted">{activeTotal} activas</span>
+                <h2 id="plans-h" className="text-base font-extrabold">{t.byPlan}</h2>
+                <span className="font-admin-mono text-[13px] text-adm-muted">{t.activeCount(activeTotal)}</span>
               </div>
               {advancedCurrent.membersByPlan.length === 0 ? (
-                <p className="py-6 text-center text-sm text-adm-muted">No hay membresías activas</p>
+                <p className="py-6 text-center text-sm text-adm-muted">{t.noActive}</p>
               ) : (
                 <ul className="flex flex-col gap-3.5">
                   {[...advancedCurrent.membersByPlan].sort((a, b) => b.count - a.count).map(p => (
@@ -442,12 +452,12 @@ export function AdvancedReports({ gymSlug, defaultMonth, view, gymTimezone, adva
             {/* Attendance */}
             <section aria-labelledby="att-h" className="flex min-w-0 flex-[1_1_400px] flex-col gap-[18px] rounded-2xl border border-adm-line bg-adm-surface p-[22px]">
               <div className="flex items-baseline justify-between gap-3">
-                <h2 id="att-h" className="text-base font-extrabold">Asistencia · últimos 7 días</h2>
-                <span className="font-admin-mono text-[13px] text-adm-muted">{attendanceTotal.toLocaleString('es-AR')} check-ins</span>
+                <h2 id="att-h" className="text-base font-extrabold">{t.attendance7}</h2>
+                <span className="font-admin-mono text-[13px] text-adm-muted">{t.checkinsCount(attendanceTotal.toLocaleString(intl))}</span>
               </div>
               {attendance.length > 0 && (
                 <div>
-                  <div className="flex h-[140px] items-end gap-2.5 border-b border-adm-line" role="img" aria-label="Check-ins por día de los últimos 7 días">
+                  <div className="flex h-[140px] items-end gap-2.5 border-b border-adm-line" role="img" aria-label={t.attendanceAria}>
                     {attendance.map(d => {
                       const peak = d.count === attendancePeak && d.count > 0
                       return (
@@ -470,16 +480,16 @@ export function AdvancedReports({ gymSlug, defaultMonth, view, gymTimezone, adva
               )}
               <div className="flex flex-wrap gap-2.5">
                 <div className="flex flex-[1_1_140px] flex-col gap-1 rounded-xl border border-adm-line-soft bg-adm-subtle px-3.5 py-3">
-                  <span className="text-xs font-semibold text-adm-muted">Día con más gente</span>
+                  <span className="text-xs font-semibold text-adm-muted">{t.busiestDay}</span>
                   <span className="text-xl font-extrabold capitalize">{advancedCurrent.peakDay ?? '—'}</span>
                 </div>
                 <div className="flex flex-[1_1_140px] flex-col gap-1 rounded-xl border border-adm-line-soft bg-adm-subtle px-3.5 py-3">
-                  <span className="text-xs font-semibold text-adm-muted">Hora pico</span>
+                  <span className="text-xs font-semibold text-adm-muted">{t.peakHour}</span>
                   <span className="text-xl font-extrabold">{advancedCurrent.peakHour ?? '—'}</span>
                 </div>
               </div>
               {groups.length > 1 && (
-                <ul className="flex flex-col" aria-label="Check-ins por grupo">
+                <ul className="flex flex-col" aria-label={t.byGroup}>
                   {groups.map(g => (
                     <li key={g.name} className="flex justify-between gap-3 border-t border-adm-line-soft py-2.5 text-sm">
                       <span className="truncate font-semibold">{g.name}</span>

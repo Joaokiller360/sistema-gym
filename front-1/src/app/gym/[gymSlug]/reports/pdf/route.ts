@@ -1,5 +1,7 @@
 import { cookies } from 'next/headers'
 import { NextResponse, type NextRequest } from 'next/server'
+import { getT } from '@/i18n/server'
+import { reportsMessages } from '../messages'
 
 const BACKEND = process.env.API_URL ?? 'http://localhost:3001/api/v1'
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/
@@ -11,7 +13,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const { gymSlug } = await params
   const month = request.nextUrl.searchParams.get('month') ?? ''
-  if (!MONTH_RE.test(month)) return NextResponse.json({ error: 'Mes inválido' }, { status: 400 })
+  const t = (await getT(reportsMessages)).actions
+  if (!MONTH_RE.test(month)) return NextResponse.json({ error: t.badMonth }, { status: 400 })
 
   const res = await fetch(`${BACKEND}/reports/advanced/pdf?month=${month}`, {
     headers: { Authorization: `Bearer ${token}`, 'x-gym-slug': gymSlug },
@@ -19,10 +22,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   })
   if (!res.ok || !res.body) {
     const error = res.status === 404
-      ? 'El servidor todavía no tiene la exportación a PDF (falta desplegar el backend)'
+      ? t.pdfNotDeployed
       : res.status === 403
-        ? 'Los reportes avanzados no están disponibles en tu plan'
-        : 'No se pudo generar el PDF'
+        ? t.pdfNotInPlan
+        : t.pdfFailed
     return NextResponse.json({ error }, { status: res.status || 502 })
   }
 
