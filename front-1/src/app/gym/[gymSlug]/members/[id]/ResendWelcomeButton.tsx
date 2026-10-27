@@ -3,6 +3,8 @@
 import { useState, useTransition } from 'react'
 import { Mail, Check } from 'lucide-react'
 import { resendWelcomeEmailAction } from './actions'
+import { useT } from '@/i18n/client'
+import { membersMessages } from '../messages'
 
 interface Props {
   memberId: string
@@ -12,6 +14,7 @@ export function ResendWelcomeButton({ memberId }: Props) {
   const [isPending, startTransition] = useTransition()
   const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const t = useT(membersMessages).welcome
 
   function handleClick() {
     if (isPending || sent) return
@@ -42,12 +45,12 @@ export function ResendWelcomeButton({ memberId }: Props) {
         {sent ? (
           <>
             <Check className="h-3.5 w-3.5" />
-            Correo enviado
+            {t.sent}
           </>
         ) : (
           <>
             <Mail className="h-3.5 w-3.5" />
-            {isPending ? 'Enviando…' : 'Reenviar correo de bienvenida'}
+            {isPending ? t.sending : t.resend}
           </>
         )}
       </button>

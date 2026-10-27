@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogDescription } from '@/components/ui/dialog'
 import { NewMemberForm } from './new/NewMemberForm'
+import { useT } from '@/i18n/client'
+import { membersMessages } from './messages'
 
 interface Props {
   gymSlug: string
@@ -14,6 +16,7 @@ export function NewMemberModal({ gymSlug }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isOpen, setIsOpen] = useState(true)
+  const t = useT(membersMessages).newModal
 
   function close() {
     setIsOpen(false)
@@ -25,7 +28,7 @@ export function NewMemberModal({ gymSlug }: Props) {
   }
 
   function handleSuccess(memberId: string) {
-    toast.success('Miembro creado correctamente')
+    toast.success(t.created)
     setIsOpen(false)
     setTimeout(() => {
       const params = new URLSearchParams(searchParams.toString())
@@ -43,8 +46,8 @@ export function NewMemberModal({ gymSlug }: Props) {
         className="max-w-[calc(100%-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto"
       >
         <DialogHeader>
-          <DialogTitle>Nuevo miembro</DialogTitle>
-          <DialogDescription>Completá los datos del nuevo miembro.</DialogDescription>
+          <DialogTitle>{t.title}</DialogTitle>
+          <DialogDescription>{t.desc}</DialogDescription>
         </DialogHeader>
         <NewMemberForm gymSlug={gymSlug} onSuccess={handleSuccess} onClose={close} />
       </DialogContent>

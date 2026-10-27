@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from 'react'
 import { toggleMemberActiveAction } from './actions'
+import { useT } from '@/i18n/client'
+import { membersMessages } from '../messages'
 
 interface Props {
   memberId: string
@@ -13,6 +15,7 @@ export function MemberStatusControl({ memberId, gymSlug, isActive }: Props) {
   const [active, setActive] = useState(isActive)
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const t = useT(membersMessages).status
 
   function handleSelect(newVal: boolean) {
     if (newVal === active || isPending) return
@@ -30,10 +33,10 @@ export function MemberStatusControl({ memberId, gymSlug, isActive }: Props) {
 
   return (
     <div className="space-y-1.5">
-      <p className="text-xs font-bold uppercase tracking-[0.08em] text-adm-muted">Estado del miembro</p>
-      <div role="group" aria-label="Estado del miembro" className="inline-flex gap-1 rounded-xl bg-adm-chip p-1">
-        <StatusButton label="Activo" selected={active} disabled={isPending} onClick={() => handleSelect(true)} dot="bg-[#1fad9d]" />
-        <StatusButton label="Inactivo" selected={!active} disabled={isPending} onClick={() => handleSelect(false)} dot="bg-zinc-400" />
+      <p className="text-xs font-bold uppercase tracking-[0.08em] text-adm-muted">{t.label}</p>
+      <div role="group" aria-label={t.label} className="inline-flex gap-1 rounded-xl bg-adm-chip p-1">
+        <StatusButton label={t.active} selected={active} disabled={isPending} onClick={() => handleSelect(true)} dot="bg-[#1fad9d]" />
+        <StatusButton label={t.inactive} selected={!active} disabled={isPending} onClick={() => handleSelect(false)} dot="bg-zinc-400" />
       </div>
       {error && <p className="text-xs font-medium text-adm-bad-fg">{error}</p>}
     </div>

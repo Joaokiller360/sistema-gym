@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { memberView, STATUS_FILTERS, type MemberRow, type StatusKey } from './memberStatus'
 import { MemberPanel } from './MemberPanel'
+import { useLocale, useT } from '@/i18n/client'
+import { memberStatusMessages, membersMessages } from './messages'
 
 const ROW_GRID =
   'grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(200px,2.2fr)_minmax(130px,1.3fr)_minmax(150px,1.5fr)_minmax(90px,0.9fr)_104px] gap-4 items-center'
@@ -32,14 +34,17 @@ export function MembersBoard({
   initialQuery?: string
 }) {
   const router = useRouter()
+  const locale = useLocale()
+  const t = useT(membersMessages).board
+  const filterLabels = useT(memberStatusMessages).filters
   const [query, setQuery] = useState(initialQuery)
   const [filter, setFilter] = useState<StatusKey | 'all'>('all')
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const rows = useMemo(() => {
     const now = new Date()
-    return members.map(m => ({ member: m, view: memberView(m, now) }))
-  }, [members])
+    return members.map(m => ({ member: m, view: memberView(m, now, locale) }))
+  }, [members, locale])
 
   const counts = useMemo(() => {
     const c: Record<StatusKey | 'all', number> = { all: rows.length, activo: 0, atencion: 0, vencido: 0, sinplan: 0, inactivo: 0 }
@@ -70,12 +75,12 @@ export function MembersBoard({
     <div className="space-y-5">
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-3xl font-black tracking-tight">Miembros</h1>
+          <h1 className="text-3xl font-black tracking-tight">{t.title}</h1>
           <p className="text-muted-foreground text-sm mt-1">
             {counts.all === 0
-              ? 'Sin miembros registrados'
-              : `${counts.activo + counts.atencion} activos de ${counts.all}`}
-            {counts.atencion + counts.vencido > 0 && ` · ${counts.atencion + counts.vencido} necesitan atención`}
+              ? t.empty
+              : t.activeOf(counts.activo + counts.atencion, counts.all)}
+            {counts.atencion + counts.vencido > 0 && ` · ${t.needAttention(counts.atencion + counts.vencido)}`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -85,7 +90,7 @@ export function MembersBoard({
             className="flex h-11 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-bold text-zinc-700 hover:border-zinc-300 transition-colors"
           >
             <CreditCard className="h-4 w-4" />
-            Registrar pago
+            {t.registerPayment}
           </Link>
           <Link
             href={newMemberHref}
@@ -93,7 +98,7 @@ export function MembersBoard({
             className="flex h-11 items-center gap-2 rounded-xl bg-[#0e7a70] px-4 text-sm font-extrabold text-white hover:bg-[#095a52] transition-colors"
           >
             <Plus className="h-4 w-4" />
-            Nuevo miembro
+            {t.newMember}
           </Link>
         </div>
       </div>
@@ -103,24 +108,24 @@ export function MembersBoard({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 pointer-events-none" />
           <Input
             type="search"
-            aria-label="Buscar miembro"
-            placeholder="Buscar por nombre, email o teléfono"
+            aria-label={t.search}
+            placeholder={t.searchPlaceholder}
             value={query}
             onChange={e => setQuery(e.target.value)}
             className="pl-9 h-11 rounded-xl"
             fieldType="search"
           />
         </div>
-        <div role="tablist" aria-label="Filtrar miembros" className="flex flex-wrap gap-1.5">
-          {STATUS_FILTERS.map(f => {
-            const on = filter === f.key
+        <div role="tablist" aria-label={t.filter} className="flex flex-wrap gap-1.5">
+          {STATUS_FILTERS.map(key => {
+            const on = filter === key
             return (
               <button
-                key={f.key}
+                key={key}
                 type="button"
                 role="tab"
                 aria-selected={on}
-                onClick={() => setFilter(f.key)}
+                onClick={() => setFilter(key)}
                 className={cn(
                   'inline-flex h-10 items-center gap-2 rounded-full border px-3.5 text-[13px] font-bold transition-colors',
                   on
@@ -128,12 +133,12 @@ export function MembersBoard({
                     : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300',
                 )}
               >
-                {f.label}
+                {filterLabels[key]}
                 <span className={cn(
                   'rounded-full px-1.5 py-px text-xs',
                   on ? 'bg-white/20 text-white dark:bg-black/10 dark:text-black' : 'bg-zinc-100 text-zinc-600',
                 )}>
-                  {counts[f.key]}
+                  {counts[key]}
                 </span>
               </button>
             )
@@ -142,17 +147,17 @@ export function MembersBoard({
       </div>
 
       <div className="flex flex-col lg:flex-row gap-5 items-start">
-        <section aria-label="Lista de miembros" className="w-full flex-1 min-w-0 rounded-2xl border border-zinc-200 bg-white overflow-hidden">
+        <section aria-label={t.list} className="w-full flex-1 min-w-0 rounded-2xl border border-zinc-200 bg-white overflow-hidden">
           <div className={cn(ROW_GRID, 'hidden md:grid px-5 py-3 border-b border-zinc-100 text-xs font-bold uppercase tracking-wider text-zinc-500')}>
-            <span>Miembro</span><span>Plan</span><span>Restante</span><span>Última visita</span><span>Estado</span>
+            <span>{t.colMember}</span><span>{t.colPlan}</span><span>{t.colRemaining}</span><span>{t.colLastVisit}</span><span>{t.colStatus}</span>
           </div>
 
           {visible.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 gap-2 text-center px-4">
               <UserCircle2 className="h-10 w-10 text-zinc-300" />
-              <p className="font-bold">{members.length === 0 ? 'Todavía no hay miembros' : 'Ningún miembro coincide'}</p>
+              <p className="font-bold">{members.length === 0 ? t.noneYet : t.noMatch}</p>
               <p className="text-sm text-zinc-500">
-                {members.length === 0 ? 'Creá el primero con “Nuevo miembro”.' : 'Probá con otro nombre o quitá el filtro.'}
+                {members.length === 0 ? t.noneYetHint : t.noMatchHint}
               </p>
             </div>
           ) : (
@@ -207,7 +212,7 @@ export function MembersBoard({
           )}
 
           <div className="px-5 py-3 border-t border-zinc-100 text-[13px] text-zinc-500">
-            Mostrando {visible.length} de {members.length}
+            {t.showing(visible.length, members.length)}
           </div>
         </section>
 

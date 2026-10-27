@@ -5,6 +5,9 @@ import { updateTag } from 'next/cache'
 import { z } from 'zod'
 import { apiFetch, apiFetchWithError } from '@/lib/api'
 import type { WalletPassInfo } from './[id]/wallet-actions'
+import { getT } from '@/i18n/server'
+import { commonMessages } from '@/i18n/common'
+import { membersMessages } from './messages'
 
 async function getToken() {
   const store = await cookies()
@@ -27,7 +30,7 @@ export async function createMemberAction(
   data: CreateMemberInput,
 ): Promise<{ error: string } | { memberId: string }> {
   const parsed = createMemberSchema.safeParse(data)
-  if (!parsed.success) return { error: 'Datos inválidos' }
+  if (!parsed.success) return { error: (await getT(commonMessages)).invalidData }
 
   const token = await getToken()
   const phone = parsed.data.phone?.trim()
@@ -48,12 +51,13 @@ export async function createMemberAction(
   })
 
   if ('error' in result) {
+    const t = (await getT(membersMessages)).actions
     const raw = result.error.toLowerCase()
     if (raw.includes('already') || raw.includes('duplicate') || raw.includes('exist') || raw.includes('único') || raw.includes('unique') || raw.includes('409')) {
-      return { error: 'Ya existe un miembro con ese nombre o correo electrónico' }
+      return { error: t.duplicate }
     }
     if (raw === 'internal server error' || raw === 'error 500') {
-      return { error: 'Error del servidor. Verificá los datos e intentá de nuevo.' }
+      return { error: t.serverError }
     }
     return { error: result.error }
   }

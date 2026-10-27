@@ -25,13 +25,16 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog'
+import { useIntlLocale, useT } from '@/i18n/client'
+import { commonMessages } from '@/i18n/common'
+import { membersMessages } from '../messages'
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+function formatDateIn(iso: string, intl: string) {
+  return new Date(iso).toLocaleDateString(intl, { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+function formatTimeIn(iso: string, intl: string) {
+  return new Date(iso).toLocaleTimeString(intl, { hour: '2-digit', minute: '2-digit' })
 }
 
 function daysLeft(endDate: string) {
@@ -52,13 +55,6 @@ const TAB =
   'h-9 flex-none rounded-[9px] border-0 px-3.5 text-[13px] font-bold text-adm-muted hover:text-adm-ink data-active:bg-adm-ink data-active:text-adm-surface dark:data-active:bg-adm-ink dark:data-active:text-adm-surface dark:data-active:border-transparent after:hidden'
 
 const EMPTY = 'rounded-2xl border border-dashed border-adm-line py-10 text-center text-sm text-adm-muted'
-
-const METHOD_LABELS: Record<string, string> = {
-  CASH: 'Efectivo',
-  CARD: 'Tarjeta',
-  TRANSFER: 'Transferencia',
-  OTHER: 'Otro',
-}
 
 interface Product {
   id: string; name: string; price: number; stock: number; category: string | null; isActive: boolean
@@ -85,6 +81,11 @@ interface MemberTabsProps {
 
 export function MemberTabs({ memberId, gymSlug, memberships, payments, attendance, plans, memberIsActive = true, storeProducts = [], memberCredits = [], candidates = [], busyIds }: MemberTabsProps) {
   const router = useRouter()
+  const t = useT(membersMessages).tabs
+  const tc = useT(commonMessages)
+  const intl = useIntlLocale()
+  const formatDate = (iso: string) => formatDateIn(iso, intl)
+  const formatTime = (iso: string) => formatTimeIn(iso, intl)
   const activeMembership = memberships.find(m => m.status === 'ACTIVE')
   const pastMemberships = memberships.filter(m => m.status !== 'ACTIVE')
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
@@ -113,7 +114,7 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
       if (result.error) {
         toast.error(result.error)
       } else {
-        toast.success('Membresía cancelada correctamente')
+        toast.success(t.cancelled)
         router.refresh()
       }
     })
@@ -123,22 +124,22 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
     <Tabs defaultValue="membership">
       <div className="-mx-1 overflow-x-auto px-1 pb-1">
       <TabsList className="h-auto gap-1 rounded-xl border border-adm-line bg-adm-surface p-1 group-data-horizontal/tabs:h-auto">
-        <TabsTrigger value="membership" className={TAB}>Membresía</TabsTrigger>
+        <TabsTrigger value="membership" className={TAB}>{t.membership}</TabsTrigger>
         <TabsTrigger value="payments" className={TAB}>
-          Pagos {payments.length > 0 && <span className="font-admin-mono text-xs opacity-60">{payments.length}</span>}
+          {t.payments} {payments.length > 0 && <span className="font-admin-mono text-xs opacity-60">{payments.length}</span>}
         </TabsTrigger>
         <TabsTrigger value="attendance" className={TAB}>
-          Asistencia {attendance.length > 0 && <span className="font-admin-mono text-xs opacity-60">{attendance.length}</span>}
+          {t.attendance} {attendance.length > 0 && <span className="font-admin-mono text-xs opacity-60">{attendance.length}</span>}
         </TabsTrigger>
         <TabsTrigger value="credits" className={TAB}>
-          Créditos
+          {t.credits}
           {memberCredits.filter(c => !c.isPaid).length > 0 && (
             <span className="rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-black text-black">
               {memberCredits.filter(c => !c.isPaid).length}
             </span>
           )}
         </TabsTrigger>
-        <TabsTrigger value="communications" className={TAB}>Comunicaciones</TabsTrigger>
+        <TabsTrigger value="communications" className={TAB}>{t.communications}</TabsTrigger>
       </TabsList>
       </div>
 
@@ -162,7 +163,7 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
                   className="flex h-9 items-center gap-1.5 rounded-xl border border-adm-bad-line bg-adm-surface px-3 text-xs font-bold text-adm-bad-fg transition-colors hover:bg-adm-bad-bg disabled:opacity-40"
                 >
                   <XCircle className="h-3.5 w-3.5" />
-                  Cancelar plan
+                  {t.cancelPlan}
                 </button>
               </div>
             </div>
@@ -175,17 +176,17 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
                       {Math.max(0, activeMembership.visitsTotal - activeMembership.visitsUsed)}
                     </span>
                     <span className="text-sm text-adm-muted ml-1">
-                      de {activeMembership.visitsTotal} días de entreno restantes
+                      {t.ofTrainingDaysLeft(activeMembership.visitsTotal)}
                     </span>
                   </div>
                   <span className="text-xs text-adm-muted">
-                    Vence en {daysLeft(activeMembership.endDate)} días
+                    {t.expiresInDays(daysLeft(activeMembership.endDate))}
                   </span>
                 </div>
                 <div
                   className="h-2 overflow-hidden rounded-full bg-adm-surface"
                   role="progressbar"
-                  aria-label="Días de entreno usados"
+                  aria-label={t.trainingDaysUsed}
                   aria-valuemin={0}
                   aria-valuemax={activeMembership.visitsTotal}
                   aria-valuenow={activeMembership.visitsUsed}
@@ -196,7 +197,7 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
                   />
                 </div>
                 <p className="text-xs text-adm-muted">
-                  {activeMembership.visitsUsed} usados · cada día que entrena descuenta uno
+                  {t.usedNote(activeMembership.visitsUsed)}
                 </p>
               </div>
             ) : (
@@ -204,23 +205,23 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
                 <span className="text-3xl font-black text-adm-ok-fg">
                   {daysLeft(activeMembership.endDate)}
                 </span>
-                <span className="text-sm text-adm-muted ml-1">días restantes</span>
+                <span className="text-sm text-adm-muted ml-1">{t.daysLeft}</span>
               </div>
             )}
 
             {activeMembership.plan && (
               <p className="text-sm text-adm-muted">
-                {activeMembership.plan.price.toLocaleString('es-AR', {
+                {activeMembership.plan.price.toLocaleString(intl, {
                   style: 'currency',
                   currency: activeMembership.plan.currency,
                 })}{' '}
-                / {activeMembership.plan.durationDays} días
+                {t.perDays(activeMembership.plan.durationDays)}
                 {activeMembership.visitsTotal != null
-                  ? ` · ${activeMembership.visitsTotal} días de entreno`
+                  ? t.trainingDays(activeMembership.visitsTotal)
                   : activeMembership.plan.daysPerWeek !== null
-                    ? ` · ${activeMembership.plan.daysPerWeek} veces/semana`
-                    : ' · Acceso ilimitado'}
-                {activeMembership.plan.maxMembers > 1 && ` · Para ${activeMembership.plan.maxMembers} personas`}
+                    ? t.timesPerWeek(activeMembership.plan.daysPerWeek)
+                    : t.unlimited}
+                {activeMembership.plan.maxMembers > 1 && t.forPeople(activeMembership.plan.maxMembers)}
               </p>
             )}
 
@@ -235,7 +236,7 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
           </div>
         ) : (
           <div className={EMPTY}>
-            Sin membresía activa
+            {t.noActive}
           </div>
         )}
 
@@ -263,7 +264,7 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
 
         {pastMemberships.length > 0 && (
           <div className="space-y-2">
-            <p className="text-xs font-bold uppercase tracking-[0.08em] text-adm-muted">Historial</p>
+            <p className="text-xs font-bold uppercase tracking-[0.08em] text-adm-muted">{t.history}</p>
             <div className="divide-y divide-adm-line-soft overflow-hidden rounded-2xl border border-adm-line bg-adm-surface">
               {pastMemberships.map(m => (
                 <div key={m.id} className="flex items-center justify-between px-5 py-3.5 text-sm">
@@ -271,7 +272,7 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
                     <p className="font-semibold">{m.plan?.name ?? 'Plan'}</p>
                     <p className="text-xs text-adm-muted">
                       {formatDate(m.startDate)} → {formatDate(m.endDate)}
-                      {m.visitsTotal != null && ` · ${m.visitsUsed}/${m.visitsTotal} días usados`}
+                      {m.visitsTotal != null && t.daysUsed(m.visitsUsed, m.visitsTotal)}
                     </p>
                   </div>
                   <StatusBadge status={m.status as MembershipStatus} />
@@ -291,17 +292,17 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
         />
         {payments.length === 0 ? (
           <div className={EMPTY}>
-            Sin pagos registrados
+            {t.noPayments}
           </div>
         ) : (
           <div className="overflow-x-auto rounded-2xl border border-adm-line bg-adm-surface">
             <table className="w-full text-sm">
               <thead className="border-b border-adm-line bg-adm-subtle">
                 <tr>
-                  <th className="text-left px-3 sm:px-5 py-3 text-xs font-bold uppercase tracking-[0.08em] text-adm-muted">Fecha</th>
-                  <th className="text-left px-3 sm:px-5 py-3 text-xs font-bold uppercase tracking-[0.08em] text-adm-muted hidden sm:table-cell">Notas</th>
-                  <th className="text-left px-3 sm:px-5 py-3 text-xs font-bold uppercase tracking-[0.08em] text-adm-muted">Método</th>
-                  <th className="text-right px-3 sm:px-5 py-3 text-xs font-bold uppercase tracking-[0.08em] text-adm-muted">Monto</th>
+                  <th className="text-left px-3 sm:px-5 py-3 text-xs font-bold uppercase tracking-[0.08em] text-adm-muted">{t.colDate}</th>
+                  <th className="text-left px-3 sm:px-5 py-3 text-xs font-bold uppercase tracking-[0.08em] text-adm-muted hidden sm:table-cell">{t.colNotes}</th>
+                  <th className="text-left px-3 sm:px-5 py-3 text-xs font-bold uppercase tracking-[0.08em] text-adm-muted">{t.colMethod}</th>
+                  <th className="text-right px-3 sm:px-5 py-3 text-xs font-bold uppercase tracking-[0.08em] text-adm-muted">{t.colAmount}</th>
                   <th className="px-3 py-3 w-10" />
                 </tr>
               </thead>
@@ -310,9 +311,9 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
                   <tr key={p.id} className={`hover:bg-adm-subtle ${deletingId === p.id ? 'opacity-50' : ''}`}>
                     <td className="px-3 sm:px-5 py-3.5 font-admin-mono text-[13px]">{formatDate(p.createdAt)}</td>
                     <td className="px-3 sm:px-5 py-3.5 text-adm-muted hidden sm:table-cell">{p.notes ?? '—'}</td>
-                    <td className="px-3 sm:px-5 py-3.5 text-adm-muted">{METHOD_LABELS[p.method] ?? p.method}</td>
+                    <td className="px-3 sm:px-5 py-3.5 text-adm-muted">{tc.methods[p.method] ?? p.method}</td>
                     <td className="px-3 sm:px-5 py-3.5 font-bold text-right">
-                      {parseFloat(String(p.amount)).toLocaleString('es-AR', { style: 'currency', currency: p.currency })}
+                      {parseFloat(String(p.amount)).toLocaleString(intl, { style: 'currency', currency: p.currency })}
                     </td>
                     <td className="px-3 py-3.5">
                       <button
@@ -320,7 +321,7 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
                         onClick={() => setConfirmDeleteId(p.id)}
                         disabled={isPendingDelete}
                         className="flex h-9 w-9 items-center justify-center rounded-[10px] text-adm-muted transition-colors hover:bg-adm-bad-bg hover:text-adm-bad-fg disabled:opacity-40"
-                        aria-label="Eliminar pago"
+                        aria-label={t.deletePayment}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -335,18 +336,18 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
         <AlertDialog open={!!confirmDeleteId} onOpenChange={open => { if (!open) setConfirmDeleteId(null) }}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Eliminar pago</AlertDialogTitle>
+              <AlertDialogTitle>{t.deletePayment}</AlertDialogTitle>
               <AlertDialogDescription>
-                ¿Estás seguro de que querés eliminar este pago? Esta acción no se puede deshacer.
+                {t.deletePaymentConfirm}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogCancel>{tc.cancel}</AlertDialogCancel>
               <AlertDialogAction
                 onClick={confirmDeletePayment}
                 className="bg-[#ff0000] hover:bg-red-700 text-white"
               >
-                Eliminar
+                {tc.delete}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -358,12 +359,12 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
       <TabsContent value="attendance" className="mt-4 space-y-3">
         {attendance.length === 0 ? (
           <div className={EMPTY}>
-            Sin registros de asistencia
+            {t.noAttendance}
           </div>
         ) : (
           <>
             <p className="text-xs text-adm-muted">
-              {attendance.length} visita{attendance.length !== 1 ? 's' : ''} registrada{attendance.length !== 1 ? 's' : ''}
+              {t.visitsLogged(attendance.length)}
             </p>
             <div className="divide-y divide-adm-line-soft overflow-hidden rounded-2xl border border-adm-line bg-adm-surface">
               {attendance.map(a => {
@@ -380,7 +381,7 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
                     </div>
                     {!a.checkOut && (
                       <span className="rounded-full bg-adm-ok-bg px-2.5 py-1 text-xs font-bold text-adm-ok-fg">
-                        Asistido
+                        {t.checkedIn}
                       </span>
                     )}
                   </div>
@@ -405,25 +406,25 @@ export function MemberTabs({ memberId, gymSlug, memberships, payments, attendanc
       <TabsContent value="communications" className="mt-4">
         <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-adm-line py-16 text-center">
           <MessageSquare className="h-10 w-10 text-adm-line" aria-hidden="true" />
-          <p className="text-sm text-adm-muted">Módulo de comunicaciones próximamente</p>
+          <p className="text-sm text-adm-muted">{t.commsSoon}</p>
         </div>
       </TabsContent>
 
       <AlertDialog open={confirmCancelMembership} onOpenChange={setConfirmCancelMembership}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancelar membresía</AlertDialogTitle>
+            <AlertDialogTitle>{t.cancelMembership}</AlertDialogTitle>
             <AlertDialogDescription>
-              Se cancelará el plan activo del miembro. Esta acción no se puede deshacer.
+              {t.cancelMembershipConfirm}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Volver</AlertDialogCancel>
+            <AlertDialogCancel>{tc.back}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleCancelMembership}
               className="bg-[#ff0000] hover:bg-red-700 text-white"
             >
-              Cancelar plan
+              {t.cancelPlan}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

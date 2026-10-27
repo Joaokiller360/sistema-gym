@@ -7,30 +7,31 @@ import { ArrowRightLeft, CheckCircle2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { changeMemberPlanAction, ProratedResult } from './actions'
 import type { Plan } from '@/types'
+import { useIntlLocale, useLocale, useT } from '@/i18n/client'
+import { commonMessages } from '@/i18n/common'
+import { membersMessages } from '../messages'
 
-const METHODS = [
-  { value: 'CASH', label: 'Efectivo' },
-  { value: 'CARD', label: 'Tarjeta' },
-  { value: 'TRANSFER', label: 'Transferencia' },
-  { value: 'OTHER', label: 'Otro' },
-] as const
+const METHODS = ['CASH', 'CARD', 'TRANSFER', 'OTHER'] as const
 
-function fmtMoney(n: number, currency = 'USD') {
-  return `${currency} ${n.toLocaleString('es-AR', { minimumFractionDigits: 2 })}`
+function fmtMoney(n: number, currency: string, intl: string) {
+  return `${currency} ${n.toLocaleString(intl, { minimumFractionDigits: 2 })}`
 }
 
 function ProratedBreakdown({ p, currency }: { p: ProratedResult; currency: string }) {
+  const t = useT(membersMessages).change
+  const intl = useIntlLocale()
+  const money = (n: number) => fmtMoney(n, currency, intl)
   return (
     <div className="rounded-xl bg-[#1fad9d]/8 border border-[#1fad9d]/20 p-4 space-y-2">
-      <p className="text-xs font-bold uppercase tracking-widest text-[#0e7a70]">Detalle de prorrateo</p>
+      <p className="text-xs font-bold uppercase tracking-widest text-[#0e7a70]">{t.breakdown}</p>
       <div className="space-y-1">
         {[
-          ['Días consumidos', `${p.daysConsumed} días`],
-          ['Días restantes', `${p.daysRemaining} días`],
-          ['Tarifa diaria', fmtMoney(p.dailyRate, currency)],
-          ['Crédito a favor', fmtMoney(p.creditAmount/100, currency)],
-          ['Precio nuevo plan', fmtMoney(p.newPlanPrice/100, currency)],
-          ['Crédito aplicado', `- ${fmtMoney(p.creditApplied/100, currency)}`],
+          [t.daysConsumed, t.days(p.daysConsumed)],
+          [t.daysRemaining, t.days(p.daysRemaining)],
+          [t.dailyRate, money(p.dailyRate)],
+          [t.credit, money(p.creditAmount/100)],
+          [t.newPrice, money(p.newPlanPrice/100)],
+          [t.creditApplied, `- ${money(p.creditApplied/100)}`],
         ].map(([label, value]) => (
           <div key={label} className="flex justify-between text-sm">
             <span className="text-zinc-500">{label}</span>
@@ -39,8 +40,8 @@ function ProratedBreakdown({ p, currency }: { p: ProratedResult; currency: strin
         ))}
       </div>
       <div className="border-t border-[#1fad9d]/20 pt-2 flex justify-between font-black text-base">
-        <span>Total cobrado</span>
-        <span className="text-[#0e7a70]">{fmtMoney(p.amountDue/100, currency)}</span>
+        <span>{t.totalCharged}</span>
+        <span className="text-[#0e7a70]">{money(p.amountDue/100)}</span>
       </div>
     </div>
   )
@@ -66,6 +67,10 @@ export function ChangePlanForm({
   const [method, setMethod] = useState<'CASH' | 'CARD' | 'TRANSFER' | 'OTHER'>('CASH')
   const [notes, setNotes] = useState('')
   const [proration, setProration] = useState<ProratedResult | null>(null)
+  const t = useT(membersMessages).change
+  const tc = useT(commonMessages)
+  const locale = useLocale()
+  const intl = useIntlLocale()
 
   const availablePlans = plans.filter(p => p.isActive && p.id !== currentPlanId)
   const selectedPlan = availablePlans.find(p => p.id === selectedPlanId)
@@ -90,7 +95,7 @@ export function ChangePlanForm({
         toast.error(res.error)
       } else {
         setProration(res.proration ?? null)
-        toast.success('Plan cambiado correctamente')
+        toast.success(t.changed)
         router.refresh()
       }
     })
@@ -105,7 +110,7 @@ export function ChangePlanForm({
           onClick={reset}
           className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-black transition-colors"
         >
-          <CheckCircle2 className="h-3.5 w-3.5 text-[#1fad9d]" /> Listo
+          <CheckCircle2 className="h-3.5 w-3.5 text-[#1fad9d]" /> {t.done}
         </button>
       </div>
     )
@@ -119,7 +124,7 @@ export function ChangePlanForm({
         className="flex items-center gap-2 rounded-xl border-2 border-dashed border-zinc-300 px-4 py-2.5 text-sm font-semibold text-zinc-500 hover:border-black hover:text-black transition-all w-full justify-center"
       >
         <ArrowRightLeft className="h-4 w-4" />
-        Cambiar plan
+        {t.title}
       </button>
     )
   }
@@ -127,18 +132,18 @@ export function ChangePlanForm({
   return (
     <form onSubmit={handleSubmit} className="rounded-2xl border-2 border-zinc-200 bg-white p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-bold">Cambiar plan</p>
+        <p className="text-sm font-bold">{t.title}</p>
         <button type="button" onClick={reset} className="text-zinc-400 hover:text-zinc-700">
           <X className="h-4 w-4" />
         </button>
       </div>
 
       {availablePlans.length === 0 ? (
-        <p className="text-sm text-zinc-400 text-center py-4">No hay otros planes activos disponibles.</p>
+        <p className="text-sm text-zinc-400 text-center py-4">{t.noOtherPlans}</p>
       ) : (
         <>
           <div className="space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Nuevo plan</label>
+            <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">{t.newPlan}</label>
             <div className="space-y-2">
               {availablePlans.map(p => (
                 <button
@@ -152,11 +157,11 @@ export function ChangePlanForm({
                   <div>
                     <p className="text-sm font-semibold">{p.name}</p>
                     <p className="text-xs text-zinc-400">
-                      {planAccessSummary(p)}
+                      {planAccessSummary(p, 1, locale)}
                     </p>
                   </div>
                   <span className="text-sm font-bold shrink-0 ml-3">
-                    {p.currency} {Number(p.price).toLocaleString('es-AR')}
+                    {p.currency} {Number(p.price).toLocaleString(intl)}
                   </span>
                 </button>
               ))}
@@ -164,31 +169,31 @@ export function ChangePlanForm({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Método de pago</label>
+            <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">{t.paymentMethod}</label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {METHODS.map(m => (
                 <button
-                  key={m.value}
+                  key={m}
                   type="button"
-                  onClick={() => setMethod(m.value)}
+                  onClick={() => setMethod(m)}
                   disabled={isPending}
                   className={`rounded-xl py-2 text-xs font-semibold border-2 transition-all ${
-                    method === m.value ? 'border-black bg-black text-white' : 'border-zinc-200 text-zinc-600 hover:border-zinc-300'
+                    method === m ? 'border-black bg-black text-white' : 'border-zinc-200 text-zinc-600 hover:border-zinc-300'
                   }`}
                 >
-                  {m.label}
+                  {tc.methods[m]}
                 </button>
               ))}
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Notas (opcional)</label>
+            <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">{t.notes}</label>
             <input
               type="text"
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              placeholder="Ej. Upgrade a Pro"
+              placeholder={t.notesPlaceholder}
               disabled={isPending}
               className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#fffb00] transition-all disabled:opacity-50"
             />
@@ -200,14 +205,14 @@ export function ChangePlanForm({
               disabled={isPending || !selectedPlanId}
               className="flex-1 rounded-xl bg-black py-2.5 text-sm font-bold text-white hover:bg-zinc-800 disabled:opacity-50 transition-all"
             >
-              {isPending ? 'Cambiando…' : 'Confirmar cambio de plan'}
+              {isPending ? t.changing : t.confirm}
             </button>
             <button
               type="button"
               onClick={reset}
               className="rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-semibold text-zinc-600 hover:border-zinc-300 transition-all"
             >
-              Cancelar
+              {tc.cancel}
             </button>
           </div>
         </>

@@ -24,21 +24,24 @@ import type { WalletPassInfo } from './[id]/wallet-actions'
 import type { CompanionCandidate } from './[id]/CompanionPicker'
 import { deleteMemberAction } from './[id]/actions'
 import type { Member, MembershipWithRelations, Payment, Attendance, Plan } from '@/types'
+import { useIntlLocale, useT } from '@/i18n/client'
+import { commonMessages } from '@/i18n/common'
+import { membersMessages } from './messages'
 
 function initials(name: string) {
   return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('es-AR', {
+function formatDate(iso: string, intl: string) {
+  return new Date(iso).toLocaleDateString(intl, {
     day: '2-digit',
     month: 'long',
     year: 'numeric',
   })
 }
 
-function formatShort(iso: string) {
-  return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })
+function formatShort(iso: string, intl: string) {
+  return new Date(iso).toLocaleDateString(intl, { day: '2-digit', month: 'short' })
 }
 
 function daysLeft(endDate: string) {
@@ -70,6 +73,9 @@ export function MemberModal({
   const [isOpen, setIsOpen] = useState(true)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const t = useT(membersMessages).modal
+  const tc = useT(commonMessages)
+  const intl = useIntlLocale()
 
   const fullName = `${member.firstName} ${member.lastName}`
 
@@ -105,7 +111,7 @@ export function MemberModal({
         toast.error(res.error)
         return
       }
-      toast.success(`${fullName} eliminado`)
+      toast.success(t.deleted(fullName))
       setIsOpen(false)
       setTimeout(() => {
         router.push(`/gym/${gymSlug}/members`)
@@ -128,7 +134,7 @@ export function MemberModal({
             </div>
 
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold uppercase tracking-[0.12em] text-adm-muted">Ficha de miembro</p>
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-adm-muted">{t.eyebrow}</p>
               <div className="mt-1 flex flex-wrap items-center gap-2.5">
                 <DialogTitle className="truncate text-2xl font-black leading-tight tracking-[-0.02em] sm:text-[28px]">
                   {fullName}
@@ -139,10 +145,10 @@ export function MemberModal({
                   }`}
                 >
                   <span className={`h-1.5 w-1.5 rounded-full ${member.isActive ? 'bg-[#1fad9d]' : 'bg-zinc-400'}`} />
-                  {member.isActive ? 'Activo' : 'Inactivo'}
+                  {member.isActive ? t.active : t.inactive}
                 </span>
               </div>
-              <DialogDescription className="sr-only">Detalle, membresía, pagos y asistencia de {fullName}</DialogDescription>
+              <DialogDescription className="sr-only">{t.a11yDesc(fullName)}</DialogDescription>
               <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-adm-muted">
                 <a href={`mailto:${member.email}`} className="inline-flex min-w-0 items-center gap-1.5 hover:text-adm-ink">
                     <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -154,23 +160,23 @@ export function MemberModal({
                       {member.phone}
                     </a>
                   )}
-                  <span>Miembro desde {formatDate(member.createdAt)}</span>
+                  <span>{t.memberSince(formatDate(member.createdAt, intl))}</span>
               </div>
             </div>
 
             <div className="flex shrink-0 items-center gap-1.5">
               <Link
                 href={editHref()}
-                aria-label="Editar datos"
+                aria-label={t.editData}
                 className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-adm-line px-3 text-[13px] font-bold transition-colors hover:bg-adm-chip"
               >
                 <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                <span className="hidden sm:inline">Editar</span>
+                <span className="hidden sm:inline">{t.edit}</span>
               </Link>
               <button
                 type="button"
                 onClick={close}
-                aria-label="Cerrar"
+                aria-label={t.close}
                 className="flex h-10 w-10 items-center justify-center rounded-xl border border-adm-line text-adm-muted transition-colors hover:bg-adm-chip hover:text-adm-ink"
               >
                 <X className="h-4 w-4" />
@@ -181,52 +187,52 @@ export function MemberModal({
           {/* Scrollable body */}
           <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
             {/* Summary */}
-            <section aria-label="Resumen" className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <section aria-label={t.summary} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="flex flex-col gap-2 rounded-2xl border border-adm-line bg-adm-surface p-4">
                 <p className="flex items-center gap-1.5 text-[13px] font-semibold text-adm-muted">
-                  <Ticket className="h-3.5 w-3.5" aria-hidden="true" /> Plan actual
+                  <Ticket className="h-3.5 w-3.5" aria-hidden="true" /> {t.currentPlan}
                 </p>
                 {activeMembership ? (
                   <>
                     <p className="truncate text-lg font-extrabold leading-tight">{activeMembership.plan?.name ?? 'Plan'}</p>
                     <p className={`text-[13px] font-semibold ${remaining !== null && remaining <= 3 ? 'text-adm-warn-fg' : 'text-adm-muted'}`}>
-                      {remaining === 0 ? 'Vence hoy' : `Vence en ${remaining} ${remaining === 1 ? 'día' : 'días'}`} · {formatShort(activeMembership.endDate)}
+                      {remaining === 0 ? t.expiresToday : t.expiresIn(remaining ?? 0)} · {formatShort(activeMembership.endDate, intl)}
                     </p>
                   </>
                 ) : (
                   <>
-                    <p className="text-lg font-extrabold leading-tight">Sin plan</p>
-                    <p className="text-[13px] text-adm-muted">Asigná uno en Membresía</p>
+                    <p className="text-lg font-extrabold leading-tight">{t.noPlan}</p>
+                    <p className="text-[13px] text-adm-muted">{t.assignInMembership}</p>
                   </>
                 )}
               </div>
 
               <div className="flex flex-col gap-2 rounded-2xl border border-adm-line bg-adm-surface p-4">
                 <p className="flex items-center gap-1.5 text-[13px] font-semibold text-adm-muted">
-                  <CalendarCheck className="h-3.5 w-3.5" aria-hidden="true" /> Visitas
+                  <CalendarCheck className="h-3.5 w-3.5" aria-hidden="true" /> {t.visits}
                 </p>
                 <p className="text-[28px] font-black leading-none tracking-[-0.02em]">{attendance.length}</p>
-                <p className="text-[13px] text-adm-muted">{lastVisit ? `Última: ${formatShort(lastVisit)}` : 'Sin visitas aún'}</p>
+                <p className="text-[13px] text-adm-muted">{lastVisit ? t.lastVisit(formatShort(lastVisit, intl)) : t.noVisits}</p>
               </div>
 
               <div className="flex flex-col gap-2 rounded-2xl border border-adm-line bg-adm-surface p-4">
                 <p className="flex items-center gap-1.5 text-[13px] font-semibold text-adm-muted">
-                  <CreditCard className="h-3.5 w-3.5" aria-hidden="true" /> Pagado
+                  <CreditCard className="h-3.5 w-3.5" aria-hidden="true" /> {t.paid}
                 </p>
                 <p className="truncate text-[28px] font-black leading-none tracking-[-0.02em]">
-                  {paidTotal.toLocaleString('es-AR', { style: 'currency', currency, maximumFractionDigits: 0 })}
+                  {paidTotal.toLocaleString(intl, { style: 'currency', currency, maximumFractionDigits: 0 })}
                 </p>
                 <p className="text-[13px] text-adm-muted">
-                  {lastPayment ? `Último: ${formatShort(lastPayment.createdAt)}` : 'Sin pagos registrados'}
+                  {lastPayment ? t.lastPayment(formatShort(lastPayment.createdAt, intl)) : t.noPayments}
                 </p>
               </div>
             </section>
 
             {/* Controls */}
-            <section aria-label="Acciones rápidas" className="flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-adm-line bg-adm-surface p-4">
+            <section aria-label={t.quickActions} className="flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-adm-line bg-adm-surface p-4">
               <MemberStatusControl memberId={member.id} gymSlug={gymSlug} isActive={member.isActive} />
               <div className="space-y-1.5">
-                <p className="text-xs font-bold uppercase tracking-[0.08em] text-adm-muted">Correo</p>
+                <p className="text-xs font-bold uppercase tracking-[0.08em] text-adm-muted">{t.email}</p>
                 <ResendWelcomeButton memberId={member.id} />
               </div>
               {walletPass && (
@@ -266,7 +272,7 @@ export function MemberModal({
                 className="inline-flex h-10 items-center gap-1.5 rounded-xl px-3 text-[13px] font-bold text-adm-bad-fg transition-colors hover:bg-adm-bad-bg disabled:opacity-40"
               >
                 <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                Eliminar miembro
+                {t.deleteMember}
               </button>
             </footer>
           )}
@@ -276,18 +282,18 @@ export function MemberModal({
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Eliminar miembro</AlertDialogTitle>
+            <AlertDialogTitle>{t.deleteMember}</AlertDialogTitle>
             <AlertDialogDescription>
-              ¿Estás seguro de que querés eliminar a {fullName}? Esta acción no se puede deshacer.
+              {t.deleteConfirm(fullName)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{tc.cancel}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
               className="bg-[#ff0000] hover:bg-red-700 text-white"
             >
-              Eliminar miembro
+              {t.deleteMember}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

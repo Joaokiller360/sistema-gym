@@ -62,3 +62,12 @@ describe('fmtLastVisit', () => {
     expect(fmtLastVisit(new Date('2026-10-16T10:00:00').toISOString(), NOW)).toBe('Hace 6 días')
   })
 })
+
+describe('English labels', () => {
+  it('memberView and fmtLastVisit follow the locale', () => {
+    const m = row({ memberships: [{ status: 'ACTIVE', endDate: days(2), visitsTotal: null, visitsUsed: 0, plan: plan() }] })
+    expect(memberView(m, NOW, 'en')).toMatchObject({ key: 'atencion', label: 'Expiring', remainingLabel: '2 days' })
+    expect(memberView(row(), NOW, 'en')).toMatchObject({ label: 'No plan', planName: 'No plan' })
+    expect(fmtLastVisit(new Date('2026-10-16T10:00:00').toISOString(), NOW, 'en')).toBe('6 days ago')
+  })
+})

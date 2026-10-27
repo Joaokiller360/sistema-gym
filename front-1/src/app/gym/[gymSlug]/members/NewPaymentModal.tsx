@@ -6,6 +6,8 @@ import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogDescription } from '@/components/ui/dialog'
 import { NewPaymentForm } from '../payments/new/NewPaymentForm'
 import type { Member, Plan } from '@/types'
+import { useT } from '@/i18n/client'
+import { membersMessages } from './messages'
 
 interface Props {
   gymSlug: string
@@ -18,6 +20,7 @@ export function NewPaymentModal({ gymSlug, members, plans, initialMemberId }: Pr
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isOpen, setIsOpen] = useState(true)
+  const t = useT(membersMessages).payModal
 
   function close() {
     setIsOpen(false)
@@ -30,7 +33,7 @@ export function NewPaymentModal({ gymSlug, members, plans, initialMemberId }: Pr
   }
 
   function handleSuccess(memberId: string) {
-    toast.success('Pago registrado correctamente')
+    toast.success(t.registered)
     setIsOpen(false)
     setTimeout(() => {
       const params = new URLSearchParams(searchParams.toString())
@@ -49,8 +52,8 @@ export function NewPaymentModal({ gymSlug, members, plans, initialMemberId }: Pr
         className="max-w-[calc(100%-2rem)] sm:max-w-xl max-h-[90vh] overflow-y-auto"
       >
         <DialogHeader>
-          <DialogTitle>Registrar pago</DialogTitle>
-          <DialogDescription>Seleccioná el miembro y el plan. Se creará la membresía y el pago automáticamente.</DialogDescription>
+          <DialogTitle>{t.title}</DialogTitle>
+          <DialogDescription>{t.desc}</DialogDescription>
         </DialogHeader>
         <NewPaymentForm
           gymSlug={gymSlug}

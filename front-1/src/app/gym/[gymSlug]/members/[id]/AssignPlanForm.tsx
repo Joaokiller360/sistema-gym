@@ -7,13 +7,11 @@ import { Plus, X } from 'lucide-react'
 import { Plan } from '@/types'
 import { assignPlanAction } from './actions'
 import { CompanionPicker, type CompanionCandidate } from './CompanionPicker'
+import { useIntlLocale, useLocale, useT } from '@/i18n/client'
+import { commonMessages } from '@/i18n/common'
+import { membersMessages } from '../messages'
 
-const METHODS = [
-  { value: 'CASH', label: 'Efectivo' },
-  { value: 'CARD', label: 'Tarjeta' },
-  { value: 'TRANSFER', label: 'Transferencia' },
-  { value: 'OTHER', label: 'Otro' },
-] as const
+const METHODS = ['CASH', 'CARD', 'TRANSFER', 'OTHER'] as const
 
 interface Props {
   memberId: string
@@ -33,6 +31,10 @@ export function AssignPlanForm({ memberId, gymSlug, plans, activeMembershipId, c
   const [companionIds, setCompanionIds] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const t = useT(membersMessages).assign
+  const tc = useT(commonMessages)
+  const locale = useLocale()
+  const intl = useIntlLocale()
 
   const activePlans = plans.filter(p => p.isActive)
   const selectedPlan = activePlans.find(p => p.id === planId)
@@ -69,7 +71,7 @@ export function AssignPlanForm({ memberId, gymSlug, plans, activeMembershipId, c
         className="flex items-center gap-2 rounded-xl border-2 border-dashed border-zinc-300 px-4 py-3 text-sm font-semibold text-zinc-500 hover:border-[#1fad9d] hover:text-[#1fad9d] transition-all w-full justify-center"
       >
         <Plus className="h-4 w-4" />
-        Asignar plan
+        {t.title}
       </button>
     )
   }
@@ -77,16 +79,16 @@ export function AssignPlanForm({ memberId, gymSlug, plans, activeMembershipId, c
   return (
     <form onSubmit={handleSubmit} className="rounded-2xl border-2 border-[#1fad9d]/30 bg-[#1fad9d]/5 p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="font-bold text-sm">Asignar plan</h3>
+        <h3 className="font-bold text-sm">{t.title}</h3>
         <button type="button" onClick={() => setOpen(false)} className="text-zinc-400 hover:text-zinc-700">
           <X className="h-4 w-4" />
         </button>
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Plan</label>
+        <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">{t.plan}</label>
         {activePlans.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No hay planes activos disponibles</p>
+          <p className="text-sm text-muted-foreground">{t.noActivePlans}</p>
         ) : (
           <div className="space-y-2">
             {activePlans.map(p => (
@@ -107,14 +109,14 @@ export function AssignPlanForm({ memberId, gymSlug, plans, activeMembershipId, c
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-sm">{p.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {p.price.toLocaleString('es-AR', { style: 'currency', currency: p.currency })}
-                    {' · '}{planAccessSummary(p)}
-                    {p.visitLimit == null && p.daysPerWeek === null ? ' · Ilimitado' : ''}
-                    {p.maxMembers > 1 ? ` · Para ${p.maxMembers} personas` : ''}
+                    {p.price.toLocaleString(intl, { style: 'currency', currency: p.currency })}
+                    {' · '}{planAccessSummary(p, 1, locale)}
+                    {p.visitLimit == null && p.daysPerWeek === null ? t.unlimited : ''}
+                    {p.maxMembers > 1 ? t.forPeople(p.maxMembers) : ''}
                   </p>
                 </div>
                 {p.isFeatured && (
-                  <span className="text-[10px] font-bold bg-[#fffb00] text-black px-2 py-0.5 rounded-full shrink-0">★ Destacado</span>
+                  <span className="text-[10px] font-bold bg-[#fffb00] text-black px-2 py-0.5 rounded-full shrink-0">{t.featured}</span>
                 )}
               </label>
             ))}
@@ -125,7 +127,7 @@ export function AssignPlanForm({ memberId, gymSlug, plans, activeMembershipId, c
       {selectedPlan && (
         <>
           <div className="space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Fecha de inicio</label>
+            <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">{t.startDate}</label>
             <input
               type="date"
               value={startDate}
@@ -134,11 +136,11 @@ export function AssignPlanForm({ memberId, gymSlug, plans, activeMembershipId, c
               className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1fad9d] focus:border-transparent transition-all"
             />
             <p className="text-xs text-muted-foreground">
-              Vence el{' '}
+              {t.expiresOn}{' '}
               {(() => {
                 const end = new Date(startDate)
                 end.setDate(end.getDate() + selectedPlan.durationDays)
-                return end.toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })
+                return end.toLocaleDateString(intl, { day: '2-digit', month: 'long', year: 'numeric' })
               })()}
             </p>
           </div>
@@ -146,7 +148,7 @@ export function AssignPlanForm({ memberId, gymSlug, plans, activeMembershipId, c
           {selectedPlan.maxMembers > 1 && (
             <div className="space-y-1.5">
               <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">
-                Acompañantes · hasta {selectedPlan.maxMembers - 1}
+                {t.companionsUpTo(selectedPlan.maxMembers - 1)}
               </p>
               <CompanionPicker
                 candidates={candidates}
@@ -158,27 +160,27 @@ export function AssignPlanForm({ memberId, gymSlug, plans, activeMembershipId, c
                 disabled={isPending}
               />
               <p className="text-xs text-muted-foreground">
-                Se paga una sola vez. Cada acompañante recibe su propio acceso con las mismas fechas; si falta alguno lo podés agregar después.
+                {t.companionsHint}
               </p>
             </div>
           )}
 
           <div className="space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Método de pago</label>
+            <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">{t.paymentMethod}</label>
             <div className="grid grid-cols-2 gap-2">
               {METHODS.map(m => (
                 <button
-                  key={m.value}
+                  key={m}
                   type="button"
-                  onClick={() => setMethod(m.value)}
+                  onClick={() => setMethod(m)}
                   disabled={isPending}
                   className={`rounded-xl py-2 text-xs font-semibold border-2 transition-all ${
-                    method === m.value
+                    method === m
                       ? 'border-[#1fad9d] bg-[#1fad9d] text-white'
                       : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300'
                   }`}
                 >
-                  {m.label}
+                  {tc.methods[m]}
                 </button>
               ))}
             </div>
@@ -194,14 +196,14 @@ export function AssignPlanForm({ memberId, gymSlug, plans, activeMembershipId, c
           disabled={isPending || !planId}
           className="flex-1 rounded-xl bg-[#1fad9d] py-2.5 text-sm font-bold text-white hover:bg-[#0e7a70] disabled:opacity-50 transition-all"
         >
-          {isPending ? 'Asignando…' : 'Confirmar'}
+          {isPending ? t.assigning : tc.confirm}
         </button>
         <button
           type="button"
           onClick={() => setOpen(false)}
           className="rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-semibold text-zinc-600 hover:border-zinc-300 transition-all"
         >
-          Cancelar
+          {tc.cancel}
         </button>
       </div>
     </form>
