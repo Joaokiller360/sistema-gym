@@ -16,17 +16,19 @@ function list<T>(raw: ListResponse<T> | null): T[] {
 }
 
 async function loadNavCounts(token: string): Promise<AdminNavCounts> {
-  const [stats, access, demos, tickets] = await Promise.all([
+  const [stats, access, demos, tickets, crm] = await Promise.all([
     apiFetch<DashboardStats>('/admin/dashboard', token, { silent: true }),
     apiFetch<ListResponse<WithStatus>>('/access-requests/admin?limit=100', token, { silent: true }),
     apiFetch<ListResponse<WithStatus>>('/admin/demo-requests?limit=100', token, { silent: true }),
     apiFetch<ListResponse<WithStatus>>('/support/tickets?all=true', token, { silent: true }),
+    apiFetch<{ unread: number }>('/admin/crm/summary', token, { silent: true }),
   ])
   const pending = (r: WithStatus) => r.status === 'PENDING'
   return {
     gyms: stats?.totalGyms,
     requests: list(access).filter(pending).length + list(demos).filter(pending).length,
     tickets: list(tickets).filter((t) => t.status === 'OPEN' || t.status === 'IN_PROGRESS').length,
+    crm: crm?.unread,
   }
 }
 

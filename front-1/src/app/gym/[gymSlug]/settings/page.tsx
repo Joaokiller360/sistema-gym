@@ -50,6 +50,10 @@ export default async function SettingsPage({ params, searchParams }: Props) {
     apiFetch<CountryOption[]>('/gyms/countries', token, { next: { revalidate: 86400 } }),
     apiFetch<GymStatus>(`/gyms/${gymSlug}/status`, token, { silent: true }),
   ])
+  // Owner / super admin only: null (403) hides the field for staff
+  const whatsapp = gym?.id && tab === 'gimnasio'
+    ? await apiFetch<{ whatsappPhone: string | null }>(`/gyms/${gym.id}/whatsapp`, token, { next: { tags: [`gym-${gymSlug}`] }, silent: true })
+    : null
 
   const logoUrl = resolveLogoUrl(gym?.logoUrl)
   const initials = (gym?.name ?? 'G').split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
@@ -125,6 +129,7 @@ export default async function SettingsPage({ params, searchParams }: Props) {
                 defaultAddress={gym?.address ?? null}
                 defaultCountry={gym?.country ?? null}
                 defaultTimezone={gym?.timezone ?? 'UTC'}
+                defaultWhatsapp={whatsapp ? whatsapp.whatsappPhone ?? '' : null}
                 countries={countries ?? []}
               />
             </div>

@@ -49,6 +49,7 @@ export interface Gym {
   demoEnabled: boolean;
   storeEnabled: boolean;
   advancedReportsEnabled: boolean;
+  whatsappPhone?: string | null;
   schedule?: Record<string, { open: string; close: string } | null> | null;
   ownerId: string | null;
   owner?: { id: string; email: string; name: string } | null;

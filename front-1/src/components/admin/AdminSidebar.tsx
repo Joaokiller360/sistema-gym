@@ -18,6 +18,7 @@ import {
   LifeBuoy,
   CalendarClock,
   Mail,
+  MessageCircle,
   type LucideIcon,
 } from 'lucide-react'
 import { cn, normalizeLogoUrl } from '@/lib/utils'
@@ -28,6 +29,7 @@ export interface AdminNavCounts {
   gyms?: number
   requests?: number
   tickets?: number
+  crm?: number
 }
 
 interface NavItem {
@@ -57,6 +59,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
   {
     group: 'Comunidad',
     items: [
+      { label: 'CRM', href: '/admin/crm', icon: MessageCircle, count: 'crm', countTone: 'alert' },
       { label: 'Comunicaciones', href: '/admin/comunicaciones', icon: Mail },
       { label: 'Soporte', href: '/admin/support', icon: LifeBuoy, count: 'tickets', countTone: 'alert' },
     ],

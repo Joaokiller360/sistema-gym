@@ -18,6 +18,7 @@ const settingsSchema = z.object({
   address: z.string().nullable().optional(),
   country: z.string().nullable().optional(),
   timezone: z.string().optional(),
+  whatsappPhone: z.string().max(20).nullable().optional(),
 })
 
 export type SettingsInput = z.infer<typeof settingsSchema>
