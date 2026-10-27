@@ -4,6 +4,9 @@ import { cookies } from 'next/headers'
 import { z } from 'zod'
 import { apiFetchWithError, apiFetch } from '@/lib/api'
 import { updateTag } from 'next/cache'
+import { getT } from '@/i18n/server'
+import { commonMessages } from '@/i18n/common'
+import { supportMessages } from './messages'
 
 async function getToken() {
   const store = await cookies()
@@ -30,21 +33,21 @@ export interface SupportTicket {
   updatedAt: string
 }
 
-const createTicketSchema = z.object({
-  title: z.string().min(5, 'Título muy corto').max(100),
-  description: z.string().min(10, 'Descripción muy corta').max(2000),
+const createTicketSchema = (t?: { titleTooShort: string; descriptionTooShort: string }) => z.object({
+  title: z.string().min(5, t?.titleTooShort).max(100),
+  description: z.string().min(10, t?.descriptionTooShort).max(2000),
   priority: z.enum(['URGENT', 'HIGH', 'NORMAL', 'LOW', 'NOTIFICATION']),
   category: z.enum(['BUG', 'BILLING', 'ACCESS', 'FEATURE', 'OTHER']),
 })
 
-export type CreateTicketInput = z.infer<typeof createTicketSchema>
+export type CreateTicketInput = z.infer<ReturnType<typeof createTicketSchema>>
 
 export async function createTicketAction(
   gymSlug: string,
   data: CreateTicketInput,
 ): Promise<{ error?: string; ticket?: SupportTicket }> {
-  const parsed = createTicketSchema.safeParse(data)
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
+  const parsed = createTicketSchema(await getT(supportMessages)).safeParse(data)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? (await getT(commonMessages)).invalidData }
 
   const token = await getToken()
   const result = await apiFetchWithError<SupportTicket>('/support/tickets', token, {
