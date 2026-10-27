@@ -8,6 +8,7 @@ import { createGymAction, uploadGymLogoAction, registerSubscriptionPaymentAction
 import { createHandlers } from '@/lib/input-validation'
 import { cn } from '@/lib/utils'
 import { btn, field, initials } from '@/components/admin/ui'
+import { PhoneInput } from '@/components/shared/PhoneInput'
 import type { SubscriptionPlan } from './page'
 
 const METHODS = [
@@ -125,7 +126,7 @@ export function CreateGymForm({ plans, onSuccess }: { plans: SubscriptionPlan[];
     if (!ownerName.trim()) e.ownerName = 'Nombre del dueño requerido'
     if (!ownerEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail)) e.ownerEmail = 'Email inválido'
     const phoneDigits = ownerPhone.replace(/\D/g, '')
-    if (ownerPhone.trim() && (phoneDigits.length < 8 || phoneDigits.length > 15)) e.ownerPhone = 'Número inválido: incluí el código de país'
+    if (ownerPhone.trim() && (phoneDigits.length < 8 || phoneDigits.length > 15)) e.ownerPhone = 'Número inválido'
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -260,17 +261,13 @@ export function CreateGymForm({ plans, onSuccess }: { plans: SubscriptionPlan[];
                 {...createHandlers('email')}
               />
             </Field>
-            <Field label="WhatsApp (opcional)" htmlFor="owner-phone" error={errors.ownerPhone} hint="Con código de país. Recibe los avisos de límite del plan.">
-              <input
+            <Field label="WhatsApp (opcional)" htmlFor="owner-phone" error={errors.ownerPhone} hint="Elegí el país y escribí el número. Recibe los avisos de límite del plan.">
+              <PhoneInput
                 id="owner-phone"
-                type="tel"
-                inputMode="tel"
-                value={ownerPhone}
-                onChange={e => setOwnerPhone(e.target.value.replace(/[^\d+\s-]/g, ''))}
-                placeholder="+54 9 11 2233 4455"
-                maxLength={20}
+                onChange={setOwnerPhone}
                 disabled={isPending}
-                className={cn(field.input, 'font-admin-mono')}
+                selectClassName={field.input}
+                inputClassName={field.input}
               />
             </Field>
           </div>

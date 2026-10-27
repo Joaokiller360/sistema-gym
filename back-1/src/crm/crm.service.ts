@@ -6,6 +6,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CrmStatus, Prisma } from '@prisma/client';
+import { randomUUID } from 'crypto';
+import { mkdir, unlink, writeFile } from 'fs/promises';
+import { join } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   WhatsappService,
@@ -17,6 +20,23 @@ import { UpdateConversationDto } from './dto/crm.dto';
 /** Meta's customer service window: free-form replies only within 24 h of the contact's last message */
 const WINDOW_MS = 24 * 60 * 60 * 1000;
 const STATUS_RANK: Record<string, number> = { sent: 1, delivered: 2, read: 3 };
+
+const MEDIA_DIR = join(process.cwd(), 'uploads', 'wa-media');
+const MAX_MEDIA_BYTES = 16 * 1024 * 1024;
+// Allow-list: anything else (html, svg…) is never written, so /uploads can't serve active content
+const MEDIA_EXT: Record<string, string> = {
+  'image/webp': 'webp',
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/gif': 'gif',
+  'audio/ogg': 'ogg',
+  'audio/mpeg': 'mp3',
+  'audio/mp4': 'm4a',
+  'audio/aac': 'aac',
+  'video/mp4': 'mp4',
+  'video/3gpp': '3gp',
+  'application/pdf': 'pdf',
+};
 
 const GYM_SELECT = {
   id: true,
@@ -70,7 +90,7 @@ export interface ZernioWebhookPayload {
     platformMessageId: string;
     direction: 'incoming' | 'outgoing';
     text: string | null;
-    attachments?: { type: string }[];
+    attachments?: { type: string; url?: string }[];
     sender?: { id: string; name?: string; phoneNumber?: string | null };
     sentAt?: string;
   };
@@ -231,6 +251,22 @@ export class CrmService {
     });
   }
 
+  /** Deletes the thread, its messages (cascade) and any stored attachments. */
+  async remove(id: string) {
+    await this.assertExists(id);
+    const media = await this.prisma.waMessage.findMany({
+      where: { conversationId: id, mediaUrl: { not: null } },
+      select: { mediaUrl: true },
+    });
+    await this.prisma.waConversation.delete({ where: { id } });
+    await Promise.all(
+      media.map(({ mediaUrl }) =>
+        unlink(join(MEDIA_DIR, mediaUrl!.split('/').pop()!)).catch(() => {}),
+      ),
+    );
+    return { ok: true };
+  }
+
   /** Opens (or reuses) the thread for a gym's WhatsApp number. Sending still needs a template. */
   async start(gymId: string) {
     const gym = await this.prisma.gym.findUnique({
@@ -345,20 +381,29 @@ export class CrmService {
         );
         return;
       }
-      const media = m.attachments?.[0]?.type;
+      const attachment = m.attachments?.[0];
+      const media = attachment?.type;
       const label = media && (MEDIA_LABEL[media] ?? `[${media}]`);
-      await this.saveInbound({
+      const saved = await this.saveInbound({
         waMessageId: m.platformMessageId,
         from,
         contactName: m.sender?.name,
-        type: m.text ? 'text' : (media ?? 'text'),
-        body:
-          m.text && label
-            ? `${label}: ${m.text}`
-            : (m.text ?? `${label ?? '[mensaje]'} (abrilo en WhatsApp)`),
+        type: media ?? 'text',
+        // Caption only; the CRM renders the media itself
+        body: m.text ?? label ?? '[mensaje]',
         at: new Date(m.sentAt ?? Date.now()),
         externalId: m.conversationId,
       });
+      // Meta drops inbound media after a while: keep a copy. Not awaited so the
+      // webhook still answers within Zernio's 5 s; a redelivery retries it.
+      if (saved && !saved.mediaUrl && attachment?.url) {
+        void this.storeMedia(saved.id, attachment.url).catch((e) =>
+          this.logger.error(
+            `[CRM] Media for ${m.platformMessageId} failed:`,
+            e,
+          ),
+        );
+      }
       return;
     }
 
@@ -376,17 +421,16 @@ export class CrmService {
     }
   }
 
+  /** Returns the stored message (also when it was already there), or null if unusable. */
   private async saveInbound(m: Inbound) {
     const phone = normalizePhone(m.from);
-    if (!phone) return;
+    if (!phone) return null;
     // Webhooks get retried: the unique waMessageId makes this idempotent
-    if (
-      await this.prisma.waMessage.findUnique({
-        where: { waMessageId: m.waMessageId },
-        select: { id: true },
-      })
-    )
-      return;
+    const dup = await this.prisma.waMessage.findUnique({
+      where: { waMessageId: m.waMessageId },
+      select: { id: true, mediaUrl: true },
+    });
+    if (dup) return dup;
 
     const { at, contactName, externalId } = m;
     const existing = await this.prisma.waConversation.findUnique({
@@ -427,7 +471,7 @@ export class CrmService {
       select: { id: true },
     });
 
-    await this.prisma.waMessage.create({
+    return this.prisma.waMessage.create({
       data: {
         conversationId: conv.id,
         direction: 'IN',
@@ -436,6 +480,40 @@ export class CrmService {
         waMessageId: m.waMessageId,
         createdAt: at,
       },
+      select: { id: true, mediaUrl: true },
+    });
+  }
+
+  private async storeMedia(messageId: string, url: string) {
+    // Zernio's media URL needs our API key: never send it anywhere else
+    if (new URL(url).origin !== 'https://zernio.com') {
+      this.logger.warn(`[CRM] Ignoring media from unexpected host: ${url}`);
+      return;
+    }
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${process.env.ZERNIO_API_KEY}` },
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) throw new Error(`Zernio media → ${res.status}`);
+    const type = (res.headers.get('content-type') ?? '').split(';')[0].trim();
+    const ext = MEDIA_EXT[type];
+    if (!ext) {
+      this.logger.warn(`[CRM] Unsupported media type "${type}", not stored`);
+      return;
+    }
+    if (Number(res.headers.get('content-length') ?? 0) > MAX_MEDIA_BYTES) {
+      this.logger.warn(`[CRM] Media too large, not stored`);
+      return;
+    }
+    const bytes = Buffer.from(await res.arrayBuffer());
+    if (bytes.length > MAX_MEDIA_BYTES) return;
+
+    const name = `${randomUUID()}.${ext}`;
+    await mkdir(MEDIA_DIR, { recursive: true });
+    await writeFile(join(MEDIA_DIR, name), bytes);
+    await this.prisma.waMessage.update({
+      where: { id: messageId },
+      data: { mediaUrl: `/uploads/wa-media/${name}` },
     });
   }
 

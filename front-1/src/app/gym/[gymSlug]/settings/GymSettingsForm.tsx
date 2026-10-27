@@ -1,13 +1,14 @@
 'use client'
 
 import { useEffect, useRef, useState, useTransition } from 'react'
-import { Globe, MapPin, MessageCircle } from 'lucide-react'
+import { Globe, MapPin } from 'lucide-react'
 import { toast } from 'sonner'
 import { updateGymSettingsAction, uploadGymLogoAction } from './actions'
 import { createHandlers } from '@/lib/input-validation'
 import { useIntlLocale, useLocale, useT } from '@/i18n/client'
 import { commonMessages } from '@/i18n/common'
 import { settingsMessages } from './messages'
+import { PhoneInput } from '@/components/shared/PhoneInput'
 
 const MAX_SIZE = 2 * 1024 * 1024
 
@@ -252,21 +253,15 @@ export function GymSettingsForm({
         {defaultWhatsapp !== null && (
           <div>
             <label htmlFor="gym-whatsapp" className={labelClass}>{t.whatsapp}</label>
-            <div className="relative">
-              <MessageCircle className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-adm-muted" aria-hidden="true" />
-              <input
-                id="gym-whatsapp"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                value={whatsapp}
-                onChange={e => setWhatsapp(e.target.value.replace(/[^\d+\s-]/g, ''))}
-                placeholder="+54 9 11 2233 4455"
-                maxLength={20}
-                aria-describedby="gym-whatsapp-hint"
-                className={`${inputClass} pl-10 font-admin-mono`}
-              />
-            </div>
+            <PhoneInput
+              id="gym-whatsapp"
+              defaultValue={defaultWhatsapp}
+              defaultCountry={defaultCountry}
+              onChange={setWhatsapp}
+              aria-describedby="gym-whatsapp-hint"
+              selectClassName={inputClass}
+              inputClassName={inputClass}
+            />
             <p id="gym-whatsapp-hint" className="mt-2 text-[13px] text-adm-muted">{t.whatsappHint}</p>
           </div>
         )}

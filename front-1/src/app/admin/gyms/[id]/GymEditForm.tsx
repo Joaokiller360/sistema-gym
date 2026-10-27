@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { cn } from '@/lib/utils'
 import { Switch, btn, field, initials } from '@/components/admin/ui'
+import { PhoneInput } from '@/components/shared/PhoneInput'
 
 const MAX_SIZE = 2 * 1024 * 1024
 
@@ -28,6 +29,7 @@ interface Props {
   defaultLogoUrl?: string | null
   defaultAdvancedReports: boolean
   defaultWhatsapp: string | null
+  defaultCountry: string | null
   ownerName?: string
   ownerEmail?: string
   hasOwner: boolean
@@ -42,7 +44,7 @@ function Info({ label, children }: { label: string; children: React.ReactNode })
   )
 }
 
-export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, planOptions, defaultLogoUrl, defaultAdvancedReports, defaultWhatsapp, ownerName, ownerEmail, hasOwner }: Props) {
+export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, planOptions, defaultLogoUrl, defaultAdvancedReports, defaultWhatsapp, defaultCountry, ownerName, ownerEmail, hasOwner }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -188,20 +190,19 @@ export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, plan
         </label>
       </div>
 
-      <label className="block">
-        <span className={field.label}>WhatsApp del dueño</span>
-        <input
-          type="tel"
-          inputMode="tel"
-          value={whatsapp}
-          onChange={e => setWhatsapp(e.target.value.replace(/[^\d+\s-]/g, ''))}
-          placeholder="+54 9 11 2233 4455"
-          maxLength={20}
+      <div>
+        <label htmlFor="edit-whatsapp" className={field.label}>WhatsApp del dueño</label>
+        <PhoneInput
+          id="edit-whatsapp"
+          defaultValue={defaultWhatsapp}
+          defaultCountry={defaultCountry}
+          onChange={setWhatsapp}
           disabled={isPending}
-          className={cn(field.input, 'font-admin-mono')}
+          selectClassName={field.input}
+          inputClassName={field.input}
         />
-        <span className={field.hint}>Con código de país. Recibe los avisos de límite del plan.</span>
-      </label>
+        <span className={field.hint}>Elegí el país y escribí el número. Recibe los avisos de límite del plan.</span>
+      </div>
 
       <div>
         <span className={field.label} id="edit-plan-label">Plan</span>

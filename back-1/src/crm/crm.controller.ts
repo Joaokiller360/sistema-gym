@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -54,6 +55,11 @@ export class CrmController {
   @Patch('conversations/:id')
   update(@Param('id') id: string, @Body() dto: UpdateConversationDto) {
     return this.crm.update(id, dto);
+  }
+
+  @Delete('conversations/:id')
+  remove(@Param('id') id: string) {
+    return this.crm.remove(id);
   }
 
   @Post('conversations/:id/read')

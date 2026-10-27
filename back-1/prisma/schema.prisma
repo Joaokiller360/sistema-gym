@@ -865,6 +865,8 @@ model WaMessage {
   /// sent | delivered | read | failed (from Meta status webhooks)
   status      String?
   error       String?
+  /// Local copy of the attachment (sticker, photo, audio…), served from /uploads/wa-media
+  mediaUrl    String?
   sentById    String?
   createdAt   DateTime    @default(now())
 

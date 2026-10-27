@@ -3,12 +3,16 @@
 import { Fragment, useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import Link from 'next/link'
 import {
-  AlertTriangle, ArrowLeft, Check, CheckCheck, Clock, ExternalLink, Inbox, Loader2, MessageCircle, Search, Send,
+  AlertTriangle, ArrowLeft, Check, CheckCheck, Clock, ExternalLink, Inbox, Loader2, MessageCircle, Search, Send, Trash2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { EmptyState, GymMark, Meter, Pill, btn, chip, field, initials, type Tone } from '@/components/admin/ui'
 import {
-  getConversationAction, listConversationsAction, markReadAction, replyAction, sendContactTemplateAction,
+  AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
+  deleteConversationAction, getConversationAction, listConversationsAction, markReadAction, replyAction, sendContactTemplateAction,
   updateConversationAction, type CrmList, type CrmMessage, type CrmStatus, type CrmThread,
 } from './actions'
 
@@ -76,6 +80,35 @@ function Tick({ m }: { m: CrmMessage }) {
   return <Check className="size-3.5" aria-label="Enviado" />
 }
 
+// Bodies the back stores when a media message has no caption: hidden once the media itself shows
+const MEDIA_ONLY = new Set(['📷 Imagen', '🎥 Video', '🎤 Audio', '📄 Documento', 'Sticker'])
+
+function Media({ m }: { m: CrmMessage }) {
+  const src = m.mediaUrl!
+  switch (m.type) {
+    case 'sticker':
+      // eslint-disable-next-line @next/next/no-img-element
+      return <img src={src} alt="Sticker" className="size-32 object-contain" loading="lazy" />
+    case 'image':
+      return (
+        <a href={src} target="_blank" rel="noopener noreferrer" className="block">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={src} alt="Imagen recibida" className="max-h-72 rounded-lg object-cover" loading="lazy" />
+        </a>
+      )
+    case 'video':
+      return <video src={src} controls preload="metadata" className="max-h-72 rounded-lg" />
+    case 'audio':
+      return <audio src={src} controls preload="metadata" className="max-w-full" />
+    default:
+      return (
+        <a href={src} target="_blank" rel="noopener noreferrer" className="font-semibold underline underline-offset-2">
+          📄 Abrir archivo
+        </a>
+      )
+  }
+}
+
 function Bubble({ m }: { m: CrmMessage }) {
   const out = m.direction === 'OUT'
   return (
@@ -94,7 +127,10 @@ function Bubble({ m }: { m: CrmMessage }) {
             {m.sentById ? 'Plantilla' : 'Aviso automático'}
           </p>
         )}
-        <p className="whitespace-pre-wrap break-words">{m.body}</p>
+        {m.mediaUrl && <Media m={m} />}
+        {!(m.mediaUrl && MEDIA_ONLY.has(m.body.replace(/ \(abrilo en WhatsApp\)$/, ''))) && (
+          <p className={cn('whitespace-pre-wrap break-words', m.mediaUrl && 'mt-1.5')}>{m.body}</p>
+        )}
         <p className={cn('mt-1 flex items-center justify-end gap-1 font-admin-mono text-[11px]', out ? 'opacity-70' : 'text-adm-muted')}>
           {new Date(m.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
           <Tick m={m} />
@@ -307,6 +343,8 @@ export function CrmInbox({
   const [error, setError] = useState<string | null>(loadError)
   const [loadingThread, startThread] = useTransition()
   const [isPending, startTransition] = useTransition()
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const reloadList = useCallback(async () => {
     const res = await listConversationsAction('ALL', q)
@@ -353,6 +391,20 @@ export function CrmInbox({
     setThread({ ...thread, status })
     startTransition(async () => {
       await updateConversationAction(thread.id, { status })
+      await reloadList()
+    })
+  }
+
+  function deleteThread() {
+    if (!thread) return
+    const id = thread.id
+    setDeleteError(null)
+    startTransition(async () => {
+      const res = await deleteConversationAction(id)
+      if (res.error) { setDeleteError(res.error); return }
+      setConfirmDelete(false)
+      setList(l => ({ ...l, data: l.data.filter(c => c.id !== id) }))
+      close()
       await reloadList()
     })
   }
@@ -500,6 +552,16 @@ export function CrmInbox({
                     <ExternalLink className="size-3.5" aria-hidden="true" />
                     <span className="hidden sm:inline">WhatsApp</span>
                   </a>
+                  <button
+                    type="button"
+                    onClick={() => { setDeleteError(null); setConfirmDelete(true) }}
+                    disabled={isPending}
+                    aria-label="Eliminar chat"
+                    title="Eliminar chat"
+                    className={cn(btn.icon, 'hover:bg-adm-bad-bg hover:text-adm-bad-fg')}
+                  >
+                    <Trash2 className="size-4" aria-hidden="true" />
+                  </button>
                 </header>
                 <div className={cn('min-h-0 flex-1 overflow-y-auto bg-adm-subtle', loadingThread && 'opacity-70')}>
                   <Messages messages={active.messages} />
@@ -513,6 +575,24 @@ export function CrmInbox({
           )}
         </section>
       </div>
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent size="sm" className="admin-surface">
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar chat?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se borran todos los mensajes, adjuntos y notas de {active ? displayName(active) : 'esta conversación'}. No se puede deshacer.
+              Si el número vuelve a escribir, se abre un chat nuevo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteError && <p role="alert" className={field.error}>{deleteError}</p>}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <button type="button" disabled={isPending} onClick={deleteThread} className={btn.dangerSolid}>
+              {isPending ? 'Eliminando…' : 'Eliminar'}
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

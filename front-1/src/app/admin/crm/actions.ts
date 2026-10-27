@@ -30,6 +30,8 @@ export interface CrmMessage {
   type: string
   status: string | null
   error: string | null
+  /** Local copy of the attachment (sticker, photo, audio…) */
+  mediaUrl: string | null
   sentById: string | null
   createdAt: string
 }
@@ -89,6 +91,13 @@ export async function sendContactTemplateAction(id: string) {
 export async function updateConversationAction(id: string, data: { status?: CrmStatus; notes?: string; gymId?: string | null }) {
   const res = await post(`/admin/crm/conversations/${id}`, data, 'PATCH')
   if (!res.error && data.status) refresh()
+  return res
+}
+
+export async function deleteConversationAction(id: string) {
+  const res = await post(`/admin/crm/conversations/${id}`, undefined, 'DELETE')
+  // Sidebar badge counts unread threads
+  if (!res.error) refresh()
   return res
 }
 
