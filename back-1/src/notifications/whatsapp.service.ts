@@ -292,6 +292,8 @@ export class WhatsappService {
 /** Meta wants the full international number, digits only (no +, spaces or dashes). */
 export function normalizePhone(raw: string | null | undefined): string | null {
   const digits = (raw ?? '').replace(/\D/g, '');
+  // No country code starts with 0: "0986660737" is a local number missing its +593
+  if (digits.startsWith('0')) return null;
   return digits.length >= 8 && digits.length <= 15 ? digits : null;
 }
 
@@ -304,7 +306,7 @@ export function parseWhatsapp(raw: unknown): string | null {
       : null;
   if (!phone) {
     throw new BadRequestException(
-      'Número de WhatsApp inválido: usá el formato internacional, ej. +5491122334455',
+      'Número de WhatsApp inválido: elegí el país e ingresá el número sin el 0 inicial, ej. +593 98 666 0737',
     );
   }
   return phone;

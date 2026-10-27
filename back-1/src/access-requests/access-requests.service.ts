@@ -282,7 +282,10 @@ export class AccessRequestsService {
           whatsappPhone: record.phone?.trim().startsWith('+')
             ? normalizePhone(record.phone)
             : record.callingCode && record.phone
-              ? normalizePhone(`${record.callingCode}${record.phone}`)
+              ? // Local trunk 0 goes away once the code is in front: +593 098… → 59398…
+                normalizePhone(
+                  `${record.callingCode}${record.phone.replace(/\D/g, '').replace(/^0+/, '')}`,
+                )
               : null,
         },
         select: { id: true, slug: true },

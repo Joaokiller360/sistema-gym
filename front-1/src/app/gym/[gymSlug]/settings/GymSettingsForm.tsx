@@ -9,6 +9,7 @@ import { useIntlLocale, useLocale, useT } from '@/i18n/client'
 import { commonMessages } from '@/i18n/common'
 import { settingsMessages } from './messages'
 import { PhoneInput } from '@/components/shared/PhoneInput'
+import { joinPhone, splitPhone } from '@/lib/phone'
 
 const MAX_SIZE = 2 * 1024 * 1024
 
@@ -90,7 +91,11 @@ export function GymSettingsForm({
   const [address, setAddress] = useState(defaultAddress ?? '')
   const [country, setCountry] = useState(defaultCountry ?? '')
   const [timezone, setTimezone] = useState(defaultTimezone || 'UTC')
-  const [whatsapp, setWhatsapp] = useState(defaultWhatsapp ? `+${defaultWhatsapp}` : '')
+  // Normalized up front so an old local number ("0986660737") is fixed on the next save
+  const [whatsapp, setWhatsapp] = useState(() => {
+    const { country, number } = splitPhone(defaultWhatsapp, defaultCountry)
+    return joinPhone(country, number)
+  })
   const [loading, setLoading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [isUploading, startUploadTransition] = useTransition()

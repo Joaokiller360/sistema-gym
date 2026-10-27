@@ -17,6 +17,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Switch, btn, field, initials } from '@/components/admin/ui'
 import { PhoneInput } from '@/components/shared/PhoneInput'
+import { joinPhone, splitPhone } from '@/lib/phone'
 
 const MAX_SIZE = 2 * 1024 * 1024
 
@@ -81,7 +82,11 @@ export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, plan
   const [slug, setSlug] = useState(defaultSlug)
   const [plan, setPlan] = useState(defaultPlan)
   const [advancedReports, setAdvancedReports] = useState(defaultAdvancedReports)
-  const [whatsapp, setWhatsapp] = useState(defaultWhatsapp ? `+${defaultWhatsapp}` : '')
+  // Normalized up front so an old local number ("0986660737") is fixed on the next save
+  const [whatsapp, setWhatsapp] = useState(() => {
+    const { country, number } = splitPhone(defaultWhatsapp, defaultCountry)
+    return joinPhone(country, number)
+  })
   const [newOwnerName, setNewOwnerName] = useState(ownerName ?? '')
   const [newOwnerEmail, setNewOwnerEmail] = useState(ownerEmail ?? '')
   const [newOwnerPassword, setNewOwnerPassword] = useState('')

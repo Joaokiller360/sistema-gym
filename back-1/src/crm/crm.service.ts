@@ -274,9 +274,13 @@ export class CrmService {
       select: { id: true, whatsappPhone: true },
     });
     if (!gym) throw new NotFoundException('Gimnasio no encontrado');
+    if (!gym.whatsappPhone)
+      throw new BadRequestException('Este gimnasio no tiene WhatsApp cargado');
     const phone = normalizePhone(gym.whatsappPhone);
     if (!phone)
-      throw new BadRequestException('Este gimnasio no tiene WhatsApp cargado');
+      throw new BadRequestException(
+        `El WhatsApp del gimnasio (${gym.whatsappPhone}) no tiene código de país: corregilo en "Editar"`,
+      );
     const conv = await this.prisma.waConversation.upsert({
       where: { phone },
       create: { phone, gymId: gym.id, status: 'PENDING' },
