@@ -4,6 +4,9 @@ import { cookies } from 'next/headers'
 import { updateTag } from 'next/cache'
 import { z } from 'zod'
 import { apiFetch, apiFetchWithError } from '@/lib/api'
+import { getT } from '@/i18n/server'
+import { commonMessages } from '@/i18n/common'
+import { storeMessages } from './messages'
 
 async function getToken() {
   const store = await cookies()
@@ -39,7 +42,7 @@ export type ProductInput = z.infer<typeof productSchema>
 
 export async function createProductAction(gymSlug: string, data: ProductInput): Promise<{ error?: string }> {
   const parsed = productSchema.safeParse(data)
-  if (!parsed.success) return { error: 'Datos inválidos' }
+  if (!parsed.success) return { error: (await getT(commonMessages)).invalidData }
 
   const token = await getToken()
   const payload = {
@@ -64,7 +67,7 @@ export async function createProductAction(gymSlug: string, data: ProductInput): 
 
 export async function updateProductAction(gymSlug: string, id: string, data: ProductInput): Promise<{ error?: string }> {
   const parsed = productSchema.safeParse(data)
-  if (!parsed.success) return { error: 'Datos inválidos' }
+  if (!parsed.success) return { error: (await getT(commonMessages)).invalidData }
 
   const token = await getToken()
   const payload = {
@@ -104,7 +107,7 @@ export async function createSaleAction(
   gymSlug: string,
   data: { items: { productId: string; quantity: number }[]; method: string; notes?: string },
 ): Promise<{ error?: string }> {
-  if (!data.items.length) return { error: 'Seleccioná al menos un producto' }
+  if (!data.items.length) return { error: (await getT(storeMessages)).pickProduct }
 
   const token = await getToken()
   const result = await apiFetchWithError('/store/sales', token, {
@@ -145,7 +148,7 @@ export async function assignCreditsAction(
   gymSlug: string,
   data: { memberId: string; items: { productId: string; quantity: number }[]; notes?: string },
 ): Promise<{ error?: string }> {
-  if (!data.items.length) return { error: 'Seleccioná al menos un producto' }
+  if (!data.items.length) return { error: (await getT(storeMessages)).pickProduct }
 
   const token = await getToken()
   const result = await apiFetchWithError('/store/credits', token, {
@@ -187,7 +190,7 @@ export async function deleteSaleAction(gymSlug: string, id: string): Promise<{ e
     method: 'DELETE',
     headers: { 'x-gym-slug': gymSlug },
   })
-  if (result === null) return { error: 'Error al eliminar la venta' }
+  if (result === null) return { error: (await getT(storeMessages)).deleteSaleFailed }
   updateTag(`store-products-${gymSlug}`)
   updateTag(`store-sales-${gymSlug}`)
   updateTag(`store-credits-${gymSlug}`)
@@ -205,7 +208,7 @@ export type CategoryInput = z.infer<typeof categorySchema>
 
 export async function createCategoryAction(gymSlug: string, data: CategoryInput): Promise<{ error?: string }> {
   const parsed = categorySchema.safeParse(data)
-  if (!parsed.success) return { error: 'Datos inválidos' }
+  if (!parsed.success) return { error: (await getT(commonMessages)).invalidData }
   const token = await getToken()
   const result = await apiFetchWithError('/store/categories', token, {
     method: 'POST',
@@ -219,7 +222,7 @@ export async function createCategoryAction(gymSlug: string, data: CategoryInput)
 
 export async function updateCategoryAction(gymSlug: string, id: string, data: CategoryInput): Promise<{ error?: string }> {
   const parsed = categorySchema.safeParse(data)
-  if (!parsed.success) return { error: 'Datos inválidos' }
+  if (!parsed.success) return { error: (await getT(commonMessages)).invalidData }
   const token = await getToken()
   const result = await apiFetchWithError(`/store/categories/${id}`, token, {
     method: 'PATCH',
