@@ -59,15 +59,24 @@ export class WhatsappService {
     return res.ok;
   }
 
-  /** Free-form text; WhatsApp only delivers it within 24 h of the contact's last message. */
-  sendText(to: string, body: string, sentById?: string): Promise<SendResult> {
-    return this.send(to, { type: 'text', body }, sentById);
+  /**
+   * Free-form text; WhatsApp only delivers it within 24 h of the contact's last message.
+   * `messageId` points at a CRM message already saved (queued reply) to update instead of logging a new one.
+   */
+  sendText(
+    to: string,
+    body: string,
+    sentById?: string,
+    messageId?: string,
+  ): Promise<SendResult> {
+    return this.send(to, { type: 'text', body }, sentById, messageId);
   }
 
   private async send(
     to: string,
     msg: Outbound,
     sentById?: string,
+    messageId?: string,
   ): Promise<SendResult> {
     const body =
       msg.type === 'template' ? renderTemplate(msg.name, msg.params) : msg.body;
@@ -97,7 +106,7 @@ export class WhatsappService {
 
     await this.logOutbound(
       phone,
-      { type: msg.type, body, sentById },
+      { type: msg.type, body, sentById, messageId },
       result,
     ).catch((e) =>
       this.logger.error('[WhatsApp] Could not log message in CRM:', e),
@@ -235,7 +244,7 @@ export class WhatsappService {
 
   private async logOutbound(
     phone: string,
-    log: { type: string; body: string; sentById?: string },
+    log: { type: string; body: string; sentById?: string; messageId?: string },
     result: SendResult,
   ) {
     const now = new Date();
@@ -262,18 +271,28 @@ export class WhatsappService {
         })
       ).id;
 
-    await this.prisma.waMessage.create({
-      data: {
-        conversationId,
-        direction: 'OUT',
-        type: log.type,
-        body: log.body,
-        sentById: log.sentById,
-        waMessageId: result.waMessageId,
-        status: result.ok ? 'sent' : 'failed',
-        error: result.error,
-      },
-    });
+    const outcome = {
+      waMessageId: result.waMessageId,
+      status: result.ok ? 'sent' : 'failed',
+      error: result.error ?? null,
+    };
+    if (log.messageId) {
+      await this.prisma.waMessage.update({
+        where: { id: log.messageId },
+        data: outcome,
+      });
+    } else {
+      await this.prisma.waMessage.create({
+        data: {
+          conversationId,
+          direction: 'OUT',
+          type: log.type,
+          body: log.body,
+          sentById: log.sentById,
+          ...outcome,
+        },
+      });
+    }
     await this.prisma.waConversation.update({
       where: { id: conversationId },
       data: {

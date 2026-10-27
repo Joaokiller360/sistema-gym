@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { Interval } from '@nestjs/schedule';
 import { CrmStatus, Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { mkdir, unlink, writeFile } from 'fs/promises';
@@ -20,6 +21,10 @@ import { UpdateConversationDto } from './dto/crm.dto';
 /** Meta's customer service window: free-form replies only within 24 h of the contact's last message */
 const WINDOW_MS = 24 * 60 * 60 * 1000;
 const STATUS_RANK: Record<string, number> = { sent: 1, delivered: 2, read: 3 };
+/** Admin replies wait this long before going out, so they can still be edited or taken back */
+export const UNDO_MS = 60 * 1000;
+// A send that never reported back (server restarted mid-request) is given up after this
+const SENDING_STALE_MS = 5 * 60 * 1000;
 
 const MEDIA_DIR = join(process.cwd(), 'uploads', 'wa-media');
 const MAX_MEDIA_BYTES = 16 * 1024 * 1024;
@@ -149,15 +154,18 @@ export class CrmService {
     return { unread };
   }
 
-  async list(status?: string, q?: string) {
+  async list(status?: string, q?: string, tag?: string) {
     const search = q?.trim();
     const where: Prisma.WaConversationWhereInput = {
+      ...(tag?.trim() && { tags: { has: tag.trim() } }),
       ...(status && status in CrmStatus ? { status: status as CrmStatus } : {}),
       ...(search
         ? {
             OR: [
               { phone: { contains: search.replace(/\D/g, '') || search } },
               { contactName: { contains: search, mode: 'insensitive' } },
+              { alias: { contains: search, mode: 'insensitive' } },
+              { tags: { has: search } },
               { gym: { name: { contains: search, mode: 'insensitive' } } },
             ],
           }
@@ -245,9 +253,18 @@ export class CrmService {
       data: {
         ...(dto.status && { status: dto.status }),
         ...(dto.notes !== undefined && { notes: dto.notes.trim() || null }),
+        ...(dto.alias !== undefined && { alias: dto.alias.trim() || null }),
+        ...(dto.tags !== undefined && { tags: dto.tags }),
         ...(dto.gymId !== undefined && { gymId: dto.gymId }),
       },
-      select: { id: true, status: true, notes: true, gymId: true },
+      select: {
+        id: true,
+        status: true,
+        notes: true,
+        alias: true,
+        tags: true,
+        gymId: true,
+      },
     });
   }
 
@@ -297,14 +314,100 @@ export class CrmService {
         'Pasaron más de 24 h desde el último mensaje del gym: WhatsApp solo permite escribirle con una plantilla.',
       );
     }
-    const res = await this.whatsapp.sendText(conv.phone, body.trim(), adminId);
-    if (!res.ok)
-      throw new BadRequestException(res.error ?? 'No se pudo enviar');
+    // Queued, not sent: flushQueued() delivers it once the undo window is over
+    const msg = await this.prisma.waMessage.create({
+      data: {
+        conversationId: id,
+        direction: 'OUT',
+        type: 'text',
+        body: body.trim(),
+        sentById: adminId,
+        status: 'queued',
+      },
+      select: { id: true, createdAt: true },
+    });
     await this.prisma.waConversation.update({
       where: { id },
-      data: { unreadCount: 0 },
+      data: { unreadCount: 0, lastMessageAt: msg.createdAt },
     });
+    return {
+      ok: true,
+      id: msg.id,
+      sendAt: new Date(msg.createdAt.getTime() + UNDO_MS),
+    };
+  }
+
+  async editQueued(id: string, messageId: string, body: string) {
+    const { count } = await this.prisma.waMessage.updateMany({
+      where: { id: messageId, conversationId: id, status: 'queued' },
+      data: { body: body.trim() },
+    });
+    if (!count)
+      throw new ConflictException(
+        'El mensaje ya se envió: no se puede editar.',
+      );
     return { ok: true };
+  }
+
+  async deleteQueued(id: string, messageId: string) {
+    const { count } = await this.prisma.waMessage.deleteMany({
+      where: { id: messageId, conversationId: id, status: 'queued' },
+    });
+    if (!count)
+      throw new ConflictException(
+        'El mensaje ya se envió: no se puede eliminar.',
+      );
+    return { ok: true };
+  }
+
+  @Interval(5000)
+  async flushQueued() {
+    const now = Date.now();
+    await this.prisma.waMessage.updateMany({
+      where: {
+        status: 'sending',
+        createdAt: { lt: new Date(now - UNDO_MS - SENDING_STALE_MS) },
+      },
+      data: { status: 'failed', error: 'No se pudo confirmar el envío' },
+    });
+    const due = await this.prisma.waMessage.findMany({
+      where: { status: 'queued', createdAt: { lte: new Date(now - UNDO_MS) } },
+      orderBy: { createdAt: 'asc' },
+      take: 20,
+      include: {
+        conversation: { select: { phone: true, lastInboundAt: true } },
+      },
+    });
+    for (const m of due) {
+      // Claim it first so a second instance (or a slow tick) can't send it twice
+      const { count } = await this.prisma.waMessage.updateMany({
+        where: { id: m.id, status: 'queued' },
+        data: { status: 'sending' },
+      });
+      if (!count) continue;
+      if (!this.windowOpen(m.conversation.lastInboundAt)) {
+        await this.prisma.waMessage.update({
+          where: { id: m.id },
+          data: {
+            status: 'failed',
+            error: 'Se cerró la ventana de 24 h antes del envío',
+          },
+        });
+        continue;
+      }
+      const res = await this.whatsapp
+        .sendText(m.conversation.phone, m.body, m.sentById ?? undefined, m.id)
+        .catch((e) => {
+          this.logger.error(`[CRM] Queued message ${m.id} failed:`, e);
+          return { ok: false, error: 'No se pudo enviar' };
+        });
+      // Rejected before reaching WhatsApp (not configured, bad number): nothing logged it
+      if (!res.ok)
+        await this.prisma.waMessage.updateMany({
+          where: { id: m.id, status: 'sending' },
+          data: { status: 'failed', error: res.error ?? 'No se pudo enviar' },
+        });
+    }
   }
 
   /** Re-opens the 24 h window with the approved contact template. */
@@ -321,6 +424,7 @@ export class CrmService {
     });
     const name =
       conv.gym?.owner?.name.split(' ')[0] ||
+      conv.alias?.split(' ')[0] ||
       conv.contactName?.split(' ')[0] ||
       'equipo';
     const ok = await this.whatsapp.sendTemplate(

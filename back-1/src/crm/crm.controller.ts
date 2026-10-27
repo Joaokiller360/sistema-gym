@@ -38,8 +38,12 @@ export class CrmController {
   }
 
   @Get('conversations')
-  list(@Query('status') status?: string, @Query('q') q?: string) {
-    return this.crm.list(status, q);
+  list(
+    @Query('status') status?: string,
+    @Query('q') q?: string,
+    @Query('tag') tag?: string,
+  ) {
+    return this.crm.list(status, q, tag);
   }
 
   @Post('conversations')
@@ -74,6 +78,23 @@ export class CrmController {
     @CurrentUser('userId') adminId: string,
   ) {
     return this.crm.reply(id, dto.body, adminId);
+  }
+
+  @Patch('conversations/:id/messages/:messageId')
+  editMessage(
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+    @Body() dto: SendMessageDto,
+  ) {
+    return this.crm.editQueued(id, messageId, dto.body);
+  }
+
+  @Delete('conversations/:id/messages/:messageId')
+  deleteMessage(
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+  ) {
+    return this.crm.deleteQueued(id, messageId);
   }
 
   @Post('conversations/:id/template')

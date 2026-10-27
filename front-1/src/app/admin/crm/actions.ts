@@ -13,6 +13,9 @@ export interface CrmConversation {
   id: string
   phone: string
   contactName: string | null
+  /** Name the team gave the contact */
+  alias: string | null
+  tags: string[]
   status: CrmStatus
   unreadCount: number
   lastMessageAt: string
@@ -84,11 +87,21 @@ export async function replyAction(id: string, body: string) {
   return post(`/admin/crm/conversations/${id}/messages`, { body })
 }
 
+/** Only while the reply is still queued (first minute) */
+export async function editMessageAction(id: string, messageId: string, body: string) {
+  if (!body.trim()) return { error: 'Escribí un mensaje' }
+  return post(`/admin/crm/conversations/${id}/messages/${messageId}`, { body }, 'PATCH')
+}
+
+export async function deleteMessageAction(id: string, messageId: string) {
+  return post(`/admin/crm/conversations/${id}/messages/${messageId}`, undefined, 'DELETE')
+}
+
 export async function sendContactTemplateAction(id: string) {
   return post(`/admin/crm/conversations/${id}/template`)
 }
 
-export async function updateConversationAction(id: string, data: { status?: CrmStatus; notes?: string; gymId?: string | null }) {
+export async function updateConversationAction(id: string, data: { status?: CrmStatus; notes?: string; alias?: string; tags?: string[]; gymId?: string | null }) {
   const res = await post(`/admin/crm/conversations/${id}`, data, 'PATCH')
   if (!res.error && data.status) refresh()
   return res
