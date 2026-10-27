@@ -9,15 +9,13 @@ import { registerMemberPaymentAction } from './actions'
 import { createHandlers } from '@/lib/input-validation'
 import type { Member, Plan } from '@/types'
 import { CompanionPicker } from '../../members/[id]/CompanionPicker'
+import { useIntlLocale, useLocale, useT } from '@/i18n/client'
+import { commonMessages } from '@/i18n/common'
+import { paymentsMessages } from '../messages'
 
 const inputClass = 'w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all disabled:opacity-50'
 
-const METHODS = [
-  { value: 'CASH', label: 'Efectivo' },
-  { value: 'CARD', label: 'Tarjeta' },
-  { value: 'TRANSFER', label: 'Transferencia' },
-  { value: 'OTHER', label: 'Otro' },
-] as const
+const METHODS = ['CASH', 'CARD', 'TRANSFER', 'OTHER'] as const
 
 function addDays(date: Date, days: number) {
   const d = new Date(date)
@@ -25,8 +23,8 @@ function addDays(date: Date, days: number) {
   return d
 }
 
-function fmtDate(d: Date) {
-  return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })
+function fmtDate(d: Date, intl: string) {
+  return d.toLocaleDateString(intl, { day: '2-digit', month: 'long', year: 'numeric' })
 }
 
 function memberInitials(m: Member) {
@@ -51,6 +49,10 @@ export function NewPaymentForm({
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const t = useT(paymentsMessages)
+  const tc = useT(commonMessages)
+  const locale = useLocale()
+  const intl = useIntlLocale()
 
   // Step 1 — member
   const [memberSearch, setMemberSearch] = useState('')
@@ -99,7 +101,7 @@ export function NewPaymentForm({
 
     const totalAmount = Number(selectedPlan.price) * months
     if (!totalAmount || totalAmount <= 0) {
-      toast.error('No se puede registrar un pago de $0. Revisá el precio del plan.')
+      toast.error(t.zeroAmount)
       return
     }
 
@@ -134,7 +136,7 @@ export function NewPaymentForm({
 
       {/* Progress breadcrumb */}
       <div className="flex items-center gap-2 text-xs font-semibold">
-        {['Miembro', 'Plan', 'Confirmar'].map((label, i) => {
+        {t.steps.map((label, i) => {
           const n = i + 1
           const done = step > n
           const active = step === n
@@ -156,10 +158,10 @@ export function NewPaymentForm({
       {/* Step 1 — Select member */}
       <div className={`rounded-2xl border bg-white overflow-hidden transition-all ${step === 1 ? 'border-black' : 'border-zinc-200'}`}>
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-100">
-          <span className="text-sm font-bold">1. Seleccionar miembro</span>
+          <span className="text-sm font-bold">{t.step1}</span>
           {selectedMember && (
             <button type="button" onClick={() => { setSelectedMember(null); setSelectedPlan(null) }} className="text-xs text-zinc-400 hover:text-black transition-colors">
-              Cambiar
+              {t.change}
             </button>
           )}
         </div>
@@ -185,14 +187,14 @@ export function NewPaymentForm({
               <input
                 value={memberSearch}
                 onChange={e => setMemberSearch(e.target.value)}
-                placeholder="Buscar por nombre o email…"
+                placeholder={t.searchPlaceholder}
                 className="w-full rounded-xl border border-zinc-200 bg-zinc-50 pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-black transition-all"
                 {...createHandlers('search')}
               />
             </div>
             <div className="space-y-1 max-h-52 overflow-y-auto">
               {filteredMembers.length === 0
-                ? <p className="text-xs text-zinc-400 text-center py-4">Sin resultados</p>
+                ? <p className="text-xs text-zinc-400 text-center py-4">{t.noResults}</p>
                 : filteredMembers.map(m => (
                   <button
                     key={m.id}
@@ -222,10 +224,10 @@ export function NewPaymentForm({
       {step >= 2 && (
         <div className={`rounded-2xl border bg-white overflow-hidden transition-all ${step === 2 ? 'border-black' : 'border-zinc-200'}`}>
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-100">
-            <span className="text-sm font-bold">2. Seleccionar plan</span>
+            <span className="text-sm font-bold">{t.step2}</span>
             {selectedPlan && (
               <button type="button" onClick={() => setSelectedPlan(null)} className="text-xs text-zinc-400 hover:text-black transition-colors">
-                Cambiar
+                {t.change}
               </button>
             )}
           </div>
@@ -237,17 +239,17 @@ export function NewPaymentForm({
                   <p className="text-sm font-semibold">{selectedPlan.name}</p>
                   {selectedPlan.isFeatured && <Star className="h-3 w-3 text-[#fffb00] fill-[#fffb00]" />}
                 </div>
-                <p className="text-xs text-zinc-400 mt-0.5">{planAccessSummary(selectedPlan)}</p>
+                <p className="text-xs text-zinc-400 mt-0.5">{planAccessSummary(selectedPlan, 1, locale)}</p>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-sm font-bold">{selectedPlan.currency} {Number(selectedPlan.price).toLocaleString('es-AR')}</span>
+                <span className="text-sm font-bold">{selectedPlan.currency} {Number(selectedPlan.price).toLocaleString(intl)}</span>
                 <CheckCircle2 className="h-4 w-4 text-[#1fad9d]" />
               </div>
             </div>
           ) : (
             <div className="p-4 space-y-2">
               {plans.filter(p => p.isActive).length === 0
-                ? <p className="text-xs text-zinc-400 text-center py-4">Sin planes activos</p>
+                ? <p className="text-xs text-zinc-400 text-center py-4">{t.noActivePlans}</p>
                 : plans.filter(p => p.isActive).map(p => (
                   <button
                     key={p.id}
@@ -260,12 +262,12 @@ export function NewPaymentForm({
                         <p className="text-sm font-semibold">{p.name}</p>
                         {p.isFeatured && <Star className="h-3 w-3 text-[#fffb00] fill-[#fffb00]" />}
                       </div>
-                      <p className="text-xs text-zinc-400 mt-0.5">{planAccessSummary(p)}</p>
+                      <p className="text-xs text-zinc-400 mt-0.5">{planAccessSummary(p, 1, locale)}</p>
                       {p.benefits?.length > 0 && (
                         <p className="text-xs text-zinc-400 truncate max-w-[200px]">{p.benefits.slice(0, 2).join(' · ')}</p>
                       )}
                     </div>
-                    <span className="text-sm font-bold shrink-0 ml-4">{p.currency} {Number(p.price).toLocaleString('es-AR')}</span>
+                    <span className="text-sm font-bold shrink-0 ml-4">{p.currency} {Number(p.price).toLocaleString(intl)}</span>
                   </button>
                 ))
               }
@@ -278,14 +280,14 @@ export function NewPaymentForm({
       {step === 3 && selectedPlan && (
         <div className="rounded-2xl border border-black bg-white overflow-hidden">
           <div className="px-5 py-3.5 border-b border-zinc-100">
-            <span className="text-sm font-bold">3. Vigencia y pago</span>
+            <span className="text-sm font-bold">{t.step3}</span>
           </div>
 
           <div className="p-5 space-y-5">
             {/* Vigencia */}
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Fecha de inicio</label>
+                <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">{t.startDate}</label>
                 <input
                   type="date"
                   value={startDate}
@@ -296,7 +298,7 @@ export function NewPaymentForm({
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Cantidad de meses</label>
+                <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">{t.months}</label>
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
@@ -315,20 +317,20 @@ export function NewPaymentForm({
                   >
                     +
                   </button>
-                  <span className="text-xs text-zinc-400">{planAccessSummary(selectedPlan, months)}</span>
+                  <span className="text-xs text-zinc-400">{planAccessSummary(selectedPlan, months, locale)}</span>
                 </div>
               </div>
 
               {endDate && (
                 <div className="rounded-xl bg-[#1fad9d]/8 border border-[#1fad9d]/20 px-4 py-3 flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-widest text-[#0e7a70] mb-1">Vigencia</p>
+                    <p className="text-xs font-bold uppercase tracking-widest text-[#0e7a70] mb-1">{t.validity}</p>
                     <p className="text-sm font-semibold text-[#0e7a70]">
-                      {fmtDate(new Date(startDate))} → {fmtDate(endDate)}
+                      {fmtDate(new Date(startDate), intl)} → {fmtDate(endDate, intl)}
                     </p>
                   </div>
                   <div className="text-right shrink-0 ml-4">
-                    <p className="text-xs text-[#1fad9d]">{selectedPlan.durationDays * months} días</p>
+                    <p className="text-xs text-[#1fad9d]">{t.days(selectedPlan.durationDays * months)}</p>
                   </div>
                 </div>
               )}
@@ -337,7 +339,7 @@ export function NewPaymentForm({
             {companionSlots > 0 && (
               <div className="space-y-2">
                 <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">
-                  Acompañantes · hasta {companionSlots}
+                  {t.companionsUpTo(companionSlots)}
                 </p>
                 <CompanionPicker
                   candidates={members}
@@ -349,28 +351,28 @@ export function NewPaymentForm({
                   disabled={isPending}
                 />
                 <p className="text-xs text-zinc-400">
-                  Un solo pago cubre a todos. Cada uno recibe su propio acceso con las mismas fechas.
+                  {t.companionsHint}
                 </p>
               </div>
             )}
 
             {/* Payment method */}
             <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">Método de pago</label>
+              <label className="text-xs font-bold uppercase tracking-widest text-zinc-400">{t.paymentMethod}</label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {METHODS.map(m => (
                   <button
-                    key={m.value}
+                    key={m}
                     type="button"
-                    onClick={() => setMethod(m.value)}
+                    onClick={() => setMethod(m)}
                     disabled={isPending}
                     className={`rounded-xl py-2.5 text-xs font-semibold border-2 transition-all ${
-                      method === m.value
+                      method === m
                         ? 'border-black bg-black text-white'
                         : 'border-zinc-200 text-zinc-600 hover:border-zinc-300'
                     }`}
                   >
-                    {m.label}
+                    {tc.methods[m]}
                   </button>
                 ))}
               </div>
@@ -378,9 +380,9 @@ export function NewPaymentForm({
 
             {/* Summary */}
             <div className="rounded-xl bg-zinc-50 border border-zinc-200 px-4 py-3 flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Total a cobrar</span>
+              <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">{t.total}</span>
               <span className="text-base font-black">
-                {selectedPlan.currency} {(Number(selectedPlan.price) * months).toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                {selectedPlan.currency} {(Number(selectedPlan.price) * months).toLocaleString(intl, { minimumFractionDigits: 2 })}
               </span>
             </div>
 
@@ -391,7 +393,7 @@ export function NewPaymentForm({
               disabled={isPending}
               className="w-full rounded-xl bg-black py-3 text-sm font-bold text-white hover:bg-zinc-800 disabled:opacity-50 transition-all active:scale-[0.98]"
             >
-              {isPending ? 'Registrando…' : 'Confirmar pago y crear membresía'}
+              {isPending ? t.registering : t.submit}
             </button>
           </div>
         </div>
