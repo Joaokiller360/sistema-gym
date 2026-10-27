@@ -8,7 +8,7 @@ import { useT } from '@/i18n/client'
 import { commonMessages } from '@/i18n/common'
 import { settingsMessages } from './messages'
 
-const inputClass = 'h-12 w-full rounded-xl border border-adm-line bg-adm-ground px-3.5 text-[15px] text-adm-ink outline-none transition-colors placeholder:text-adm-muted focus:border-adm-brand disabled:opacity-50'
+const inputClass = 'h-12 w-full rounded-xl border border-adm-line bg-adm-ground px-3.5 text-[15px] text-adm-ink outline-none transition-colors placeholder:text-adm-muted focus:border-adm-ink dark:focus:border-adm-brand disabled:opacity-50'
 const labelClass = 'mb-2 block text-xs font-bold uppercase tracking-[0.08em] text-adm-muted'
 
 /** 0–4: length plus character variety; only guidance, the server enforces the 12-char rule. */

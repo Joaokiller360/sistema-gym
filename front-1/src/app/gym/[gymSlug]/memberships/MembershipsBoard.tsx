@@ -9,12 +9,14 @@ import { StatusBadge } from '@/components/shared/StatusBadge'
 import { cn } from '@/lib/utils'
 import { FILTERS, matchesFilter, membershipView, type FilterKey } from './membershipView'
 import { MembershipPanel } from './MembershipPanel'
+import { useLocale, useT } from '@/i18n/client'
+import { membershipsMessages } from './messages'
 
 const ROW_GRID =
   'grid grid-cols-[minmax(0,1fr)_auto] md:grid-cols-[minmax(200px,2fr)_minmax(140px,1.3fr)_minmax(160px,1.5fr)_96px_20px] gap-4 items-center'
 
 function isFilterKey(v: string | undefined): v is FilterKey {
-  return FILTERS.some(f => f.key === v)
+  return FILTERS.some(f => f === v)
 }
 
 export function MembershipsBoard({
@@ -37,17 +39,19 @@ export function MembershipsBoard({
   const [planId, setPlanId] = useState(initialPlanId ?? '')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const locale = useLocale()
+  const { board: t, view: tv } = useT(membershipsMessages)
 
   const rows = useMemo(() => {
     const now = new Date().getTime()
-    return memberships.map(m => ({ m, view: membershipView(m, now) }))
-  }, [memberships])
+    return memberships.map(m => ({ m, view: membershipView(m, now, locale) }))
+  }, [memberships, locale])
 
   const byPlan = rows.filter(r => !planId || r.m.planId === planId)
 
   const counts = useMemo(() => {
-    const c = Object.fromEntries(FILTERS.map(f => [f.key, 0])) as Record<FilterKey, number>
-    for (const r of byPlan) for (const f of FILTERS) if (matchesFilter(r.m, r.view, f.key)) c[f.key]++
+    const c = Object.fromEntries(FILTERS.map(f => [f, 0])) as Record<FilterKey, number>
+    for (const r of byPlan) for (const f of FILTERS) if (matchesFilter(r.m, r.view, f)) c[f]++
     return c
   }, [byPlan])
 
@@ -68,11 +72,11 @@ export function MembershipsBoard({
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-3xl font-black tracking-tight">Membresías</h1>
+        <h1 className="text-3xl font-black tracking-tight">{t.title}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {counts.ACTIVE} activas
-          {counts.expiring > 0 && ` · ${counts.expiring} por vencer`}
-          {counts.EXPIRED > 0 && ` · ${counts.EXPIRED} vencidas`}
+          {t.active(counts.ACTIVE)}
+          {counts.expiring > 0 && ` · ${t.expiring(counts.expiring)}`}
+          {counts.EXPIRED > 0 && ` · ${t.expired(counts.EXPIRED)}`}
         </p>
       </div>
 
@@ -81,36 +85,36 @@ export function MembershipsBoard({
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
           <Input
             type="search"
-            aria-label="Buscar membresía"
-            placeholder="Buscar por socio o plan"
+            aria-label={t.search}
+            placeholder={t.searchPlaceholder}
             value={query}
             onChange={e => setQuery(e.target.value)}
             className="h-11 rounded-xl pl-9"
             fieldType="search"
           />
         </div>
-        <label className="sr-only" htmlFor="plan-filter">Plan</label>
+        <label className="sr-only" htmlFor="plan-filter">{t.plan}</label>
         <select
           id="plan-filter"
           value={planId}
           onChange={e => setPlanId(e.target.value)}
           className="h-11 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-700 focus:outline-none focus:ring-2 focus:ring-[#1fad9d]"
         >
-          <option value="">Todos los planes</option>
+          <option value="">{t.allPlans}</option>
           {plansInUse.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </div>
 
-      <div role="tablist" aria-label="Filtrar membresías" className="flex flex-wrap gap-1.5">
+      <div role="tablist" aria-label={t.filter} className="flex flex-wrap gap-1.5">
         {FILTERS.map(f => {
-          const on = filter === f.key
+          const on = filter === f
           return (
             <button
-              key={f.key}
+              key={f}
               type="button"
               role="tab"
               aria-selected={on}
-              onClick={() => setFilter(f.key)}
+              onClick={() => setFilter(f)}
               className={cn(
                 'inline-flex h-10 items-center gap-2 rounded-full border px-3.5 text-[13px] font-bold transition-colors',
                 on
@@ -118,12 +122,12 @@ export function MembershipsBoard({
                   : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300',
               )}
             >
-              {f.label}
+              {tv.filters[f]}
               <span className={cn(
                 'rounded-full px-1.5 py-px text-xs',
                 on ? 'bg-white/20 text-white dark:bg-black/10 dark:text-black' : 'bg-zinc-100 text-zinc-600',
               )}>
-                {counts[f.key]}
+                {counts[f]}
               </span>
             </button>
           )
@@ -131,17 +135,17 @@ export function MembershipsBoard({
       </div>
 
       <div className="flex flex-col items-start gap-5 lg:flex-row">
-        <section aria-label="Lista de membresías" className="w-full min-w-0 flex-1 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+        <section aria-label={t.list} className="w-full min-w-0 flex-1 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
           <div className={cn(ROW_GRID, 'hidden border-b border-zinc-100 px-5 py-3 text-xs font-bold uppercase tracking-wider text-zinc-500 md:grid')}>
-            <span>Socio</span><span>Plan</span><span>Restante</span><span>Estado</span><span />
+            <span>{t.colMember}</span><span>{t.colPlan}</span><span>{t.colRemaining}</span><span>{t.colStatus}</span><span />
           </div>
 
           {visible.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-2 px-4 py-16 text-center">
               <IdCard className="h-10 w-10 text-zinc-300" />
-              <p className="font-bold">{memberships.length === 0 ? 'Todavía no hay membresías' : 'Ninguna membresía coincide'}</p>
+              <p className="font-bold">{memberships.length === 0 ? t.noneYet : t.noMatch}</p>
               <p className="text-sm text-zinc-500">
-                {memberships.length === 0 ? 'Se crean al registrar el pago de un plan.' : 'Probá con otro nombre, plan o estado.'}
+                {memberships.length === 0 ? t.noneYetHint : t.noMatchHint}
               </p>
             </div>
           ) : (
@@ -193,7 +197,7 @@ export function MembershipsBoard({
           )}
 
           <div className="border-t border-zinc-100 px-5 py-3 text-[13px] text-zinc-500">
-            Mostrando {visible.length} de {memberships.length}
+            {t.showing(visible.length, memberships.length)}
           </div>
         </section>
 
@@ -213,7 +217,7 @@ export function MembershipsBoard({
 
       <Dialog open={mobileOpen && !!selected} onOpenChange={setMobileOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto p-0 sm:max-w-md lg:hidden">
-          <DialogTitle className="sr-only">Detalle de la membresía</DialogTitle>
+          <DialogTitle className="sr-only">{t.detail}</DialogTitle>
           {selected && (
             <MembershipPanel
               key={selected.m.id}

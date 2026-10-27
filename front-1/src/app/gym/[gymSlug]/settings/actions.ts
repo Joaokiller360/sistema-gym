@@ -1,7 +1,7 @@
 'use server'
 
 import { cookies } from 'next/headers'
-import { updateTag } from 'next/cache'
+import { updateTag, refresh } from 'next/cache'
 import { z } from 'zod'
 import { apiFetch, apiFetchWithError } from '@/lib/api'
 import { getT } from '@/i18n/server'
@@ -18,6 +18,7 @@ const settingsSchema = z.object({
   address: z.string().nullable().optional(),
   country: z.string().nullable().optional(),
   timezone: z.string().optional(),
+  whatsappPhone: z.string().max(20).nullable().optional(),
 })
 
 export type SettingsInput = z.infer<typeof settingsSchema>
@@ -127,9 +128,10 @@ export interface GymAdmin {
   createdAt: string
 }
 
-export async function getGymAdminsAction(): Promise<GymAdmin[]> {
+// Staff routes need the gym slug: a super admin's token carries no gym
+export async function getGymAdminsAction(gymSlug: string): Promise<GymAdmin[]> {
   const token = await getToken()
-  const result = await apiFetch<GymAdmin[]>('/gyms/staff/list', token)
+  const result = await apiFetch<GymAdmin[]>('/gyms/staff/list', token, { headers: { 'x-gym-slug': gymSlug } })
   return result ?? []
 }
 
@@ -139,27 +141,31 @@ const gymAdminSchema = z.object({
 })
 
 export async function createGymAdminAction(
+  gymSlug: string,
   name: string,
   email: string,
-): Promise<{ error?: string; tempPassword?: string }> {
+): Promise<{ error?: string; tempPassword?: string; emailSent?: boolean }> {
   const parsed = gymAdminSchema.safeParse({ name, email })
   if (!parsed.success) return { error: (await getT(commonMessages)).invalidData }
   const token = await getToken()
-  const result = await apiFetchWithError<{ id: string; tempPassword: string }>('/gyms/staff', token, {
+  // The API emails the credentials itself and reports whether that worked
+  const result = await apiFetchWithError<{ id: string; tempPassword: string; emailSent?: boolean }>('/gyms/staff', token, {
     method: 'POST',
+    headers: { 'x-gym-slug': gymSlug },
     body: JSON.stringify({ name: parsed.data.name, email: parsed.data.email }),
   })
   if ('error' in result) return { error: result.error }
 
-  // Send welcome email — fire and forget, don't block on failure
-  await apiFetch(`/gyms/staff/${result.data.id}/resend-welcome`, token, { method: 'POST' }).catch(() => {})
-
-  return { tempPassword: result.data.tempPassword }
+  // Re-render the current page in this same round trip
+  refresh()
+  return { tempPassword: result.data.tempPassword, emailSent: result.data.emailSent ?? false }
 }
 
-export async function deleteGymAdminAction(userId: string): Promise<{ error?: string }> {
+export async function deleteGymAdminAction(gymSlug: string, userId: string): Promise<{ error?: string }> {
   const token = await getToken()
-  const result = await apiFetchWithError(`/gyms/staff/${userId}`, token, { method: 'DELETE' })
+  const result = await apiFetchWithError(`/gyms/staff/${userId}`, token, { method: 'DELETE', headers: { 'x-gym-slug': gymSlug } })
   if ('error' in result) return { error: result.error }
+  // Re-render the current page in this same round trip
+  refresh()
   return {}
 }

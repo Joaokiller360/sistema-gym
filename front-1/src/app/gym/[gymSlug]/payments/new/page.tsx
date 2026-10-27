@@ -4,6 +4,8 @@ import { ChevronLeft } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
 import { Member, Plan } from '@/types'
 import { NewPaymentForm } from './NewPaymentForm'
+import { getT } from '@/i18n/server'
+import { paymentsMessages } from '../messages'
 
 interface Props {
   params: Promise<{ gymSlug: string }>
@@ -15,6 +17,7 @@ export default async function NewPaymentPage({ params }: Props) {
   const { gymSlug } = await params
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value ?? ''
+  const t = await getT(paymentsMessages)
 
   const [membersRaw, plans] = await Promise.all([
     apiFetch<MembersResponse | Member[]>(`/members?limit=200`, token, {
@@ -40,12 +43,12 @@ export default async function NewPaymentPage({ params }: Props) {
         className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-black transition-colors mb-6"
       >
         <ChevronLeft className="h-4 w-4" />
-        Volver a miembros
+        {t.backToMembers}
       </Link>
 
       <div className="max-w-xl mx-auto space-y-2 mb-8">
-        <h1 className="text-2xl font-bold tracking-tight">Registrar pago</h1>
-        <p className="text-zinc-400 text-sm">Seleccioná el miembro y el plan. Se creará la membresía y el pago automáticamente.</p>
+        <h1 className="text-2xl font-bold tracking-tight">{t.title}</h1>
+        <p className="text-zinc-400 text-sm">{t.desc}</p>
       </div>
 
       <div className="max-w-xl mx-auto">

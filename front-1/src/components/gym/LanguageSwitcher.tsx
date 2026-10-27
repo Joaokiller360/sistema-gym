@@ -1,7 +1,6 @@
 'use client'
 
 import { useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { setLanguageAction } from '@/i18n/actions'
 import { useLocale, useT } from '@/i18n/client'
@@ -12,7 +11,6 @@ import { shellMessages } from './messages'
 export function LanguageSwitcher() {
   const locale = useLocale()
   const t = useT(shellMessages)
-  const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
   function choose(next: Locale) {
@@ -21,7 +19,6 @@ export function LanguageSwitcher() {
       const res = await setLanguageAction(next)
       if (res.error) { toast.error(res.error); return }
       toast.success(shellMessages[next].languageSaved)
-      router.refresh()
     })
   }
 

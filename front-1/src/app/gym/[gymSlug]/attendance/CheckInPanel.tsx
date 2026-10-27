@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { LogIn, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { checkInAction } from './actions'
 import { createHandlers } from '@/lib/input-validation'
 import { Member, AttendanceGroup } from '@/types'
 import { groupColor, initials } from './groupColors'
+import { useT } from '@/i18n/client'
+import { attendanceMessages } from './messages'
 
 interface Props {
   gymSlug: string
@@ -20,12 +21,12 @@ interface Props {
 
 export function CheckInPanel({ gymSlug, members, groups, checkedIn = {}, onSuccess }: Props) {
   const safeHandlers = createHandlers('search')
-  const router = useRouter()
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Member | null>(null)
   const [selectedGroup, setSelectedGroup] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const t = useT(attendanceMessages).checkIn
 
   const q = search.trim().toLowerCase()
   const filtered = q.length >= 2 && !selected
@@ -46,15 +47,14 @@ export function CheckInPanel({ gymSlug, members, groups, checkedIn = {}, onSucce
         if (res.visitsRemaining != null) {
           toast.success(
             res.visitsRemaining === 0
-              ? `${name}: usó su último día del plan`
-              : `${name}: le quedan ${res.visitsRemaining} días`,
+              ? t.lastDay(name)
+              : t.daysLeft(name, res.visitsRemaining),
           )
         } else {
-          toast.success(`Entrada registrada: ${name}`)
+          toast.success(t.logged(name))
         }
         setSearch('')
         setSelected(null)
-        router.refresh()
         onSuccess?.()
       }
     })
@@ -74,18 +74,18 @@ export function CheckInPanel({ gymSlug, members, groups, checkedIn = {}, onSucce
     setError(null)
   }
 
-  const shiftOptions = [{ id: '', name: 'Ninguno', idx: -1 }, ...groups.map((g, i) => ({ id: g.id, name: g.name, idx: i }))]
+  const shiftOptions = [{ id: '', name: t.none, idx: -1 }, ...groups.map((g, i) => ({ id: g.id, name: g.name, idx: i }))]
 
   return (
     <section aria-labelledby="checkin-h" className="flex flex-col gap-[18px] rounded-[20px] border border-adm-line bg-adm-surface p-6">
       <div className="flex flex-col gap-1">
-        <h2 id="checkin-h" className="text-xl font-extrabold">Registrar entrada</h2>
-        <p className="text-sm text-adm-muted">Buscá por nombre o email. Enter registra al primero.</p>
+        <h2 id="checkin-h" className="text-xl font-extrabold">{t.title}</h2>
+        <p className="text-sm text-adm-muted">{t.hint}</p>
       </div>
 
       <div className="flex flex-col gap-2">
         <label htmlFor="checkin-search" className="text-xs font-bold uppercase tracking-[0.08em] text-adm-muted">
-          Miembro
+          {t.member}
         </label>
         <div className="relative">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-adm-muted" aria-hidden="true" />
@@ -97,13 +97,13 @@ export function CheckInPanel({ gymSlug, members, groups, checkedIn = {}, onSucce
             value={search}
             onChange={e => { setSearch(e.target.value); if (selected) setSelected(null) }}
             onKeyDown={handleKeyDown}
-            placeholder="Nombre o email del miembro…"
+            placeholder={t.placeholder}
             className="h-12 w-full rounded-xl border-2 border-adm-line bg-adm-surface pl-11 pr-4 text-base text-adm-ink outline-none transition-colors placeholder:text-adm-muted focus:border-[#1fad9d]"
           />
         </div>
 
         {filtered.length > 0 && (
-          <ul aria-label="Resultados" className="flex flex-col gap-0.5 rounded-xl border border-adm-line bg-adm-surface p-1.5 shadow-[0_8px_24px_rgba(18,20,19,0.08)]">
+          <ul aria-label={t.results} className="flex flex-col gap-0.5 rounded-xl border border-adm-line bg-adm-surface p-1.5 shadow-[0_8px_24px_rgba(18,20,19,0.08)]">
             {filtered.map((m, i) => {
               const name = `${m.firstName} ${m.lastName}`
               const inside = checkedIn[m.id]
@@ -130,7 +130,7 @@ export function CheckInPanel({ gymSlug, members, groups, checkedIn = {}, onSucce
                           : 'bg-adm-warn-bg text-adm-warn-fg'
                       }`}
                     >
-                      {inside ? `Ya entró ${inside}` : m.isActive ? 'Activo' : 'Inactivo'}
+                      {inside ? t.alreadyIn(inside) : m.isActive ? t.active : t.inactive}
                     </span>
                   </button>
                 </li>
@@ -139,13 +139,13 @@ export function CheckInPanel({ gymSlug, members, groups, checkedIn = {}, onSucce
           </ul>
         )}
         {q.length >= 2 && !selected && filtered.length === 0 && (
-          <p className="text-[13px] text-adm-muted">Sin resultados para “{search.trim()}”.</p>
+          <p className="text-[13px] text-adm-muted">{t.noResults(search.trim())}</p>
         )}
       </div>
 
       {groups.length > 0 && (
         <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-          <legend className="mb-2 p-0 text-xs font-bold uppercase tracking-[0.08em] text-adm-muted">Turno</legend>
+          <legend className="mb-2 p-0 text-xs font-bold uppercase tracking-[0.08em] text-adm-muted">{t.shift}</legend>
           <div className="grid grid-cols-[repeat(auto-fit,minmax(88px,1fr))] gap-1.5 rounded-xl bg-adm-chip p-1">
             {shiftOptions.map(opt => {
               const on = selectedGroup === opt.id
@@ -173,12 +173,12 @@ export function CheckInPanel({ gymSlug, members, groups, checkedIn = {}, onSucce
 
       <button
         type="button"
-        onClick={() => { const t = selected ?? filtered[0]; if (t) checkIn(t) }}
+        onClick={() => { const target = selected ?? filtered[0]; if (target) checkIn(target) }}
         disabled={(!selected && filtered.length === 0) || isPending}
         className="flex h-[52px] items-center justify-center gap-2.5 rounded-[14px] bg-[#0e7a70] text-base font-extrabold text-white transition-colors hover:bg-[#095a52] disabled:cursor-not-allowed disabled:opacity-40"
       >
         <LogIn className="h-[18px] w-[18px]" aria-hidden="true" />
-        {isPending ? 'Registrando…' : 'Registrar entrada'}
+        {isPending ? t.logging : t.title}
       </button>
     </section>
   )

@@ -145,7 +145,7 @@ export function GymScheduleEditor({ gymSlug, gymId, defaultSchedule }: Props) {
                       type="time"
                       value={hours.open}
                       onChange={e => updateHour(key, 'open', e.target.value)}
-                      className="h-9 w-full rounded-lg border border-adm-line bg-adm-ground px-1 text-center font-admin-mono text-[13px] font-bold text-adm-ink outline-none [color-scheme:dark] focus:border-adm-brand"
+                      className="h-9 w-full rounded-lg border border-adm-line bg-adm-ground px-1 text-center font-admin-mono text-[13px] font-bold text-adm-ink outline-none dark:[color-scheme:dark] focus:border-adm-ink dark:focus:border-adm-brand"
                     />
                     <label className="sr-only" htmlFor={`close-${key}`}>{t.closing(label)}</label>
                     <input
@@ -153,7 +153,7 @@ export function GymScheduleEditor({ gymSlug, gymId, defaultSchedule }: Props) {
                       type="time"
                       value={hours.close}
                       onChange={e => updateHour(key, 'close', e.target.value)}
-                      className="h-9 w-full rounded-lg border border-adm-line bg-adm-ground px-1 text-center font-admin-mono text-[13px] font-bold text-adm-ink outline-none [color-scheme:dark] focus:border-adm-brand"
+                      className="h-9 w-full rounded-lg border border-adm-line bg-adm-ground px-1 text-center font-admin-mono text-[13px] font-bold text-adm-ink outline-none dark:[color-scheme:dark] focus:border-adm-ink dark:focus:border-adm-brand"
                     />
                   </div>
                 ) : (

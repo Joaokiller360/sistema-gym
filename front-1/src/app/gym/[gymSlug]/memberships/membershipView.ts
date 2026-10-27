@@ -1,16 +1,11 @@
 import type { MembershipStatus, MembershipWithRelations } from '@/types'
+import { DEFAULT_LOCALE, INTL_LOCALE, type Locale } from '@/i18n/config'
+import { membershipsMessages } from './messages'
 
 export type FilterKey = 'all' | 'expiring' | MembershipStatus
 
-export const FILTERS: { key: FilterKey; label: string }[] = [
-  { key: 'ACTIVE', label: 'Activas' },
-  { key: 'expiring', label: 'Por vencer' },
-  { key: 'EXPIRED', label: 'Vencidas' },
-  { key: 'FROZEN', label: 'Congeladas' },
-  { key: 'SUSPENDED', label: 'Suspendidas' },
-  { key: 'CANCELLED', label: 'Canceladas' },
-  { key: 'all', label: 'Todas' },
-]
+// Labels live in membershipsMessages.view.filters
+export const FILTERS: FilterKey[] = ['ACTIVE', 'expiring', 'EXPIRED', 'FROZEN', 'SUSPENDED', 'CANCELLED', 'all']
 
 const DAY_MS = 86_400_000
 const LOW_DAYS = 3
@@ -30,7 +25,8 @@ export interface MembershipView {
   barClass: string
 }
 
-export function membershipView(m: MembershipWithRelations, now: number): MembershipView {
+export function membershipView(m: MembershipWithRelations, now: number, locale: Locale = DEFAULT_LOCALE): MembershipView {
+  const t = membershipsMessages[locale].view
   const daysLeft = Math.ceil((new Date(m.endDate).getTime() - now) / DAY_MS)
   const byVisits = m.visitsTotal != null
   const visitsLeft = byVisits ? Math.max(0, m.visitsTotal! - m.visitsUsed) : null
@@ -42,11 +38,11 @@ export function membershipView(m: MembershipWithRelations, now: number): Members
   let remainingLabel: string
   if (byVisits) {
     pct = m.visitsTotal! > 0 ? visitsLeft! / m.visitsTotal! : 0
-    remainingLabel = `Quedan ${visitsLeft} de ${m.visitsTotal} ${m.visitsTotal === 1 ? 'día' : 'días'}`
+    remainingLabel = t.visitsLeft(visitsLeft!, m.visitsTotal!)
   } else {
     const duration = Math.max(1, m.plan.durationDays)
     pct = Math.max(0, Math.min(1, daysLeft / duration))
-    remainingLabel = daysLeft > 0 ? `Vence en ${daysLeft} ${daysLeft === 1 ? 'día' : 'días'}` : 'Sin días restantes'
+    remainingLabel = daysLeft > 0 ? t.expiresIn(daysLeft) : t.noDaysLeft
   }
   if (!active) pct = m.status === 'FROZEN' ? pct : 0
 
@@ -59,7 +55,7 @@ export function membershipView(m: MembershipWithRelations, now: number): Members
     daysLeft,
     expiring,
     remainingLabel,
-    kindLabel: byVisits ? `Plan por días · vence ${fmtShort(m.endDate)}` : `${m.plan.durationDays} días corridos`,
+    kindLabel: byVisits ? t.visitKind(fmtShort(m.endDate, locale)) : t.timeKind(m.plan.durationDays),
     pct,
     barClass,
   }
@@ -71,10 +67,10 @@ export function matchesFilter(m: MembershipWithRelations, v: MembershipView, key
   return m.status === key
 }
 
-export function fmtShort(iso: string) {
-  return new Date(iso).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+export function fmtShort(iso: string, locale: Locale = DEFAULT_LOCALE) {
+  return new Date(iso).toLocaleDateString(INTL_LOCALE[locale], { day: 'numeric', month: 'short' })
 }
 
-export function fmtLong(iso: string) {
-  return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
+export function fmtLong(iso: string, locale: Locale = DEFAULT_LOCALE) {
+  return new Date(iso).toLocaleDateString(INTL_LOCALE[locale], { day: '2-digit', month: 'short', year: 'numeric' })
 }

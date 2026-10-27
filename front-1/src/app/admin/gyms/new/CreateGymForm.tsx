@@ -110,6 +110,7 @@ export function CreateGymForm({ plans, onSuccess }: { plans: SubscriptionPlan[];
 
   const [ownerName, setOwnerName] = useState('')
   const [ownerEmail, setOwnerEmail] = useState('')
+  const [ownerPhone, setOwnerPhone] = useState('')
 
   function handleNameChange(v: string) {
     setName(v)
@@ -123,6 +124,8 @@ export function CreateGymForm({ plans, onSuccess }: { plans: SubscriptionPlan[];
     if (!/^[a-z0-9-]+$/.test(slug)) e.slug = 'Solo minúsculas, números y guiones'
     if (!ownerName.trim()) e.ownerName = 'Nombre del dueño requerido'
     if (!ownerEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail)) e.ownerEmail = 'Email inválido'
+    const phoneDigits = ownerPhone.replace(/\D/g, '')
+    if (ownerPhone.trim() && (phoneDigits.length < 8 || phoneDigits.length > 15)) e.ownerPhone = 'Número inválido: incluí el código de país'
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -141,6 +144,7 @@ export function CreateGymForm({ plans, onSuccess }: { plans: SubscriptionPlan[];
         slug,
         subscriptionPlan: plan,
         owner: { name: ownerName, email: ownerEmail },
+        whatsappPhone: ownerPhone.trim() || null,
       }
       const result = await createGymAction(payload)
       if ('error' in result) {
@@ -254,6 +258,19 @@ export function CreateGymForm({ plans, onSuccess }: { plans: SubscriptionPlan[];
                 disabled={isPending}
                 className={field.input}
                 {...createHandlers('email')}
+              />
+            </Field>
+            <Field label="WhatsApp (opcional)" htmlFor="owner-phone" error={errors.ownerPhone} hint="Con código de país. Recibe los avisos de límite del plan.">
+              <input
+                id="owner-phone"
+                type="tel"
+                inputMode="tel"
+                value={ownerPhone}
+                onChange={e => setOwnerPhone(e.target.value.replace(/[^\d+\s-]/g, ''))}
+                placeholder="+54 9 11 2233 4455"
+                maxLength={20}
+                disabled={isPending}
+                className={cn(field.input, 'font-admin-mono')}
               />
             </Field>
           </div>

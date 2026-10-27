@@ -2,12 +2,13 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Copy, Pencil, Star } from 'lucide-react'
 import { Plan } from '@/types'
 import { createPlanAction, togglePlanActiveAction } from './actions'
-import { PAUSED_COLOR, PLAN_COLORS, accessLabel, durationLabel, money, peopleLabel, pricePerDay } from './planMath'
+import { PAUSED_COLOR, PLAN_COLORS, accessLabel, durationLabel, money as moneyIn, peopleLabel, pricePerDay } from './planMath'
+import { useLocale, useT } from '@/i18n/client'
+import { plansMessages } from './messages'
 
 interface Props {
   plans: Plan[]
@@ -18,19 +19,16 @@ interface Props {
 type Filter = 'all' | 'time' | 'visits' | 'paused'
 type Sort = 'members' | 'price' | 'name'
 
-const FILTERS: { key: Filter; label: string }[] = [
-  { key: 'all', label: 'Todos' },
-  { key: 'time', label: 'Por tiempo' },
-  { key: 'visits', label: 'Por días' },
-  { key: 'paused', label: 'Pausados' },
-]
+const FILTERS: Filter[] = ['all', 'time', 'visits', 'paused']
 
 export function PlansTable({ plans, memberCounts, gymSlug }: Props) {
-  const router = useRouter()
   const [filter, setFilter] = useState<Filter>('all')
   const [sort, setSort] = useState<Sort>('members')
   const [busyId, setBusyId] = useState<string | null>(null)
   const [, startTransition] = useTransition()
+  const t = useT(plansMessages).table
+  const locale = useLocale()
+  const money = (value: number, currency: string, decimals = 0) => moneyIn(value, currency, decimals, locale)
 
   const colorOf = new Map(plans.map((p, i) => [p.id, p.isActive ? PLAN_COLORS[i % PLAN_COLORS.length] : PAUSED_COLOR]))
   const count = (p: Plan) => memberCounts[p.id] ?? 0
@@ -60,7 +58,6 @@ export function PlansTable({ plans, memberCounts, gymSlug }: Props) {
     startTransition(async () => {
       await togglePlanActiveAction(gymSlug, plan.id, !plan.isActive)
       setBusyId(null)
-      router.refresh()
     })
   }
 
@@ -68,7 +65,7 @@ export function PlansTable({ plans, memberCounts, gymSlug }: Props) {
     setBusyId(plan.id)
     startTransition(async () => {
       const res = await createPlanAction(gymSlug, {
-        name: `${plan.name} copia`.slice(0, 100),
+        name: `${plan.name} ${t.copySuffix}`.slice(0, 100),
         price: plan.price,
         currency: plan.currency,
         durationDays: plan.durationDays,
@@ -82,43 +79,43 @@ export function PlansTable({ plans, memberCounts, gymSlug }: Props) {
       })
       setBusyId(null)
       if (res.error) toast.error(res.error)
-      else { toast.success('Plan duplicado (pausado)'); router.refresh() }
+      else toast.success(t.duplicated)
     })
   }
 
   return (
     <div className="flex flex-wrap items-start gap-4">
-      <section aria-label="Planes" className="min-w-0 flex-[999_1_720px] overflow-hidden rounded-[18px] border border-adm-line bg-adm-surface">
+      <section aria-label={t.plans} className="min-w-0 flex-[999_1_720px] overflow-hidden rounded-[18px] border border-adm-line bg-adm-surface">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-adm-line px-4 py-3.5">
-          <div role="tablist" aria-label="Filtrar" className="flex flex-wrap gap-1 rounded-xl border border-adm-line bg-adm-ground p-1">
+          <div role="tablist" aria-label={t.filter} className="flex flex-wrap gap-1 rounded-xl border border-adm-line bg-adm-ground p-1">
             {FILTERS.map(f => {
-              const on = filter === f.key
+              const on = filter === f
               return (
                 <button
-                  key={f.key}
+                  key={f}
                   type="button"
                   role="tab"
                   aria-selected={on}
-                  onClick={() => setFilter(f.key)}
+                  onClick={() => setFilter(f)}
                   className={`h-9 rounded-[9px] border px-3 text-[13px] font-bold transition-colors ${
                     on ? 'border-adm-ink bg-adm-subtle text-adm-ink' : 'border-transparent text-adm-muted hover:text-adm-ink'
                   }`}
                 >
-                  {f.label}
+                  {t.filters[f]}
                 </button>
               )
             })}
           </div>
           <label className="inline-flex items-center gap-2 text-[13px] text-adm-muted">
-            Ordenar
+            {t.sort}
             <select
               value={sort}
               onChange={e => setSort(e.target.value as Sort)}
               className="h-10 rounded-[10px] border border-adm-line bg-adm-ground px-2.5 text-[13px] font-bold text-adm-ink"
             >
-              <option value="members">Más socios</option>
-              <option value="price">Precio</option>
-              <option value="name">Nombre</option>
+              <option value="members">{t.sortMembers}</option>
+              <option value="price">{t.sortPrice}</option>
+              <option value="name">{t.sortName}</option>
             </select>
           </label>
         </div>
@@ -127,19 +124,19 @@ export function PlansTable({ plans, memberCounts, gymSlug }: Props) {
           <table className="w-full min-w-[820px] border-collapse text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-[0.08em] text-adm-muted">
-                <th scope="col" className="px-4 py-3 font-bold">Plan</th>
-                <th scope="col" className="px-2 py-3 text-right font-bold">Precio</th>
-                <th scope="col" className="px-2 py-3 font-bold">Vigencia</th>
-                <th scope="col" className="px-2 py-3 font-bold">Acceso</th>
-                <th scope="col" className="w-[170px] px-2 py-3 font-bold">Socios</th>
-                <th scope="col" className="px-2 py-3 font-bold">Activo</th>
-                <th scope="col" className="px-4 py-3"><span className="sr-only">Acciones</span></th>
+                <th scope="col" className="px-4 py-3 font-bold">{t.colPlan}</th>
+                <th scope="col" className="px-2 py-3 text-right font-bold">{t.colPrice}</th>
+                <th scope="col" className="px-2 py-3 font-bold">{t.colDuration}</th>
+                <th scope="col" className="px-2 py-3 font-bold">{t.colAccess}</th>
+                <th scope="col" className="w-[170px] px-2 py-3 font-bold">{t.colMembers}</th>
+                <th scope="col" className="px-2 py-3 font-bold">{t.colActive}</th>
+                <th scope="col" className="px-4 py-3"><span className="sr-only">{t.colActions}</span></th>
               </tr>
             </thead>
             <tbody>
               {visible.length === 0 && (
                 <tr className="border-t border-adm-line">
-                  <td colSpan={7} className="px-4 py-12 text-center text-adm-muted">No hay planes en este filtro.</td>
+                  <td colSpan={7} className="px-4 py-12 text-center text-adm-muted">{t.emptyFilter}</td>
                 </tr>
               )}
               {visible.map(p => {
@@ -157,11 +154,11 @@ export function PlansTable({ plans, memberCounts, gymSlug }: Props) {
                         <div className="flex min-w-0 flex-col gap-0.5">
                           <span className="inline-flex items-center gap-2 text-[15px] font-extrabold">
                             <span className="truncate">{p.name}</span>
-                            {p.isFeatured && <Star className="h-3.5 w-3.5 shrink-0 fill-adm-brand text-adm-brand" role="img" aria-label="Destacado" />}
+                            {p.isFeatured && <Star className="h-3.5 w-3.5 shrink-0 fill-adm-brand text-[#8a8600] dark:text-adm-brand" role="img" aria-label={t.featured} />}
                           </span>
                           <span className="text-xs text-adm-muted">
-                            {benefits ? `${benefits} ${benefits === 1 ? 'beneficio' : 'beneficios'}` : 'Sin beneficios'}
-                            {p.storeEnabled && ' · Tienda'}
+                            {benefits ? t.benefits(benefits) : t.noBenefits}
+                            {p.storeEnabled && t.store}
                           </span>
                         </div>
                       </div>
@@ -169,20 +166,20 @@ export function PlansTable({ plans, memberCounts, gymSlug }: Props) {
                     <td className="whitespace-nowrap px-2 py-3.5 text-right">
                       <span className="block font-admin-mono text-base font-bold">{money(p.price, p.currency)}</span>
                       <span className="font-admin-mono text-[11px] text-adm-muted">
-                        {p.maxMembers > 1 ? `${money(p.price / p.maxMembers, p.currency)} c/u` : `${money(pricePerDay(p), p.currency, 2)}/día`}
+                        {p.maxMembers > 1 ? t.each(money(p.price / p.maxMembers, p.currency)) : t.perDay(money(pricePerDay(p), p.currency, 2))}
                       </span>
                     </td>
-                    <td className="whitespace-nowrap px-2 py-3.5">{durationLabel(p.durationDays)}</td>
+                    <td className="whitespace-nowrap px-2 py-3.5">{durationLabel(p.durationDays, locale)}</td>
                     <td className="px-2 py-3.5">
                       <div className="flex flex-wrap gap-1">
                         <span className={`inline-flex h-[26px] items-center rounded-full px-2.5 text-xs font-extrabold ${
                           p.visitLimit != null ? 'bg-adm-warn-bg text-adm-warn-fg' : 'bg-adm-chip text-adm-ink'
                         }`}>
-                          {accessLabel(p)}
+                          {accessLabel(p, locale)}
                         </span>
                         {p.maxMembers > 1 && (
                           <span className="inline-flex h-[26px] items-center rounded-full bg-adm-info-bg px-2.5 text-xs font-extrabold text-adm-info-fg">
-                            {peopleLabel(p.maxMembers)}
+                            {peopleLabel(p.maxMembers, locale)}
                           </span>
                         )}
                       </div>
@@ -200,7 +197,7 @@ export function PlansTable({ plans, memberCounts, gymSlug }: Props) {
                         type="button"
                         role="switch"
                         aria-checked={p.isActive}
-                        aria-label={`${p.name} activo`}
+                        aria-label={t.activeToggle(p.name)}
                         disabled={busyId === p.id}
                         onClick={() => toggle(p)}
                         className={`flex h-[26px] w-[46px] rounded-full p-[3px] transition-colors ${
@@ -213,14 +210,14 @@ export function PlansTable({ plans, memberCounts, gymSlug }: Props) {
                     <td className="whitespace-nowrap px-4 py-3.5 text-right">
                       <Link
                         href={`?edit=${p.id}`}
-                        aria-label={`Editar ${p.name}`}
+                        aria-label={t.edit(p.name)}
                         className="inline-flex h-10 w-10 items-center justify-center rounded-[10px] border border-adm-line text-adm-ink transition-colors hover:bg-adm-chip"
                       >
                         <Pencil className="h-[15px] w-[15px]" aria-hidden="true" />
                       </Link>
                       <button
                         type="button"
-                        aria-label={`Duplicar ${p.name}`}
+                        aria-label={t.duplicate(p.name)}
                         disabled={busyId === p.id}
                         onClick={() => duplicate(p)}
                         className="ml-1 inline-flex h-10 w-10 items-center justify-center rounded-[10px] text-adm-muted transition-colors hover:bg-adm-chip hover:text-adm-ink"
@@ -240,8 +237,8 @@ export function PlansTable({ plans, memberCounts, gymSlug }: Props) {
         {perDay.length > 0 && (
           <section aria-labelledby="cmp-h" className="flex flex-col gap-3.5 rounded-[18px] border border-adm-line bg-adm-surface p-[18px]">
             <div className="flex flex-col gap-1">
-              <h2 id="cmp-h" className="text-[15px] font-extrabold">Costo real por día</h2>
-              <p className="text-[13px] text-adm-muted">Precio dividido por los días que el socio puede venir.</p>
+              <h2 id="cmp-h" className="text-[15px] font-extrabold">{t.costPerDay}</h2>
+              <p className="text-[13px] text-adm-muted">{t.costPerDayHint}</p>
             </div>
             <ul className="flex flex-col gap-3">
               {perDay.map(({ plan, value }, i) => (
@@ -264,15 +261,15 @@ export function PlansTable({ plans, memberCounts, gymSlug }: Props) {
 
         {paused.map(p => (
           <section key={p.id} className="flex flex-col gap-2 rounded-[18px] border border-dashed border-adm-line p-[18px]">
-            <h2 className="text-[15px] font-extrabold">{p.name} está pausado</h2>
-            <p className="text-[13px] text-adm-muted">No aparece para asignar a nuevos socios.</p>
+            <h2 className="text-[15px] font-extrabold">{t.paused(p.name)}</h2>
+            <p className="text-[13px] text-adm-muted">{t.pausedHint}</p>
             <button
               type="button"
               disabled={busyId === p.id}
               onClick={() => toggle(p)}
               className="h-10 self-start rounded-[10px] border border-adm-ink px-3.5 text-[13px] font-bold transition-colors hover:bg-adm-chip disabled:opacity-50"
             >
-              Reactivar
+              {t.reactivate}
             </button>
           </section>
         ))}

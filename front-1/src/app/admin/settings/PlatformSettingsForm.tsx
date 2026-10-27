@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { Plus, Trash2, Camera, Dumbbell, Globe, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { updatePlatformSettingsAction } from './actions'
@@ -49,6 +50,7 @@ export function PlatformSettingsForm({ settings }: Props) {
   const [isUploading, startUploadTransition] = useTransition()
 
   const [saasName, setSaasName] = useState(settings.saasName)
+  const router = useRouter()
   const [logoUrl, setLogoUrl] = useState(settings.logoUrl ?? '')
   const [primaryColor, setPrimaryColor] = useState(settings.primaryColor ?? '#fffb00')
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -83,7 +85,11 @@ export function PlatformSettingsForm({ settings }: Props) {
       const res = await fetch('/api/v1/admin/platform-settings/logo', { method: 'POST', body: fd })
       const data = await res.json().catch(() => ({})) as { error?: string; logoUrl?: string }
       if (!res.ok || data.error) { toast.error(data.error ?? 'Error al subir la imagen') }
-      else if (data.logoUrl) { setLogoUrl(data.logoUrl) }
+      else if (data.logoUrl) {
+        setLogoUrl(data.logoUrl)
+        // The logo is already saved: refresh so the sidebar shows it
+        router.refresh()
+      }
     })
     e.target.value = ''
   }

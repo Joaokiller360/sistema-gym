@@ -394,7 +394,7 @@ export default async function AdminDashboardPage() {
                       <td className={`${td} pr-5`}>
                         <div className="flex justify-end gap-2">
                           <Link href={`/gym/${g.slug}/dashboard`} className={btn.dark}>Entrar</Link>
-                          <Link href={`/admin/gyms/${g.id}`} className={btn.line}>Detalle</Link>
+                          <Link href={`/admin/gyms/${g.slug}`} className={btn.line}>Detalle</Link>
                         </div>
                       </td>
                     </tr>

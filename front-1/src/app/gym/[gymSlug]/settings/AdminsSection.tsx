@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { Copy, Check } from 'lucide-react'
 import { createGymAdminAction, deleteGymAdminAction, type GymAdmin } from './actions'
 import { createHandlers } from '@/lib/input-validation'
@@ -19,7 +18,7 @@ import { useT } from '@/i18n/client'
 import { commonMessages } from '@/i18n/common'
 import { settingsMessages } from './messages'
 
-const inputClass = 'h-12 w-full rounded-xl border border-adm-line bg-adm-ground px-3.5 text-[15px] text-adm-ink outline-none transition-colors placeholder:text-adm-muted focus:border-adm-brand disabled:opacity-50'
+const inputClass = 'h-12 w-full rounded-xl border border-adm-line bg-adm-ground px-3.5 text-[15px] text-adm-ink outline-none transition-colors placeholder:text-adm-muted focus:border-adm-ink dark:focus:border-adm-brand disabled:opacity-50'
 const labelClass = 'mb-2 block text-xs font-bold uppercase tracking-[0.08em] text-adm-muted'
 
 function CopyButton({ text, label, className }: { text: string; label: string; className?: string }) {
@@ -37,7 +36,7 @@ function CopyButton({ text, label, className }: { text: string; label: string; c
   )
 }
 
-function DeleteAdminButton({ admin, onDeleted }: { admin: GymAdmin; onDeleted: () => void }) {
+function DeleteAdminButton({ gymSlug, admin, onDeleted }: { gymSlug: string; admin: GymAdmin; onDeleted: () => void }) {
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -46,7 +45,7 @@ function DeleteAdminButton({ admin, onDeleted }: { admin: GymAdmin; onDeleted: (
 
   function handleDelete() {
     startTransition(async () => {
-      const res = await deleteGymAdminAction(admin.id)
+      const res = await deleteGymAdminAction(gymSlug, admin.id)
       if (res.error) { setError(res.error) }
       else { setOpen(false); onDeleted() }
     })
@@ -83,14 +82,13 @@ function DeleteAdminButton({ admin, onDeleted }: { admin: GymAdmin; onDeleted: (
   )
 }
 
-export function AdminsSection({ initialAdmins }: { initialAdmins: GymAdmin[] }) {
-  const router = useRouter()
+export function AdminsSection({ gymSlug, initialAdmins }: { gymSlug: string; initialAdmins: GymAdmin[] }) {
   const [admins, setAdmins] = useState(initialAdmins)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
-  const [newCreds, setNewCreds] = useState<{ name: string; email: string; password: string } | null>(null)
+  const [newCreds, setNewCreds] = useState<{ name: string; email: string; password: string; emailSent: boolean } | null>(null)
   const t = useT(settingsMessages).admins
 
   function handleCreate(e: React.FormEvent) {
@@ -98,14 +96,13 @@ export function AdminsSection({ initialAdmins }: { initialAdmins: GymAdmin[] }) 
     if (!name.trim() || !email.trim()) return
     setError(null)
     startTransition(async () => {
-      const res = await createGymAdminAction(name.trim(), email.trim())
+      const res = await createGymAdminAction(gymSlug, name.trim(), email.trim())
       if (res.error) {
         setError(res.error)
       } else {
-        setNewCreds({ name: name.trim(), email: email.trim(), password: res.tempPassword ?? '' })
+        setNewCreds({ name: name.trim(), email: email.trim(), password: res.tempPassword ?? '', emailSent: res.emailSent ?? false })
         setName('')
         setEmail('')
-        router.refresh()
       }
     })
   }
@@ -131,6 +128,9 @@ export function AdminsSection({ initialAdmins }: { initialAdmins: GymAdmin[] }) 
               <div className="flex items-center gap-2 font-mono font-bold">{newCreds?.password} <CopyButton text={newCreds?.password ?? ''} label={t.copyPassword} /></div>
             </div>
           </div>
+          <p className={`rounded-xl px-3.5 py-2.5 text-[13px] font-semibold ${newCreds?.emailSent ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>
+            {newCreds?.emailSent ? t.emailSent(newCreds.email) : t.emailFailed}
+          </p>
           <AlertDialogFooter>
             <Button onClick={() => setNewCreds(null)}>{t.gotIt}</Button>
           </AlertDialogFooter>
@@ -171,7 +171,7 @@ export function AdminsSection({ initialAdmins }: { initialAdmins: GymAdmin[] }) 
                     label={t.copyEmailOf(admin.name)}
                     className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-adm-line text-adm-muted transition-colors hover:text-adm-ink"
                   />
-                  <DeleteAdminButton admin={admin} onDeleted={() => { setAdmins(a => a.filter(x => x.id !== admin.id)) }} />
+                  <DeleteAdminButton gymSlug={gymSlug} admin={admin} onDeleted={() => { setAdmins(a => a.filter(x => x.id !== admin.id)) }} />
                 </li>
               )
             })}

@@ -4,6 +4,11 @@ import { cookies } from 'next/headers'
 import { updateTag } from 'next/cache'
 import { z } from 'zod'
 import { apiFetch, apiFetchWithError } from '@/lib/api'
+import { getT } from '@/i18n/server'
+import { commonMessages } from '@/i18n/common'
+import { membersMessages } from '../messages'
+
+const messages = async () => (await getT(membersMessages)).memberActions
 
 async function getToken() {
   const store = await cookies()
@@ -26,7 +31,7 @@ export async function updateMemberAction(
   data: UpdateMemberInput,
 ): Promise<{ error?: string }> {
   const parsed = updateMemberSchema.safeParse(data)
-  if (!parsed.success) return { error: 'Datos inválidos' }
+  if (!parsed.success) return { error: (await getT(commonMessages)).invalidData }
 
   const token = await getToken()
   const phone = parsed.data.phone?.trim()
@@ -47,7 +52,7 @@ export async function updateMemberAction(
   if (existing) {
     const normalized = `${(payload.firstName as string).toLowerCase()} ${(payload.lastName as string).toLowerCase()}`
     if (existing.some(m => m.id !== memberId && `${m.firstName.toLowerCase()} ${m.lastName.toLowerCase()}` === normalized)) {
-      return { error: 'Ya existe un miembro con ese nombre y apellido' }
+      return { error: (await messages()).duplicateName }
     }
   }
 
@@ -75,15 +80,15 @@ export async function toggleMemberActiveAction(
     headers: { 'x-gym-slug': gymSlug },
     body: JSON.stringify({ isActive }),
   })
-  if (!result) return { error: 'Error al actualizar el estado' }
+  if (!result) return { error: (await messages()).statusFailed }
   updateTag(`member-${memberId}`)
   updateTag(`members-${gymSlug}`)
   return {}
 }
 
-const assignPlanSchema = z.object({
-  planId: z.string().min(1, 'Seleccioná un plan'),
-  startDate: z.string().min(1, 'Ingresá la fecha de inicio'),
+const assignPlanSchema = (t: Awaited<ReturnType<typeof messages>>) => z.object({
+  planId: z.string().min(1, t.pickPlan),
+  startDate: z.string().min(1, t.startDateRequired),
   durationDays: z.number().int().positive(),
   price: z.number().positive(),
   currency: z.string().min(1),
@@ -97,8 +102,8 @@ export async function assignPlanAction(
   data: { planId: string; startDate: string; durationDays: number; price: number; currency: string; method: 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER'; companionIds?: string[] },
   activeMembershipId?: string,
 ): Promise<{ error?: string }> {
-  const parsed = assignPlanSchema.safeParse(data)
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
+  const parsed = assignPlanSchema(await messages()).safeParse(data)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? (await getT(commonMessages)).invalidData }
 
   const start = new Date(parsed.data.startDate)
   const end = new Date(start)
@@ -155,7 +160,7 @@ export async function addCompanionAction(
   holderId: string,
   companionId: string,
 ): Promise<{ error?: string }> {
-  if (!z.string().uuid().safeParse(companionId).success) return { error: 'Acompañante inválido' }
+  if (!z.string().uuid().safeParse(companionId).success) return { error: (await messages()).badCompanion }
   const token = await getToken()
   const result = await apiFetchWithError(`/memberships/${membershipId}/companions`, token, {
     method: 'POST',
@@ -170,8 +175,8 @@ export async function addCompanionAction(
   return {}
 }
 
-const paymentSchema = z.object({
-  amount: z.number().positive('Monto inválido'),
+const paymentSchema = (t: Awaited<ReturnType<typeof messages>>) => z.object({
+  amount: z.number().positive(t.badAmount),
   currency: z.string().min(1),
   method: z.enum(['CASH', 'CARD', 'TRANSFER', 'OTHER']),
   notes: z.string().optional(),
@@ -229,9 +234,15 @@ export async function deletePaymentAction(
 ): Promise<{ error?: string }> {
   const token = await getToken()
   const result = await apiFetch(`/payments/${paymentId}`, token, { method: 'DELETE', headers: { 'x-gym-slug': gymSlug } })
-  if (result === null) return { error: 'Error al eliminar el pago' }
+  if (result === null) return { error: (await messages()).deletePaymentFailed }
+  // Removing a membership's last payment also cancels it and drops its check-ins
   updateTag(`member-${memberId}-payments`)
+  updateTag(`member-${memberId}-memberships`)
+  updateTag(`member-${memberId}-wallet`)
+  updateTag(`member-${memberId}`)
   updateTag(`members-${gymSlug}`)
+  updateTag(`memberships-${gymSlug}`)
+  updateTag(`attendance-${gymSlug}`)
   return {}
 }
 
@@ -244,7 +255,7 @@ export async function deleteMemberAction(
     method: 'DELETE',
     headers: { 'x-gym-slug': gymSlug },
   })
-  if (result === null) return { error: 'Error al eliminar el miembro' }
+  if (result === null) return { error: (await messages()).deleteMemberFailed }
   updateTag(`members-${gymSlug}`)
   updateTag(`member-${memberId}`)
   return {}
@@ -261,8 +272,8 @@ export async function registerPaymentAction(
     membershipId?: string
   },
 ): Promise<{ error?: string }> {
-  const parsed = paymentSchema.safeParse(data)
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
+  const parsed = paymentSchema(await messages()).safeParse(data)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? (await getT(commonMessages)).invalidData }
 
   const token = await getToken()
   const result = await apiFetch('/payments', token, {
@@ -275,7 +286,7 @@ export async function registerPaymentAction(
     }),
   })
 
-  if (!result) return { error: 'Error al registrar el pago' }
+  if (!result) return { error: (await messages()).paymentFailed }
   updateTag(`member-${memberId}-payments`)
   return {}
 }

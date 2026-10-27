@@ -3,6 +3,8 @@ import { ChevronLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { buttonVariants } from '@/components/ui/button'
 import { NewMemberForm } from './NewMemberForm'
+import { getT } from '@/i18n/server'
+import { membersMessages } from '../messages'
 
 interface Props {
   params: Promise<{ gymSlug: string }>
@@ -10,6 +12,7 @@ interface Props {
 
 export default async function NewMemberPage({ params }: Props) {
   const { gymSlug } = await params
+  const t = (await getT(membersMessages)).form
 
   return (
     <div className="p-6 sm:p-8 space-y-6 max-w-2xl">
@@ -19,10 +22,10 @@ export default async function NewMemberPage({ params }: Props) {
           className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), '-ml-2 mb-4 text-muted-foreground')}
         >
           <ChevronLeft className="h-4 w-4 mr-1" />
-          Volver a miembros
+          {t.backToMembers}
         </Link>
-        <h1 className="text-2xl font-black tracking-tight">Nuevo miembro</h1>
-        <p className="text-muted-foreground text-sm mt-1">Completá los datos del nuevo miembro</p>
+        <h1 className="text-2xl font-black tracking-tight">{t.pageTitle}</h1>
+        <p className="text-muted-foreground text-sm mt-1">{t.pageDesc}</p>
       </div>
 
       <div className="bg-white rounded-2xl border border-zinc-200 p-6">

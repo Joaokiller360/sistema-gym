@@ -27,6 +27,7 @@ interface Props {
   planOptions: { key: string; label: string }[]
   defaultLogoUrl?: string | null
   defaultAdvancedReports: boolean
+  defaultWhatsapp: string | null
   ownerName?: string
   ownerEmail?: string
   hasOwner: boolean
@@ -41,7 +42,7 @@ function Info({ label, children }: { label: string; children: React.ReactNode })
   )
 }
 
-export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, planOptions, defaultLogoUrl, defaultAdvancedReports, ownerName, ownerEmail, hasOwner }: Props) {
+export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, planOptions, defaultLogoUrl, defaultAdvancedReports, defaultWhatsapp, ownerName, ownerEmail, hasOwner }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -78,6 +79,7 @@ export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, plan
   const [slug, setSlug] = useState(defaultSlug)
   const [plan, setPlan] = useState(defaultPlan)
   const [advancedReports, setAdvancedReports] = useState(defaultAdvancedReports)
+  const [whatsapp, setWhatsapp] = useState(defaultWhatsapp ? `+${defaultWhatsapp}` : '')
   const [newOwnerName, setNewOwnerName] = useState(ownerName ?? '')
   const [newOwnerEmail, setNewOwnerEmail] = useState(ownerEmail ?? '')
   const [newOwnerPassword, setNewOwnerPassword] = useState('')
@@ -90,7 +92,10 @@ export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, plan
     if (!name.trim() || !slug.trim()) { setError('Nombre y slug requeridos'); return }
     setError(null)
     startTransition(async () => {
-      const gymRes = await updateGymAction(gymId, { name, slug, subscriptionPlan: plan || undefined, advancedReportsEnabled: advancedReports })
+      const gymRes = await updateGymAction(gymId, {
+        name, slug, subscriptionPlan: plan || undefined, advancedReportsEnabled: advancedReports,
+        ...(whatsapp !== (defaultWhatsapp ? `+${defaultWhatsapp}` : '') && { whatsappPhone: whatsapp.trim() || null }),
+      })
       if (gymRes?.error) { setError(gymRes.error); return }
 
       if (hasOwner && (newOwnerName !== ownerName || newOwnerEmail !== ownerEmail || newOwnerPassword)) {
@@ -107,7 +112,8 @@ export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, plan
 
       setOpen(false)
       setNewOwnerPassword('')
-      router.refresh()
+      // The detail URL is the slug, so a renamed gym moves to its new address
+      if (slug !== defaultSlug) router.replace(`/admin/gyms/${slug}`)
     })
   }
 
@@ -123,6 +129,7 @@ export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, plan
           <Info label="Slug"><span className="font-admin-mono">/{defaultSlug}</span></Info>
           <Info label="Plan">{planLabel(defaultPlan)}</Info>
           <Info label="Reportes avanzados">{defaultAdvancedReports ? 'Activos' : 'Inactivos'}</Info>
+          <Info label="WhatsApp">{defaultWhatsapp ? <span className="font-admin-mono">+{defaultWhatsapp}</span> : '—'}</Info>
         </dl>
         <h3 className="mt-5 text-[13px] font-bold">Dueño</h3>
         {hasOwner ? (
@@ -180,6 +187,21 @@ export function GymEditForm({ gymId, defaultName, defaultSlug, defaultPlan, plan
           <input value={slug} onChange={e => setSlug(e.target.value)} disabled={isPending} className={cn(field.input, 'font-admin-mono')} {...createHandlers('slug')} />
         </label>
       </div>
+
+      <label className="block">
+        <span className={field.label}>WhatsApp del dueño</span>
+        <input
+          type="tel"
+          inputMode="tel"
+          value={whatsapp}
+          onChange={e => setWhatsapp(e.target.value.replace(/[^\d+\s-]/g, ''))}
+          placeholder="+54 9 11 2233 4455"
+          maxLength={20}
+          disabled={isPending}
+          className={cn(field.input, 'font-admin-mono')}
+        />
+        <span className={field.hint}>Con código de país. Recibe los avisos de límite del plan.</span>
+      </label>
 
       <div>
         <span className={field.label} id="edit-plan-label">Plan</span>

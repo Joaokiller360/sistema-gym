@@ -46,10 +46,14 @@ export default async function SettingsPage({ params, searchParams }: Props) {
 
   const [gym, admins, countries, status] = await Promise.all([
     apiFetch<Gym>(`/gyms/${gymSlug}`, token, { next: { tags: [`gym-${gymSlug}`] } }),
-    tab === 'equipo' ? getGymAdminsAction() : Promise.resolve([]),
+    tab === 'equipo' ? getGymAdminsAction(gymSlug) : Promise.resolve([]),
     apiFetch<CountryOption[]>('/gyms/countries', token, { next: { revalidate: 86400 } }),
     apiFetch<GymStatus>(`/gyms/${gymSlug}/status`, token, { silent: true }),
   ])
+  // Owner / super admin only: null (403) hides the field for staff
+  const whatsapp = gym?.id && tab === 'gimnasio'
+    ? await apiFetch<{ whatsappPhone: string | null }>(`/gyms/${gym.id}/whatsapp`, token, { next: { tags: [`gym-${gymSlug}`] }, silent: true })
+    : null
 
   const logoUrl = resolveLogoUrl(gym?.logoUrl)
   const initials = (gym?.name ?? 'G').split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
@@ -62,7 +66,7 @@ export default async function SettingsPage({ params, searchParams }: Props) {
       : `${t.closed}${hours ? ` · ${t.opensAt(hours.open)}` : ''}`
 
   return (
-    <div className="dark admin-surface min-h-full bg-adm-ground px-4 pb-14 pt-8 text-adm-ink sm:px-8">
+    <div className="admin-surface min-h-full bg-adm-ground px-4 pb-14 pt-8 text-adm-ink sm:px-8">
       <div className="mx-auto flex max-w-[1360px] flex-col gap-5">
 
         <header className="flex flex-wrap items-center gap-5 rounded-[22px] border border-adm-line bg-adm-surface p-5 sm:p-6">
@@ -125,6 +129,7 @@ export default async function SettingsPage({ params, searchParams }: Props) {
                 defaultAddress={gym?.address ?? null}
                 defaultCountry={gym?.country ?? null}
                 defaultTimezone={gym?.timezone ?? 'UTC'}
+                defaultWhatsapp={whatsapp ? whatsapp.whatsappPhone ?? '' : null}
                 countries={countries ?? []}
               />
             </div>
@@ -139,7 +144,7 @@ export default async function SettingsPage({ params, searchParams }: Props) {
         ) : (
           <div className="flex flex-wrap items-start gap-5">
             <div className="min-w-0 flex-[999_1_640px]">
-              <AdminsSection initialAdmins={admins} />
+              <AdminsSection gymSlug={gymSlug} initialAdmins={admins} />
             </div>
             <div className="flex min-w-0 flex-[1_1_380px] flex-col gap-5">
               <LanguageSwitcher />

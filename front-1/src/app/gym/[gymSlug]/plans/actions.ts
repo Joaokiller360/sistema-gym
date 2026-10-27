@@ -4,6 +4,9 @@ import { cookies } from 'next/headers'
 import { updateTag } from 'next/cache'
 import { z } from 'zod'
 import { apiFetch } from '@/lib/api'
+import { getT } from '@/i18n/server'
+import { commonMessages } from '@/i18n/common'
+import { plansMessages } from './messages'
 
 const ONLY_LETTERS_NUMBERS = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ0-9\s]+$/
 
@@ -51,7 +54,7 @@ export async function createPlanAction(
   data: PlanActionInput,
 ): Promise<{ error?: string }> {
   const parsed = planSchema.safeParse(data)
-  if (!parsed.success) return { error: 'Datos inválidos' }
+  if (!parsed.success) return { error: (await getT(commonMessages)).invalidData }
 
   const token = await getToken()
   const result = await apiFetch(`/plans`, token, {
@@ -60,7 +63,7 @@ export async function createPlanAction(
     body: JSON.stringify(buildPayload(parsed.data)),
   })
 
-  if (!result) return { error: 'Error al crear el plan' }
+  if (!result) return { error: (await getT(plansMessages)).actions.createFailed }
 
   updateTag(`plans-${gymSlug}`)
   updateTag(`gym-${gymSlug}`)
@@ -73,7 +76,7 @@ export async function updatePlanAction(
   data: PlanActionInput,
 ): Promise<{ error?: string }> {
   const parsed = planSchema.safeParse(data)
-  if (!parsed.success) return { error: 'Datos inválidos' }
+  if (!parsed.success) return { error: (await getT(commonMessages)).invalidData }
 
   const token = await getToken()
   const result = await apiFetch(`/plans/${planId}`, token, {
@@ -82,7 +85,7 @@ export async function updatePlanAction(
     body: JSON.stringify(buildPayload(parsed.data)),
   })
 
-  if (!result) return { error: 'Error al actualizar el plan' }
+  if (!result) return { error: (await getT(plansMessages)).actions.updateFailed }
 
   updateTag(`plans-${gymSlug}`)
   updateTag(`plan-${planId}`)

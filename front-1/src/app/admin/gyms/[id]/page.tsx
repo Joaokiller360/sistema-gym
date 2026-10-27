@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowUpRight, Star } from 'lucide-react'
 import { apiFetch } from '@/lib/api'
@@ -8,6 +8,7 @@ import { Gym, Member, Plan, Payment } from '@/types'
 import { AdminPage, EmptyState, GymMark, Meter, PageHeader, Panel, PanelLink, Pill, Stat, btn, td, th, type Tone } from '@/components/admin/ui'
 import { GymDangerZone, GymEditForm } from './GymEditForm'
 import { ResendGymWelcomeButton } from './ResendGymWelcomeButton'
+import { CrmChatButton } from './CrmChatButton'
 import { SubscriptionSection } from './SubscriptionSection'
 import type { SubscriptionInfo, BillingRecord } from '../actions'
 
@@ -33,10 +34,22 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export default async function GymDetailPage({ params }: Props) {
-  const { id } = await params
+  // The URL shows the gym slug; old /admin/gyms/<uuid> links redirect to it
+  const { id: param } = await params
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value ?? ''
+
+  if (UUID_RE.test(param)) {
+    const byId = await apiFetch<Gym>(`/admin/gyms/${param}`, token, { silent: true })
+    if (!byId) notFound()
+    redirect(`/admin/gyms/${encodeURIComponent(byId.slug)}`)
+  }
+  const bySlug = await apiFetch<Gym>(`/gyms/${encodeURIComponent(param)}`, token, { silent: true })
+  if (!bySlug) notFound()
+  const id = bySlug.id
 
   const [gym, membersRaw, plansRaw, subscription, billing, subPlans, paymentsRaw] = await Promise.all([
     apiFetch<Gym>(`/admin/gyms/${id}`, token, {
@@ -223,10 +236,12 @@ export default async function GymDetailPage({ params }: Props) {
             planOptions={(subPlans ?? []).map(p => ({ key: p.key, label: p.label ?? p.key }))}
             defaultLogoUrl={gymLogoUrl}
             defaultAdvancedReports={gym.advancedReportsEnabled}
+            defaultWhatsapp={gym.whatsappPhone ?? null}
             ownerName={gym.owner?.name}
             ownerEmail={gym.owner?.email}
             hasOwner={!!gym.owner}
           />
+          <CrmChatButton gymId={gym.id} hasWhatsapp={!!gym.whatsappPhone} />
 
           <Panel title="Planes que ofrece" id="gp-h" action={<span className="text-[13px] text-adm-muted">{plans.length}</span>} bodyClassName="flex flex-col gap-2 p-4">
             {plans.length === 0 ? (

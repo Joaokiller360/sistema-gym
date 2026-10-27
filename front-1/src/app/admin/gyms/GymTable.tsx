@@ -365,7 +365,7 @@ export function GymTable({ gyms, plans, initialQuery = '' }: { gyms: Gym[]; plan
                         <td className={cn(td, 'pr-5')} onClick={e => e.stopPropagation()}>
                           <div className="flex justify-end gap-2">
                             <Link href={`/gym/${gym.slug}/dashboard`} className={btn.dark}>Entrar</Link>
-                            <Link href={`/admin/gyms/${gym.id}`} className={btn.line}>Detalle</Link>
+                            <Link href={`/admin/gyms/${gym.slug}`} className={btn.line}>Detalle</Link>
                           </div>
                         </td>
                       </tr>
@@ -616,7 +616,7 @@ export function GymTable({ gyms, plans, initialQuery = '' }: { gyms: Gym[]; plan
               )}
 
               <div className="flex gap-2">
-                <Link href={`/admin/gyms/${selected.id}`} className={cn(btn.line, 'min-h-11 flex-1')}>Ver detalle</Link>
+                <Link href={`/admin/gyms/${selected.slug}`} className={cn(btn.line, 'min-h-11 flex-1')}>Ver detalle</Link>
                 <Link href={`/gym/${selected.slug}/dashboard`} className={cn(btn.primary, 'flex-1')}>Entrar al panel</Link>
               </div>
             </div>

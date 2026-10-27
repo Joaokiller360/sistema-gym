@@ -3,7 +3,8 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { apiFetch } from '@/lib/api'
 import { verifyToken } from '@/lib/auth'
-import { Gym, ProductCategory } from '@/types'
+import { isStaffRole } from '@/lib/gym-access'
+import { Gym } from '@/types'
 import { StoreTabs } from './StoreTabs'
 
 interface Product {
@@ -81,25 +82,26 @@ export default async function StorePage({ params, searchParams }: Props) {
   const session = await verifyToken(token)
   const isSuperAdmin = session?.role === 'SUPER_ADMIN'
   const canDeleteSales = isSuperAdmin || session?.role === 'GYM_OWNER'
+  const showMonthly = !isStaffRole(session?.role)
 
   const gym = await apiFetch<Gym>(`/gyms/${gymSlug}`, token, { next: { tags: [`gym-${gymSlug}`] } })
   if (!gym?.storeEnabled) redirect(`/gym/${gymSlug}/dashboard`)
+  // Product and category management moved to Inventory; keep old links working
+  if (tab === 'products' || tab === 'categories') redirect(`/gym/${gymSlug}/inventory?tab=${tab}`)
 
   const today = new Date().toISOString().split('T')[0]
   const now = new Date()
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 
-  const [products, categories, dailyCut, monthlyCut, members, pendingCredits] = await Promise.all([
+  const [products, dailyCut, monthlyCut, members, pendingCredits] = await Promise.all([
     apiFetch<Product[]>('/store/products', token, {
       next: { tags: [`store-products-${gymSlug}`] },
       headers,
     }).then(r => r ?? []),
-    apiFetch<ProductCategory[]>('/store/categories', token, {
-      next: { tags: [`store-categories-${gymSlug}`] },
-      headers,
-    }).then(r => r ?? []),
     apiFetch<CutSummary>(`/store/cuts/daily?date=${date ?? today}`, token, { headers }),
-    apiFetch<CutSummary>(`/store/cuts/monthly?month=${month ?? currentMonth}`, token, { headers }),
+    showMonthly
+      ? apiFetch<CutSummary>(`/store/cuts/monthly?month=${month ?? currentMonth}`, token, { headers })
+      : Promise.resolve(null),
     apiFetch<Member[]>('/members', token, { headers }).then(r => r ?? []),
     apiFetch<PendingCredit[]>('/store/credits', token, {
       next: { tags: [`store-credits-${gymSlug}`] },
@@ -114,7 +116,6 @@ export default async function StorePage({ params, searchParams }: Props) {
           gymSlug={gymSlug}
           gymName={gym.name}
           products={products}
-          categories={categories}
           dailyCut={dailyCut}
           monthlyCut={monthlyCut}
           activeTab={tab}
@@ -122,8 +123,8 @@ export default async function StorePage({ params, searchParams }: Props) {
           monthParam={month ?? currentMonth}
           members={members}
           pendingCredits={pendingCredits}
-          canDelete={isSuperAdmin}
           canDeleteSales={canDeleteSales}
+          showMonthly={showMonthly}
         />
       </Suspense>
     </div>

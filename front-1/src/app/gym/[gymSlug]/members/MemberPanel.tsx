@@ -9,15 +9,15 @@ import { checkInAction } from '../attendance/actions'
 import { issueWalletPassAction, emailWalletPassAction } from './[id]/wallet-actions'
 import { getMemberPanelAction, type MemberPanelData } from './actions'
 import type { MemberRow, MemberView } from './memberStatus'
-
-const WEEKDAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
+import { useIntlLocale, useT } from '@/i18n/client'
+import { membersMessages } from './messages'
 
 function dayKey(d: Date) {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
 }
 
 /** 4 Monday-first weeks ending this week; future days are flagged so they render empty. */
-function buildHeatmap(checkIns: string[], now = new Date()) {
+function buildHeatmap(checkIns: string[], intl: string, now = new Date()) {
   const attended = new Set(checkIns.map(c => dayKey(new Date(c))))
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const mondayOffset = (today.getDay() + 6) % 7
@@ -28,7 +28,7 @@ function buildHeatmap(checkIns: string[], now = new Date()) {
     d.setDate(start.getDate() + i)
     return {
       key: dayKey(d),
-      label: d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' }),
+      label: d.toLocaleDateString(intl, { weekday: 'long', day: 'numeric', month: 'long' }),
       attended: attended.has(dayKey(d)),
       isToday: d.getTime() === today.getTime(),
       future: d > today,
@@ -52,6 +52,8 @@ export function MemberPanel({
   const router = useRouter()
   const [data, setData] = useState<MemberPanelData | null>(null)
   const [isPending, startTransition] = useTransition()
+  const t = useT(membersMessages).panel
+  const intl = useIntlLocale()
   const name = `${member.firstName} ${member.lastName}`
 
   useEffect(() => {
@@ -60,7 +62,7 @@ export function MemberPanel({
     return () => { cancelled = true }
   }, [gymSlug, member.id])
 
-  const heat = data ? buildHeatmap(data.checkIns) : null
+  const heat = data ? buildHeatmap(data.checkIns, intl) : null
   const visits = heat?.filter(d => d.attended).length ?? 0
   const canCheckIn = view.key === 'activo' || view.key === 'atencion'
 
@@ -70,13 +72,12 @@ export function MemberPanel({
       if (res.error) { toast.error(res.error); return }
       toast.success(
         res.visitsRemaining == null
-          ? `Entrada registrada: ${name}`
+          ? t.checkedIn(name)
           : res.visitsRemaining === 0
-            ? `${name}: usó su último día del plan`
-            : `${name}: le quedan ${res.visitsRemaining} días`,
+            ? t.lastDay(name)
+            : t.daysLeft(name, res.visitsRemaining),
       )
       setData(d => d && { ...d, checkIns: [new Date().toISOString(), ...d.checkIns] })
-      router.refresh()
     })
   }
 
@@ -93,19 +94,19 @@ export function MemberPanel({
     startTransition(async () => {
       if (pass.issued) {
         const res = await emailWalletPassAction(gymSlug, member.id)
-        if (res.error || !res.emailSent) toast.error(res.error ?? 'No se pudo enviar el correo')
-        else toast.success(`Tarjeta reenviada a ${member.email}`)
+        if (res.error || !res.emailSent) toast.error(res.error ?? t.emailFailed)
+        else toast.success(t.passResent(member.email))
         return
       }
       const res = await issueWalletPassAction(gymSlug, member.id, true)
       if (res.error) { toast.error(res.error); return }
-      toast.success(res.emailSent ? `Tarjeta creada y enviada a ${member.email}` : 'Tarjeta creada')
+      toast.success(res.emailSent ? t.passCreatedSent(member.email) : t.passCreated)
       setData(d => d && d.wallet ? { ...d, wallet: { ...d.wallet, issued: true } } : d)
     })
   }
 
   return (
-    <aside aria-label={`Ficha de ${name}`} className="hidden lg:flex w-[400px] shrink-0 flex-col gap-3.5">
+    <aside aria-label={t.profileOf(name)} className="hidden lg:flex w-[400px] shrink-0 flex-col gap-3.5">
       <section className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-4">
         <div className="flex items-center gap-3.5">
           <span className="h-14 w-14 shrink-0 rounded-full bg-[#1fad9d]/15 flex items-center justify-center text-lg font-black text-[#0a6158] dark:text-[#5fd4c4]">
@@ -114,7 +115,7 @@ export function MemberPanel({
           <div className="min-w-0 flex-1">
             <h2 className="text-xl font-extrabold leading-tight truncate">{name}</h2>
             <p className="text-[13px] text-zinc-500">
-              Socio desde {new Date(member.createdAt).toLocaleDateString('es-AR', { month: 'short', year: 'numeric' })}
+              {t.memberSince(new Date(member.createdAt).toLocaleDateString(intl, { month: 'short', year: 'numeric' }))}
             </p>
           </div>
           <span className={cn('rounded-full px-2.5 py-1 text-xs font-bold whitespace-nowrap', view.badgeClass)}>{view.label}</span>
@@ -122,11 +123,11 @@ export function MemberPanel({
 
         <dl className="grid grid-cols-2 gap-3">
           <div className="min-w-0">
-            <dt className="text-xs text-zinc-500">Email</dt>
+            <dt className="text-xs text-zinc-500">{t.email}</dt>
             <dd className="text-sm font-semibold truncate">{member.email}</dd>
           </div>
           <div>
-            <dt className="text-xs text-zinc-500">Teléfono</dt>
+            <dt className="text-xs text-zinc-500">{t.phone}</dt>
             <dd className="text-sm font-semibold">{member.phone || '—'}</dd>
           </div>
         </dl>
@@ -136,11 +137,11 @@ export function MemberPanel({
             type="button"
             onClick={checkIn}
             disabled={isPending || !canCheckIn}
-            title={canCheckIn ? undefined : 'Necesita un plan vigente'}
+            title={canCheckIn ? undefined : t.needsPlan}
             className="flex min-h-16 flex-col items-center justify-center gap-1.5 rounded-xl bg-[#0e7a70] text-[13px] font-extrabold text-white hover:bg-[#095a52] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             <LogIn className="h-[18px] w-[18px]" />
-            Entrada
+            {t.checkIn}
           </button>
           <button
             type="button"
@@ -148,7 +149,7 @@ export function MemberPanel({
             className="flex min-h-16 flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white text-[13px] font-bold hover:border-zinc-300 transition-colors"
           >
             <CreditCard className="h-[18px] w-[18px]" />
-            Cobrar
+            {t.charge}
           </button>
           <button
             type="button"
@@ -156,7 +157,7 @@ export function MemberPanel({
             className="flex min-h-16 flex-col items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white text-[13px] font-bold hover:border-zinc-300 transition-colors"
           >
             <UserRound className="h-[18px] w-[18px]" />
-            Ver ficha
+            {t.openProfile}
           </button>
         </div>
       </section>
@@ -178,18 +179,18 @@ export function MemberPanel({
 
       <section aria-labelledby="panel-attendance" className="rounded-2xl border border-zinc-200 bg-white p-5 space-y-3">
         <div className="flex items-baseline justify-between">
-          <h3 id="panel-attendance" className="text-[15px] font-extrabold">Asistencia · últimas 4 semanas</h3>
-          {heat && <span className="text-[13px] text-zinc-500"><strong className="text-foreground">{visits}</strong> {visits === 1 ? 'día' : 'días'}</span>}
+          <h3 id="panel-attendance" className="text-[15px] font-extrabold">{t.attendance4w}</h3>
+          {heat && <span className="text-[13px] text-zinc-500"><strong className="text-foreground">{visits}</strong> {t.days(visits)}</span>}
         </div>
         <div className="grid grid-cols-7 gap-1">
-          {WEEKDAYS.map((d, i) => (
+          {t.weekdayInitials.map((d, i) => (
             <span key={i} aria-hidden="true" className="text-center text-[11px] text-zinc-500">{d}</span>
           ))}
           {heat
             ? heat.map(d => (
                 <span
                   key={d.key}
-                  title={`${d.label}${d.attended ? ' · entrenó' : ''}`}
+                  title={`${d.label}${d.attended ? t.trained : ''}`}
                   className={cn(
                     'aspect-square rounded',
                     d.future ? 'bg-transparent' : d.attended ? 'bg-[#1fad9d]' : 'bg-zinc-100',
@@ -205,13 +206,13 @@ export function MemberPanel({
         <section aria-labelledby="panel-wallet" className="rounded-2xl bg-zinc-950 text-zinc-50 p-5 flex items-center gap-3.5 dark:border dark:border-zinc-800">
           <QrCode className="h-7 w-7 shrink-0" aria-hidden="true" />
           <div className="flex-1 min-w-0">
-            <h3 id="panel-wallet" className="text-[15px] font-extrabold">Tarjeta de Wallet</h3>
+            <h3 id="panel-wallet" className="text-[15px] font-extrabold">{t.wallet}</h3>
             <p className="text-[13px] text-zinc-300">
               {!data.wallet.configured
-                ? 'No configurada en el servidor'
+                ? t.walletNotConfigured
                 : data.wallet.issued
-                  ? 'Emitida · se actualiza en cada entrada'
-                  : 'Todavía no tiene tarjeta'}
+                  ? t.walletIssued
+                  : t.walletNone}
             </p>
           </div>
           {data.wallet.configured && (
@@ -221,7 +222,7 @@ export function MemberPanel({
               disabled={isPending}
               className="h-10 shrink-0 rounded-lg bg-[#fffb00] px-3.5 text-[13px] font-extrabold text-black hover:bg-yellow-300 disabled:opacity-50 transition-colors"
             >
-              {data.wallet.issued ? 'Reenviar' : 'Emitir'}
+              {data.wallet.issued ? t.resend : t.issue}
             </button>
           )}
         </section>

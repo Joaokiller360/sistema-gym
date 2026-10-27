@@ -3,6 +3,11 @@
 import { useState, useTransition, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createMemberAction } from '../actions'
+import { useT } from '@/i18n/client'
+import { commonMessages } from '@/i18n/common'
+import { membersMessages } from '../messages'
+
+type FormMessages = (typeof membersMessages)['es']['form']
 
 interface Props {
   gymSlug: string
@@ -21,29 +26,29 @@ const LETTERS_REGEX = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s'-]+$/
 // Strict: only alphanumeric + . _ % + - in local part, no < > ? / or other special chars
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/
 
-function validateFields(data: { firstName: string; lastName: string; email: string; phone: string }): FieldErrors {
+function validateFields(data: { firstName: string; lastName: string; email: string; phone: string }, t: FormMessages): FieldErrors {
   const errors: FieldErrors = {}
   if (!data.firstName.trim()) {
-    errors.firstName = 'El nombre es obligatorio'
+    errors.firstName = t.firstNameRequired
   } else if (!LETTERS_REGEX.test(data.firstName.trim())) {
-    errors.firstName = 'El nombre solo puede contener letras'
+    errors.firstName = t.firstNameLetters
   }
   if (!data.lastName.trim()) {
-    errors.lastName = 'El apellido es obligatorio'
+    errors.lastName = t.lastNameRequired
   } else if (!LETTERS_REGEX.test(data.lastName.trim())) {
-    errors.lastName = 'El apellido solo puede contener letras'
+    errors.lastName = t.lastNameLetters
   }
   if (!data.email.trim()) {
-    errors.email = 'El email es obligatorio'
+    errors.email = t.emailRequired
   } else if (/[<>?/]/.test(data.email)) {
-    errors.email = 'El email contiene caracteres no permitidos'
+    errors.email = t.emailBadChars
   } else if (!EMAIL_REGEX.test(data.email.trim())) {
-    errors.email = 'El email no tiene un formato válido (ej: usuario@dominio.com)'
+    errors.email = t.emailFormat
   }
   if (data.phone && !/^\d+$/.test(data.phone)) {
-    errors.phone = 'El teléfono solo puede contener números'
+    errors.phone = t.phoneDigits
   } else if (data.phone && data.phone.length < 7) {
-    errors.phone = 'El teléfono debe tener al menos 7 dígitos'
+    errors.phone = t.phoneMin
   }
   return errors
 }
@@ -54,6 +59,8 @@ export function NewMemberForm({ gymSlug, onSuccess, onClose }: Props) {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [isPending, startTransition] = useTransition()
   const submittingRef = useRef(false)
+  const t = useT(membersMessages).form
+  const tc = useT(commonMessages)
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -68,7 +75,7 @@ export function NewMemberForm({ gymSlug, onSuccess, onClose }: Props) {
       birthDate: fd.get('birthDate') as string,
     }
 
-    const errors = validateFields(data)
+    const errors = validateFields(data, t)
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors)
       return
@@ -114,17 +121,17 @@ export function NewMemberForm({ gymSlug, onSuccess, onClose }: Props) {
     <form onSubmit={handleSubmit} className="space-y-5 max-w-lg">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <LetterField
-          label="Nombre *"
+          label={t.firstName}
           name="firstName"
-          placeholder="Juan"
+          placeholder={t.firstNamePlaceholder}
           disabled={isPending}
           error={fieldErrors.firstName}
           onInput={() => clearFieldError('firstName')}
         />
         <LetterField
-          label="Apellido *"
+          label={t.lastName}
           name="lastName"
-          placeholder="Pérez"
+          placeholder={t.lastNamePlaceholder}
           disabled={isPending}
           error={fieldErrors.lastName}
           onInput={() => clearFieldError('lastName')}
@@ -132,10 +139,10 @@ export function NewMemberForm({ gymSlug, onSuccess, onClose }: Props) {
       </div>
 
       <Field
-        label="Email *"
+        label={t.email}
         name="email"
         type="email"
-        placeholder="juan@email.com"
+        placeholder={t.emailPlaceholder}
         disabled={isPending}
         error={fieldErrors.email}
         onInput={() => clearFieldError('email')}
@@ -143,14 +150,14 @@ export function NewMemberForm({ gymSlug, onSuccess, onClose }: Props) {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <PhoneField
-          label="Teléfono"
+          label={t.phone}
           name="phone"
           disabled={isPending}
           error={fieldErrors.phone}
           onInput={() => clearFieldError('phone')}
         />
         <Field
-          label="Fecha de nacimiento"
+          label={t.birthDate}
           name="birthDate"
           type="date"
           disabled={isPending}
@@ -170,7 +177,7 @@ export function NewMemberForm({ gymSlug, onSuccess, onClose }: Props) {
           disabled={isPending}
           className="rounded-xl bg-black px-6 py-2.5 text-sm font-bold text-white hover:bg-zinc-800 disabled:opacity-50 transition-all active:scale-[0.98]"
         >
-          {isPending ? 'Creando…' : 'Crear miembro'}
+          {isPending ? t.creating : t.create}
         </button>
         <button
           type="button"
@@ -178,7 +185,7 @@ export function NewMemberForm({ gymSlug, onSuccess, onClose }: Props) {
           disabled={isPending}
           className="rounded-xl px-6 py-2.5 text-sm font-semibold text-zinc-600 hover:text-black border border-zinc-200 hover:border-zinc-300 transition-all disabled:opacity-50"
         >
-          Cancelar
+          {tc.cancel}
         </button>
       </div>
     </form>

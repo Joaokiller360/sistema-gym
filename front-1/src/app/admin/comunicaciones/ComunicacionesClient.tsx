@@ -8,6 +8,7 @@ import { NewsSection } from '@/app/gym/[gymSlug]/dashboard/NewsSection'
 import { TutorialsSection } from '@/app/gym/[gymSlug]/dashboard/TutorialsSection'
 import { EmptyState, PageHeader, Panel, Pill, btn, field, initials } from '@/components/admin/ui'
 import { sendComunicacionAction } from './actions'
+import { WhatsappReminders } from './WhatsappReminders'
 
 const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 function fmtDate(iso: string) {
@@ -39,7 +40,7 @@ const TEMPLATES = [
 ]
 
 type RecipientFilter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'CUSTOM'
-type Section = 'mail' | 'news'
+type Section = 'mail' | 'whatsapp' | 'news'
 
 export function ComunicacionesClient({
   gyms,
@@ -105,10 +106,10 @@ export function ComunicacionesClient({
 
   return (
     <>
-      <PageHeader eyebrow="Correos a los dueños y contenido para los paneles de cada gimnasio" title="Comunicaciones" />
+      <PageHeader eyebrow="Correos y recordatorios por WhatsApp a los dueños, y contenido para los paneles de cada gimnasio" title="Comunicaciones" />
 
       <div role="tablist" aria-label="Sección" className="flex border-b border-adm-line">
-        {([['mail', 'Correos'], ['news', 'Novedades y tutoriales']] as const).map(([key, label]) => (
+        {([['mail', 'Correos'], ['whatsapp', 'WhatsApp'], ['news', 'Novedades y tutoriales']] as const).map(([key, label]) => (
           <button
             key={key}
             type="button"
@@ -125,7 +126,9 @@ export function ComunicacionesClient({
         ))}
       </div>
 
-      {section === 'news' ? (
+      {section === 'whatsapp' ? (
+        <WhatsappReminders gyms={gyms} saasName={saasName} />
+      ) : section === 'news' ? (
         <div className="flex flex-col gap-2">
           <p className="text-[13px] text-adm-muted">Lo que publiques acá aparece en el dashboard de todos los gimnasios.</p>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

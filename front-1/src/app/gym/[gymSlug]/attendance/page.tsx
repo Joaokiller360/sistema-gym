@@ -8,6 +8,10 @@ import { CheckInPanel } from './CheckInPanel'
 import { AttendanceList } from './AttendanceList'
 import { GroupsCard } from './GroupsCard'
 import { groupColor, initials } from './groupColors'
+import { getIntlLocale, getT } from '@/i18n/server'
+import { attendanceMessages } from './messages'
+
+type PageMessages = (typeof attendanceMessages)['es']['page']
 
 interface AttendanceWithMember extends Attendance {
   member?: { id: string; firstName: string; lastName: string } | null
@@ -44,12 +48,11 @@ function shiftDate(dateStr: string, days: number) {
   return d.toISOString().slice(0, 10)
 }
 
-function relativeMinutes(iso: string) {
+function relativeMinutes(iso: string, t: PageMessages) {
   const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
-  if (mins < 1) return 'recién'
-  if (mins < 60) return `hace ${mins} min`
-  const h = Math.floor(mins / 60)
-  return `hace ${h} h`
+  if (mins < 1) return t.justNow
+  if (mins < 60) return t.minsAgo(mins)
+  return t.hoursAgo(Math.floor(mins / 60))
 }
 
 export default async function AttendancePage({ params, searchParams }: Props) {
@@ -57,6 +60,7 @@ export default async function AttendancePage({ params, searchParams }: Props) {
   const { date } = await searchParams
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value ?? ''
+  const [{ page: t }, intl] = await Promise.all([getT(attendanceMessages), getIntlLocale()])
 
   const gymHeader = { headers: { 'x-gym-slug': gymSlug } }
 
@@ -98,12 +102,12 @@ export default async function AttendancePage({ params, searchParams }: Props) {
     : []
   const gymGroups = groups ?? []
 
-  const displayDate = new Date(activeDate + 'T12:00:00Z').toLocaleDateString('es-AR', {
+  const displayDate = new Date(activeDate + 'T12:00:00Z').toLocaleDateString(intl, {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
   })
-  const weekday = new Date(activeDate + 'T12:00:00Z').toLocaleDateString('es-AR', { weekday: 'long', timeZone: 'UTC' })
+  const weekday = new Date(activeDate + 'T12:00:00Z').toLocaleDateString(intl, { weekday: 'long', timeZone: 'UTC' })
   const fmtTime = (iso: string) =>
-    new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: tz })
+    new Date(iso).toLocaleTimeString(intl, { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: tz })
   const hourOf = (iso: string) => parseInt(fmtTime(iso).slice(0, 2))
 
   // Per-shift counts
@@ -113,7 +117,7 @@ export default async function AttendancePage({ params, searchParams }: Props) {
   const breakdown = [
     ...gymGroups.map((g, i) => ({ key: g.id, name: g.name, count: groupCounts[g.id] ?? 0, dot: groupColor(i).dot })),
     ...(ungroupedCount > 0 || gymGroups.length === 0
-      ? [{ key: 'none', name: 'Sin turno', count: ungroupedCount, dot: groupColor(-1).dot }]
+      ? [{ key: 'none', name: t.noShift, count: ungroupedCount, dot: groupColor(-1).dot }]
       : []),
   ]
 
@@ -149,9 +153,9 @@ export default async function AttendancePage({ params, searchParams }: Props) {
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-col gap-1.5">
             <p className="text-xs font-bold uppercase tracking-[0.12em] text-adm-muted">
-              {gym?.name ? `${gym.name} · ` : ''}Recepción
+              {gym?.name ? `${gym.name} · ` : ''}{t.frontDesk}
             </p>
-            <h1 className="text-[34px] font-black leading-[1.05] tracking-[-0.02em] sm:text-[40px]">Asistencia</h1>
+            <h1 className="text-[34px] font-black leading-[1.05] tracking-[-0.02em] sm:text-[40px]">{t.title}</h1>
             <p className="text-[15px] capitalize text-adm-muted">{displayDate}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -161,19 +165,19 @@ export default async function AttendancePage({ params, searchParams }: Props) {
               className="inline-flex h-11 items-center gap-2 rounded-xl border border-adm-ink bg-adm-ink px-4 text-sm font-bold text-adm-surface transition-opacity hover:opacity-90"
             >
               <QrCode className="h-4 w-4" aria-hidden="true" />
-              Escanear QR
+              {t.scanQr}
             </Link>
           </div>
         </header>
 
         {/* KPIs */}
-        <section aria-label="Resumen del día" className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-3">
+        <section aria-label={t.daySummary} className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-3">
           <div className="flex flex-col gap-3.5 rounded-2xl border border-adm-line bg-adm-surface p-5">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <p className="text-[13px] font-semibold text-adm-muted">{isToday ? 'Entradas hoy' : 'Entradas'}</p>
+              <p className="text-[13px] font-semibold text-adm-muted">{isToday ? t.entriesToday : t.entries}</p>
               {delta !== null && (
                 <p className="text-xs text-adm-muted">
-                  vs. {weekday} pasado{' '}
+                  {t.vsLast(weekday)}{' '}
                   <strong className={delta > 0 ? 'text-adm-ok-fg' : delta < 0 ? 'text-adm-bad-fg' : 'text-adm-ink'}>
                     {delta > 0 ? `+${delta}` : delta}
                   </strong>
@@ -199,7 +203,7 @@ export default async function AttendancePage({ params, searchParams }: Props) {
           </div>
 
           <div className="flex flex-col gap-3.5 rounded-2xl border border-adm-line bg-adm-surface p-5">
-            <p className="text-[13px] font-semibold text-adm-muted">Hora pico</p>
+            <p className="text-[13px] font-semibold text-adm-muted">{t.peakHour}</p>
             <p className="text-[32px] font-extrabold leading-none tracking-[-0.02em]">
               {peakHour !== null ? `${pad(peakHour)}:00 – ${pad((peakHour + 1) % 24)}:00` : '—'}
             </p>
@@ -218,26 +222,26 @@ export default async function AttendancePage({ params, searchParams }: Props) {
           </div>
 
           <div className="flex flex-col gap-3.5 rounded-2xl border border-adm-line bg-adm-surface p-5">
-            <p className="text-[13px] font-semibold text-adm-muted">Última entrada</p>
+            <p className="text-[13px] font-semibold text-adm-muted">{t.latest}</p>
             {latest ? (
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-adm-ok-bg text-[15px] font-extrabold text-adm-ok-fg">
                   {initials(latestName ?? '?')}
                 </div>
                 <div className="flex min-w-0 flex-col gap-0.5">
-                  <p className="truncate text-lg font-bold">{latestName ?? 'Miembro'}</p>
+                  <p className="truncate text-lg font-bold">{latestName ?? t.member}</p>
                   <p className="text-[13px] text-adm-muted">
-                    {fmtTime(latest.checkIn)}{latestGroup ? ` · ${latestGroup}` : ''}{isToday ? ` · ${relativeMinutes(latest.checkIn)}` : ''}
+                    {fmtTime(latest.checkIn)}{latestGroup ? ` · ${latestGroup}` : ''}{isToday ? ` · ${relativeMinutes(latest.checkIn, t)}` : ''}
                   </p>
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-adm-muted">Todavía no hay entradas.</p>
+              <p className="text-sm text-adm-muted">{t.noEntries}</p>
             )}
             {isToday && gymStatus?.isOpen != null && (
               <p className="mt-auto flex items-center gap-2 text-[13px] text-adm-muted">
                 <span className={`h-2 w-2 rounded-full ${gymStatus.isOpen ? 'bg-[#1fad9d]' : 'bg-zinc-400'}`} />
-                {gymStatus.isOpen ? 'Gimnasio abierto' : 'Gimnasio cerrado'} · {gymStatus.localTime}
+                {gymStatus.isOpen ? t.gymOpen : t.gymClosed} · {gymStatus.localTime}
               </p>
             )}
           </div>

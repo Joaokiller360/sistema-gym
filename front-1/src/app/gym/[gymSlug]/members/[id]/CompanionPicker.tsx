@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { Search, UserPlus, X } from 'lucide-react'
 import { createHandlers } from '@/lib/input-validation'
+import { useT } from '@/i18n/client'
+import { membersMessages } from '../messages'
 
 export interface CompanionCandidate {
   id: string
@@ -26,6 +28,7 @@ interface Props {
 
 export function CompanionPicker({ candidates, excludeIds, busyIds, max, value, onChange, disabled }: Props) {
   const [query, setQuery] = useState('')
+  const t = useT(membersMessages).companion
   const q = query.trim().toLowerCase()
   const selected = value.map(id => candidates.find(c => c.id === id)).filter((c): c is CompanionCandidate => !!c)
   const full = value.length >= max
@@ -53,7 +56,7 @@ export function CompanionPicker({ candidates, excludeIds, busyIds, max, value, o
                 type="button"
                 onClick={() => onChange(value.filter(v => v !== c.id))}
                 disabled={disabled}
-                aria-label={`Quitar a ${c.firstName} ${c.lastName}`}
+                aria-label={t.remove(`${c.firstName} ${c.lastName}`)}
                 className="flex h-6 w-6 items-center justify-center rounded-full hover:bg-[#1fad9d]/20"
               >
                 <X className="h-3 w-3" />
@@ -71,8 +74,8 @@ export function CompanionPicker({ candidates, excludeIds, busyIds, max, value, o
             value={query}
             onChange={e => setQuery(e.target.value)}
             disabled={disabled}
-            aria-label="Buscar acompañante"
-            placeholder={`Buscar acompañante (${value.length}/${max})…`}
+            aria-label={t.search}
+            placeholder={t.searchPlaceholder(value.length, max)}
             className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 pl-10 pr-4 text-sm transition-all placeholder:text-zinc-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#1fad9d]"
             {...createHandlers('search')}
           />
@@ -96,7 +99,7 @@ export function CompanionPicker({ candidates, excludeIds, busyIds, max, value, o
                     <span className="block truncate font-semibold text-zinc-800">{c.firstName} {c.lastName}</span>
                     <span className="block truncate text-xs text-zinc-400">{c.email}</span>
                   </span>
-                  {busy && <span className="shrink-0 text-xs font-semibold text-zinc-500">Ya tiene plan</span>}
+                  {busy && <span className="shrink-0 text-xs font-semibold text-zinc-500">{t.hasPlan}</span>}
                 </button>
               </li>
             )
@@ -104,7 +107,7 @@ export function CompanionPicker({ candidates, excludeIds, busyIds, max, value, o
         </ul>
       )}
       {q.length >= 2 && !full && results.length === 0 && (
-        <p className="text-xs text-zinc-500">Sin resultados. El acompañante tiene que estar registrado como miembro.</p>
+        <p className="text-xs text-zinc-500">{t.noResults}</p>
       )}
     </div>
   )

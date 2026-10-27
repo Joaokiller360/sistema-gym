@@ -1,20 +1,14 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
 import { Users } from 'lucide-react'
 import { toast } from 'sonner'
 import type { MembershipWithRelations } from '@/types'
 import { addCompanionAction } from './actions'
 import { CompanionPicker, type CompanionCandidate } from './CompanionPicker'
-
-const STATUS_LABEL: Record<string, string> = {
-  ACTIVE: 'Activo',
-  EXPIRED: 'Vencido',
-  CANCELLED: 'Cancelado',
-  FROZEN: 'Congelado',
-  SUSPENDED: 'Suspendido',
-}
+import { useT } from '@/i18n/client'
+import { commonMessages } from '@/i18n/common'
+import { membersMessages } from '../messages'
 
 interface Props {
   gymSlug: string
@@ -24,9 +18,10 @@ interface Props {
 }
 
 export function SharedPlanBlock({ gymSlug, membership, candidates, busyIds }: Props) {
-  const router = useRouter()
   const [picked, setPicked] = useState<string[]>([])
   const [isPending, startTransition] = useTransition()
+  const t = useT(membersMessages).shared
+  const statusLabel = useT(commonMessages).status
 
   const max = membership.plan?.maxMembers ?? 1
   const mates = membership.group ?? []
@@ -39,9 +34,8 @@ export function SharedPlanBlock({ gymSlug, membership, candidates, busyIds }: Pr
     startTransition(async () => {
       const res = await addCompanionAction(gymSlug, membership.id, membership.memberId, companionId)
       if (res.error) { toast.error(res.error); return }
-      toast.success('Acompañante agregado al plan')
+      toast.success(t.added)
       setPicked([])
-      router.refresh()
     })
   }
 
@@ -49,7 +43,7 @@ export function SharedPlanBlock({ gymSlug, membership, candidates, busyIds }: Pr
     <div className="space-y-2.5 rounded-xl border border-adm-line bg-adm-surface p-3.5">
       <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.08em] text-adm-muted">
         <Users className="h-3.5 w-3.5" aria-hidden="true" />
-        Plan compartido · {1 + holding.length} de {max} personas
+        {t.heading(1 + holding.length, max)}
       </p>
 
       {mates.length > 0 ? (
@@ -61,13 +55,13 @@ export function SharedPlanBlock({ gymSlug, membership, candidates, busyIds }: Pr
                 className="inline-flex h-8 items-center gap-1.5 rounded-full bg-adm-chip px-3 text-xs font-semibold text-adm-ink hover:bg-adm-line"
               >
                 {m.member.firstName} {m.member.lastName}
-                {m.status !== 'ACTIVE' && <span className="text-adm-muted">· {STATUS_LABEL[m.status] ?? m.status}</span>}
+                {m.status !== 'ACTIVE' && <span className="text-adm-muted">· {statusLabel[m.status] ?? m.status}</span>}
               </a>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="text-[13px] text-adm-muted">Todavía no hay acompañantes en este plan.</p>
+        <p className="text-[13px] text-adm-muted">{t.none}</p>
       )}
 
       {free > 0 && (
@@ -88,11 +82,11 @@ export function SharedPlanBlock({ gymSlug, membership, candidates, busyIds }: Pr
               disabled={isPending}
               className="h-10 rounded-xl bg-[#1fad9d] px-4 text-sm font-bold text-white transition-colors hover:bg-[#0e7a70] disabled:opacity-50"
             >
-              {isPending ? 'Agregando…' : 'Agregar al plan'}
+              {isPending ? t.adding : t.add}
             </button>
           )}
           <p className="text-xs text-adm-muted">
-            {free === 1 ? 'Queda 1 lugar libre.' : `Quedan ${free} lugares libres.`} El acompañante usa las mismas fechas, sin pago extra.
+            {t.free(free)} {t.sameDates}
           </p>
         </div>
       )}

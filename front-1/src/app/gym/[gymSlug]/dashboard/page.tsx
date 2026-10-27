@@ -11,6 +11,8 @@ import { AdminPage, EmptyState, PageHeader, Panel, PanelLink, PersonMark, Pill, 
 import { NewMemberModal } from '../members/NewMemberModal'
 import { AdvancedReportsSection, type AdvancedReport } from './AdvancedReportsSection'
 import { QuickCheckInModal } from './QuickCheckInModal'
+import { dashboardMessages } from './messages'
+import { getIntlLocale, getT } from '@/i18n/server'
 
 interface MembersResponse { data: Member[]; total: number }
 interface FinancialReport { totalRevenue: number; currency: string }
@@ -65,6 +67,7 @@ export default async function GymDashboardPage({ params, searchParams }: Props) 
   const { new: newParam, modal } = await searchParams
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value ?? ''
+  const [t, intl] = await Promise.all([getT(dashboardMessages), getIntlLocale()])
 
   const session = await verifyToken(token)
   const isSuperAdmin = session?.role === 'SUPER_ADMIN'
@@ -121,33 +124,33 @@ export default async function GymDashboardPage({ params, searchParams }: Props) 
   const maxHour = Math.max(1, ...perHour)
   const currentHour = hourOf(now.toISOString())
 
-  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: tz })
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString(intl, { hour: '2-digit', minute: '2-digit', timeZone: tz })
 
   return (
     <div className="admin-shell min-h-full">
       <AdminPage>
         <PageHeader
-          eyebrow={<span className="capitalize">{now.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: tz })}</span>}
+          eyebrow={<span className="capitalize">{now.toLocaleDateString(intl, { weekday: 'long', day: 'numeric', month: 'long', timeZone: tz })}</span>}
           title={gym?.name ?? 'Dashboard'}
           meta={
             gymStatus ? (
               <>
-                <Pill tone={gymStatus.isOpen ? 'ok' : 'neutral'}>{gymStatus.isOpen ? 'Abierto ahora' : 'Cerrado'}</Pill>
-                <span>Hora local {gymStatus.localTime}</span>
+                <Pill tone={gymStatus.isOpen ? 'ok' : 'neutral'}>{gymStatus.isOpen ? t.openNow : t.closed}</Pill>
+                <span>{t.localTime(gymStatus.localTime)}</span>
               </>
             ) : undefined
           }
           actions={
             <>
               <Link href="?new=member" className={btn.line}>
-                <UserPlus className="size-4" aria-hidden="true" /> Nuevo miembro
+                <UserPlus className="size-4" aria-hidden="true" /> {t.newMember}
               </Link>
               <Link href="?modal=checkin" className={btn.line}>
-                <LogIn className="size-4" aria-hidden="true" /> Asistencia manual
+                <LogIn className="size-4" aria-hidden="true" /> {t.manualCheckIn}
               </Link>
               {canScan && (
                 <Link href="attendance/scan" className={btn.primary}>
-                  <QrCode className="size-4" aria-hidden="true" /> Escanear QR
+                  <QrCode className="size-4" aria-hidden="true" /> {t.scanQr}
                 </Link>
               )}
             </>
@@ -155,48 +158,48 @@ export default async function GymDashboardPage({ params, searchParams }: Props) 
         />
 
         <section aria-labelledby="attn-h" className="flex flex-col gap-2.5">
-          <SectionLabel id="attn-h">Hoy</SectionLabel>
+          <SectionLabel id="attn-h">{t.today}</SectionLabel>
           <div className="flex flex-wrap gap-3">
-            <AttentionCard href="attendance" count={insideNow} label="En el gimnasio ahora" tag={insideNow > 0 ? 'En vivo' : undefined} tone="ok" />
+            <AttentionCard href="attendance" count={insideNow} label={t.insideNow} tag={insideNow > 0 ? t.live : undefined} tone="ok" />
             <AttentionCard
               href="members?status=expiring"
               count={expiringCount}
-              label="Membresías vencen en 3 días"
-              tag={expiringCount > 0 ? 'Revisar' : undefined}
+              label={t.expiring3}
+              tag={expiringCount > 0 ? t.review : undefined}
               tone="warn"
             />
             {storeEnabled && (
               <AttentionCard
                 href="store"
-                count={<span className="text-[24px]">${creditTotal.toLocaleString('es-AR')}</span>}
-                label={`Fiado pendiente${creditMembers ? ` · ${creditMembers} socio${creditMembers !== 1 ? 's' : ''}` : ''}`}
-                tag={credits.length > 0 ? `${credits.length} ítem${credits.length !== 1 ? 's' : ''}` : undefined}
+                count={<span className="text-[24px]">${creditTotal.toLocaleString(intl)}</span>}
+                label={`${t.pendingCredit}${creditMembers ? ` · ${t.creditMembers(creditMembers)}` : ''}`}
+                tag={credits.length > 0 ? t.items(credits.length) : undefined}
                 tone="high"
               />
             )}
           </div>
         </section>
 
-        <section aria-label="Indicadores" className="flex flex-wrap gap-3">
-          <Stat label="Miembros activos" value={activeMembers.toLocaleString('es-AR')} />
-          <Stat label="Ingresos del mes" unit={currency} value={(monthRevenue / 100).toLocaleString('es-AR')} />
-          <Stat label="Asistencia hoy" value={attendance.length} hint={insideNow > 0 ? `${insideNow} adentro ahora` : undefined} hintTone="ok" />
+        <section aria-label={t.indicators} className="flex flex-wrap gap-3">
+          <Stat label={t.activeMembers} value={activeMembers.toLocaleString(intl)} />
+          <Stat label={t.monthRevenue} unit={currency} value={(monthRevenue / 100).toLocaleString(intl)} />
+          <Stat label={t.attendanceToday} value={attendance.length} hint={insideNow > 0 ? t.insideCount(insideNow) : undefined} hintTone="ok" />
           {storeEnabled ? (
-            <Stat label="Ventas de la tienda hoy" value={`$${(dailyCut?.total ?? 0).toLocaleString('es-AR')}`} hint={`${dailyCut?.salesCount ?? 0} venta${dailyCut?.salesCount !== 1 ? 's' : ''}`} />
+            <Stat label={t.storeSalesToday} value={`$${(dailyCut?.total ?? 0).toLocaleString(intl)}`} hint={t.sales(dailyCut?.salesCount ?? 0)} />
           ) : (
-            <Stat label="Clases activas" value={activeClasses} />
+            <Stat label={t.activeClasses} value={activeClasses} />
           )}
         </section>
 
         <section aria-labelledby="hours-h" className="rounded-2xl border border-adm-line bg-adm-night p-6 text-white">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h2 id="hours-h" className="text-[15px] font-bold">Entradas por hora</h2>
-              <p className="mt-1 text-[13px] text-[#a3a39d]">Hoy · hora del gimnasio</p>
+              <h2 id="hours-h" className="text-[15px] font-bold">{t.perHour}</h2>
+              <p className="mt-1 text-[13px] text-[#a3a39d]">{t.perHourSub}</p>
             </div>
-            <span className="font-admin-mono text-[13px] text-[#a3a39d]">{attendance.length} entradas</span>
+            <span className="font-admin-mono text-[13px] text-[#a3a39d]">{t.entries(attendance.length)}</span>
           </div>
-          <div className="mt-6 flex h-[140px] items-end gap-1.5 border-b border-[#2a2a2c]" role="img" aria-label={`Entradas por hora de hoy, total ${attendance.length}`}>
+          <div className="mt-6 flex h-[140px] items-end gap-1.5 border-b border-[#2a2a2c]" role="img" aria-label={t.perHourAria(attendance.length)}>
             {perHour.map((n, i) => (
               <div key={hours[i]} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1" title={`${hours[i]} h: ${n}`}>
                 {n > 0 && <span className="font-admin-mono text-[10px] text-[#a3a39d]">{n}</span>}
@@ -215,9 +218,9 @@ export default async function GymDashboardPage({ params, searchParams }: Props) 
         </section>
 
         <div className="flex flex-wrap gap-3">
-          <Panel title="Asistencia de hoy" id="att-h" action={<PanelLink href="attendance">Ver todo</PanelLink>} className="min-w-0 flex-[1_1_380px]">
+          <Panel title={t.todayAttendance} id="att-h" action={<PanelLink href="attendance">{t.seeAll}</PanelLink>} className="min-w-0 flex-[1_1_380px]">
             {attendance.length === 0 ? (
-              <EmptyState>Sin registros hoy.</EmptyState>
+              <EmptyState>{t.noRecordsToday}</EmptyState>
             ) : (
               <ul>
                 {attendance.slice(0, 6).map(a => {
@@ -229,20 +232,20 @@ export default async function GymDashboardPage({ params, searchParams }: Props) 
                         <p className="truncate text-sm font-semibold">{name}</p>
                         <p className="font-admin-mono text-xs text-adm-muted">{fmtTime(a.checkIn)}{a.checkOut ? ` → ${fmtTime(a.checkOut)}` : ''}</p>
                       </div>
-                      <Pill tone={a.checkOut ? 'neutral' : 'ok'}>{a.checkOut ? 'Salió' : 'Adentro'}</Pill>
+                      <Pill tone={a.checkOut ? 'neutral' : 'ok'}>{a.checkOut ? t.left : t.inside}</Pill>
                     </li>
                   )
                 })}
                 {attendance.length > 6 && (
-                  <li className="border-t border-adm-line-soft py-2.5 text-center text-xs text-adm-muted">+{attendance.length - 6} más</li>
+                  <li className="border-t border-adm-line-soft py-2.5 text-center text-xs text-adm-muted">{t.more(attendance.length - 6)}</li>
                 )}
               </ul>
             )}
           </Panel>
 
-          <Panel title="Últimos miembros" id="mem-h" action={<PanelLink href="members">Ver todos</PanelLink>} className="min-w-0 flex-[1_1_380px]">
+          <Panel title={t.latestMembers} id="mem-h" action={<PanelLink href="members">{t.seeAllMembers}</PanelLink>} className="min-w-0 flex-[1_1_380px]">
             {recentMembers.length === 0 ? (
-              <EmptyState>Sin miembros registrados.</EmptyState>
+              <EmptyState>{t.noMembers}</EmptyState>
             ) : (
               <ul>
                 {recentMembers.map(m => (

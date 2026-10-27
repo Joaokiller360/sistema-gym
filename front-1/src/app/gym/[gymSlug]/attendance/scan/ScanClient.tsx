@@ -6,6 +6,9 @@ import { Camera, CameraOff, CheckCircle2, LogIn, Minus, Plus, QrCode, Receipt, S
 import { cn } from '@/lib/utils'
 import { EmptyState, Pill, btn, field, initials } from '@/components/admin/ui'
 import { scanCodeAction, scanCheckInAction, scanSaleAction, scanCreditAction, type ScanResult } from './actions'
+import { useIntlLocale, useT } from '@/i18n/client'
+import { commonMessages } from '@/i18n/common'
+import { attendanceMessages } from '../messages'
 
 export interface ScanProduct {
   id: string
@@ -25,12 +28,7 @@ export interface ScanMember {
 type Mode = 'idle' | 'sale' | 'credit'
 type CameraState = 'off' | 'starting' | 'on' | 'error'
 
-const METHODS = [
-  { value: 'CASH', label: 'Efectivo' },
-  { value: 'TRANSFER', label: 'Transferencia' },
-  { value: 'CARD', label: 'Tarjeta' },
-  { value: 'OTHER', label: 'Otro' },
-] as const
+const METHODS = ['CASH', 'TRANSFER', 'CARD', 'OTHER'] as const
 
 interface LogEntry {
   id: number
@@ -43,17 +41,6 @@ interface BarcodeDetectorLike {
   detect: (source: CanvasImageSource) => Promise<{ rawValue: string }[]>
 }
 
-function money(n: number) {
-  return `$${n.toLocaleString('es-AR')}`
-}
-
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
-}
-
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
 
 // Case- and accent-insensitive, so "jose" finds "José"
 function normalize(text: string) {
@@ -76,6 +63,12 @@ export function ScanClient({ gymSlug, products, members }: { gymSlug: string; pr
   const busyRef = useRef(false)
   const lastScanRef = useRef({ code: '', at: 0 })
   const logId = useRef(0)
+  const t = useT(attendanceMessages).scan
+  const tc = useT(commonMessages)
+  const intl = useIntlLocale()
+  const money = (n: number) => `$${n.toLocaleString(intl)}`
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString(intl, { hour: '2-digit', minute: '2-digit' })
+  const fmtDate = (iso: string) => new Date(iso).toLocaleDateString(intl, { day: '2-digit', month: '2-digit', year: 'numeric' })
 
   const [camera, setCamera] = useState<CameraState>('off')
   const [cameraError, setCameraError] = useState('')
@@ -90,7 +83,7 @@ export function ScanClient({ gymSlug, products, members }: { gymSlug: string; pr
   const [mode, setMode] = useState<Mode>('idle')
   const [cart, setCart] = useState<Record<string, number>>({})
   const [productQuery, setProductQuery] = useState('')
-  const [method, setMethod] = useState<(typeof METHODS)[number]['value']>('CASH')
+  const [method, setMethod] = useState<(typeof METHODS)[number]>('CASH')
   const [notes, setNotes] = useState('')
   const [actionError, setActionError] = useState<string | null>(null)
   const [done, setDone] = useState<string | null>(null)
@@ -114,7 +107,7 @@ export function ScanClient({ gymSlug, products, members }: { gymSlug: string; pr
     const res = await scanCodeAction(gymSlug, value)
     setLooking(false)
     if (res.error || !res.data) {
-      setLookupError(res.error ?? 'No se pudo leer el código')
+      setLookupError(res.error ?? t.unreadable)
       setResult(null)
       setCode(null)
       return
@@ -190,8 +183,8 @@ export function ScanClient({ gymSlug, products, members }: { gymSlug: string; pr
       const name = (e as { name?: string })?.name
       setCameraError(
         name === 'NotAllowedError'
-          ? 'Sin permiso para usar la cámara. Habilitalo en el navegador o usá el lector / el campo de texto.'
-          : 'No se pudo abrir la cámara en este dispositivo.',
+          ? t.cameraDenied
+          : t.cameraFailed,
       )
     }
   }
@@ -248,15 +241,15 @@ export function ScanClient({ gymSlug, products, members }: { gymSlug: string; pr
         setActionError(res.error)
         return
       }
-      const remaining = 'visitsRemaining' in res ? res.visitsRemaining : null
+      const remaining = 'visitsRemaining' in res && typeof res.visitsRemaining === 'number' ? res.visitsRemaining : null
       const message =
         kind === 'checkin'
           ? remaining != null
-            ? `Asistencia registrada · ${remaining === 0 ? 'usó su último día del plan' : `quedan ${remaining} días`}`
-            : 'Asistencia registrada'
+            ? t.checkedInLeft(remaining)
+            : t.checkedIn
           : kind === 'sale'
-            ? `Compra registrada · ${money(total)}`
-            : `Fiado anotado · ${money(total)}`
+            ? t.saleLogged(money(total))
+            : t.creditLogged(money(total))
       setDone(message)
       addLog(message)
       setMode('idle')
@@ -307,7 +300,7 @@ export function ScanClient({ gymSlug, products, members }: { gymSlug: string; pr
   return (
     <div className="flex flex-wrap items-start gap-4">
       {/* Scanner */}
-      <section aria-label="Lector" className="flex min-w-0 flex-[1_1_360px] flex-col gap-4 rounded-2xl border border-adm-line bg-adm-surface p-5">
+      <section aria-label={t.reader} className="flex min-w-0 flex-[1_1_360px] flex-col gap-4 rounded-2xl border border-adm-line bg-adm-surface p-5">
         <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-adm-night">
           <video ref={videoRef} muted playsInline className={cn('size-full object-cover', camera !== 'on' && 'invisible')} />
           <canvas ref={canvasRef} className="hidden" />
@@ -321,7 +314,7 @@ export function ScanClient({ gymSlug, products, members }: { gymSlug: string; pr
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center text-white">
               <QrCode className="size-12 text-adm-brand" aria-hidden="true" />
               <p className="text-sm text-[#a3a39d]">
-                {camera === 'starting' ? 'Abriendo cámara…' : 'Activá la cámara o usá un lector de códigos.'}
+                {camera === 'starting' ? t.openingCamera : t.cameraHint}
               </p>
             </div>
           )}
@@ -329,7 +322,7 @@ export function ScanClient({ gymSlug, products, members }: { gymSlug: string; pr
 
         <button type="button" onClick={toggleCamera} className={cn(camera === 'on' ? btn.line : btn.primary, 'min-h-11')}>
           {camera === 'on' ? <CameraOff className="size-4" aria-hidden="true" /> : <Camera className="size-4" aria-hidden="true" />}
-          {camera === 'on' ? 'Apagar cámara' : 'Activar cámara'}
+          {camera === 'on' ? t.cameraOff : t.cameraOn}
         </button>
         {cameraError && <p role="alert" className={field.error}>{cameraError}</p>}
 
@@ -345,7 +338,7 @@ export function ScanClient({ gymSlug, products, members }: { gymSlug: string; pr
             void lookup(value)
           }}
         >
-          <label htmlFor="scan-code" className={field.label}>Lector USB, código o nombre del socio</label>
+          <label htmlFor="scan-code" className={field.label}>{t.inputLabel}</label>
           <div className="flex gap-2">
             <div className="relative min-w-0 flex-1">
               <input
@@ -356,7 +349,7 @@ export function ScanClient({ gymSlug, products, members }: { gymSlug: string; pr
                 onKeyDown={onManualKeyDown}
                 autoFocus
                 autoComplete="off"
-                placeholder="GYMOS-… o nombre"
+                placeholder={t.inputPlaceholder}
                 role="combobox"
                 aria-expanded={suggestions.length > 0}
                 aria-controls="scan-member-suggestions"
@@ -368,7 +361,7 @@ export function ScanClient({ gymSlug, products, members }: { gymSlug: string; pr
                 <ul
                   id="scan-member-suggestions"
                   role="listbox"
-                  aria-label="Socios que coinciden"
+                  aria-label={t.matches}
                   className="absolute inset-x-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-xl border border-adm-line bg-adm-surface py-1 shadow-lg"
                 >
                   {suggestions.map((m, i) => (
@@ -395,32 +388,32 @@ export function ScanClient({ gymSlug, products, members }: { gymSlug: string; pr
               )}
             </div>
             <button type="submit" disabled={!manualValue || looking} className={cn(btn.dark, 'min-h-11')}>
-              Buscar
+              {t.search}
             </button>
           </div>
           <p className={field.hint}>
             {manualValue.length >= 2 && !isCode && suggestions.length === 0
-              ? 'Ningún socio coincide con ese nombre.'
-              : 'Los lectores USB escriben el código y presionan Enter solos. También podés escribir el nombre, correo o teléfono del socio.'}
+              ? t.noMatch
+              : t.inputHint}
           </p>
         </form>
       </section>
 
       {/* Member + actions */}
-      <section aria-label="Socio escaneado" aria-live="polite" className="flex min-w-0 flex-[1.4_1_440px] flex-col gap-4">
+      <section aria-label={t.scanned} aria-live="polite" className="flex min-w-0 flex-[1.4_1_440px] flex-col gap-4">
         <div className="rounded-2xl border border-adm-line bg-adm-surface p-5">
           {looking ? (
-            <p className="py-10 text-center text-sm text-adm-muted">Buscando socio…</p>
+            <p className="py-10 text-center text-sm text-adm-muted">{t.looking}</p>
           ) : lookupError ? (
             <div className="flex flex-col items-center gap-3 py-8 text-center">
               <div className="flex size-12 items-center justify-center rounded-full bg-adm-bad-bg">
                 <X className="size-6 text-adm-bad-fg" aria-hidden="true" />
               </div>
               <p className="text-sm font-semibold text-adm-bad-fg">{lookupError}</p>
-              <button type="button" onClick={clearMember} className={btn.line}>Volver a escanear</button>
+              <button type="button" onClick={clearMember} className={btn.line}>{t.scanAgain}</button>
             </div>
           ) : !result ? (
-            <EmptyState icon={<QrCode className="size-10" />}>Esperando un código…</EmptyState>
+            <EmptyState icon={<QrCode className="size-10" />}>{t.waiting}</EmptyState>
           ) : (
             <div className="flex flex-col gap-5">
               <div className="flex items-start gap-4">
@@ -434,22 +427,22 @@ export function ScanClient({ gymSlug, products, members }: { gymSlug: string; pr
                   <h2 className="truncate text-2xl font-extrabold">{result.member.firstName} {result.member.lastName}</h2>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {result.membership.active ? (
-                      <Pill tone="ok">{result.membership.planName} · vence {fmtDate(result.membership.endDate!)}</Pill>
+                      <Pill tone="ok">{t.expires(result.membership.planName, fmtDate(result.membership.endDate!))}</Pill>
                     ) : result.membership.visitsRemaining === 0 ? (
-                      <Pill tone="bad">{result.membership.planName}: usó sus {result.membership.visitsTotal} días</Pill>
+                      <Pill tone="bad">{t.usedAll(result.membership.planName, result.membership.visitsTotal)}</Pill>
                     ) : (
-                      <Pill tone="bad">Sin membresía activa</Pill>
+                      <Pill tone="bad">{t.noActive}</Pill>
                     )}
                     {result.membership.active && result.membership.visitsRemaining != null && (
                       <Pill tone={result.membership.visitsRemaining <= 2 ? 'warn' : 'info'}>
-                        Quedan {result.membership.visitsRemaining} de {result.membership.visitsTotal} días
+                        {t.visitsLeft(result.membership.visitsRemaining, result.membership.visitsTotal)}
                       </Pill>
                     )}
-                    {result.checkedInToday && <Pill tone="info">Entró hoy {fmtTime(result.checkedInToday)}</Pill>}
-                    {!result.member.isActive && <Pill>Socio inactivo</Pill>}
+                    {result.checkedInToday && <Pill tone="info">{t.inToday(fmtTime(result.checkedInToday))}</Pill>}
+                    {!result.member.isActive && <Pill>{t.inactive}</Pill>}
                   </div>
                 </div>
-                <button type="button" onClick={clearMember} aria-label="Siguiente socio" className={btn.icon}>
+                <button type="button" onClick={clearMember} aria-label={t.nextMember} className={btn.icon}>
                   <X className="size-4" />
                 </button>
               </div>
@@ -458,11 +451,11 @@ export function ScanClient({ gymSlug, products, members }: { gymSlug: string; pr
                 'flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm',
                 result.pendingCredits.count > 0 ? 'border-adm-warn-line bg-adm-warn-bg text-adm-warn-fg' : 'border-adm-line-soft bg-adm-subtle text-adm-muted',
               )}>
-                <span className="font-semibold">Fiado pendiente</span>
+                <span className="font-semibold">{t.pendingCredit}</span>
                 <span className="font-admin-mono font-bold">
                   {result.pendingCredits.count > 0
-                    ? `${money(result.pendingCredits.total)} · ${result.pendingCredits.count} ítem${result.pendingCredits.count !== 1 ? 's' : ''}`
-                    : 'Nada pendiente'}
+                    ? t.pendingItems(money(result.pendingCredits.total), result.pendingCredits.count)
+                    : t.nothingPending}
                 </span>
               </div>
 
@@ -482,27 +475,27 @@ export function ScanClient({ gymSlug, products, members }: { gymSlug: string; pr
                     className={cn(btn.primary, 'min-h-14 flex-[1_1_100%] text-base')}
                   >
                     <LogIn className="size-5" aria-hidden="true" />
-                    {result.checkedInToday ? 'Asistencia ya registrada hoy' : isPending ? 'Registrando…' : 'Registrar asistencia'}
+                    {result.checkedInToday ? t.alreadyToday : isPending ? t.logging : t.logCheckIn}
                   </button>
                   <button type="button" onClick={() => { setMode('sale'); setDone(null) }} disabled={isPending || products.length === 0} className={cn(btn.line, 'min-h-12 flex-1 text-sm')}>
-                    <ShoppingBag className="size-4" aria-hidden="true" /> Compró algo
+                    <ShoppingBag className="size-4" aria-hidden="true" /> {t.bought}
                   </button>
                   <button type="button" onClick={() => { setMode('credit'); setDone(null) }} disabled={isPending || products.length === 0} className={cn(btn.line, 'min-h-12 flex-1 text-sm')}>
-                    <Receipt className="size-4" aria-hidden="true" /> Fiado
+                    <Receipt className="size-4" aria-hidden="true" /> {t.credit}
                   </button>
-                  {products.length === 0 && <p className="w-full text-xs text-adm-muted">No hay productos activos en la tienda para registrar compras o fiados.</p>}
+                  {products.length === 0 && <p className="w-full text-xs text-adm-muted">{t.noProducts}</p>}
                 </div>
               ) : (
                 <div className="flex flex-col gap-4 rounded-xl border-2 border-adm-ink p-4">
                   <div className="flex items-center justify-between">
-                    <p className="text-[15px] font-bold">{mode === 'sale' ? 'Registrar compra' : 'Anotar fiado'}</p>
-                    <button type="button" onClick={() => { setMode('idle'); setCart({}) }} aria-label="Cancelar" className={btn.icon}><X className="size-4" /></button>
+                    <p className="text-[15px] font-bold">{mode === 'sale' ? t.logSale : t.logCredit}</p>
+                    <button type="button" onClick={() => { setMode('idle'); setCart({}) }} aria-label={t.cancel} className={btn.icon}><X className="size-4" /></button>
                   </div>
 
                   <label className="relative flex items-center">
-                    <span className="sr-only">Buscar producto</span>
+                    <span className="sr-only">{t.searchProduct}</span>
                     <Search className="pointer-events-none absolute left-3 size-4 text-adm-muted" aria-hidden="true" />
-                    <input type="search" value={productQuery} onChange={e => setProductQuery(e.target.value)} placeholder="Buscar producto" className={cn(field.input, 'min-h-10 pl-9')} />
+                    <input type="search" value={productQuery} onChange={e => setProductQuery(e.target.value)} placeholder={t.searchProduct} className={cn(field.input, 'min-h-10 pl-9')} />
                   </label>
 
                   <ul className="max-h-64 overflow-y-auto rounded-xl border border-adm-line-soft">
@@ -512,46 +505,46 @@ export function ScanClient({ gymSlug, products, members }: { gymSlug: string; pr
                         <li key={p.id} className={cn('flex items-center gap-3 border-t border-adm-line-soft px-3 py-2.5 first:border-t-0', qty > 0 && 'bg-adm-subtle')}>
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-sm font-semibold">{p.name}</p>
-                            <p className="text-xs text-adm-muted">{money(p.price)} · stock {p.stock}</p>
+                            <p className="text-xs text-adm-muted">{money(p.price)} · {t.stock(p.stock)}</p>
                           </div>
                           <div className="flex items-center gap-1">
-                            <button type="button" onClick={() => setQty(p.id, qty - 1)} disabled={qty === 0} aria-label={`Quitar ${p.name}`} className={cn(btn.icon, 'size-9')}><Minus className="size-4" /></button>
+                            <button type="button" onClick={() => setQty(p.id, qty - 1)} disabled={qty === 0} aria-label={t.remove(p.name)} className={cn(btn.icon, 'size-9')}><Minus className="size-4" /></button>
                             <span className="w-6 text-center font-admin-mono text-sm font-bold">{qty}</span>
-                            <button type="button" onClick={() => setQty(p.id, qty + 1)} disabled={qty >= p.stock} aria-label={`Agregar ${p.name}`} className={cn(btn.icon, 'size-9')}><Plus className="size-4" /></button>
+                            <button type="button" onClick={() => setQty(p.id, qty + 1)} disabled={qty >= p.stock} aria-label={t.add(p.name)} className={cn(btn.icon, 'size-9')}><Plus className="size-4" /></button>
                           </div>
                         </li>
                       )
                     })}
-                    {shownProducts.length === 0 && <li className="px-3 py-4 text-center text-sm text-adm-muted">Sin resultados</li>}
+                    {shownProducts.length === 0 && <li className="px-3 py-4 text-center text-sm text-adm-muted">{t.noResults}</li>}
                   </ul>
 
                   {mode === 'sale' && (
-                    <div role="radiogroup" aria-label="Método de pago" className="flex flex-wrap gap-2">
+                    <div role="radiogroup" aria-label={t.paymentMethod} className="flex flex-wrap gap-2">
                       {METHODS.map(m => (
                         <button
-                          key={m.value}
+                          key={m}
                           type="button"
                           role="radio"
-                          aria-checked={method === m.value}
-                          onClick={() => setMethod(m.value)}
+                          aria-checked={method === m}
+                          onClick={() => setMethod(m)}
                           className={cn(
                             'min-h-10 rounded-lg border px-3.5 text-[13px] font-semibold transition-colors',
-                            method === m.value ? 'border-adm-ink bg-adm-ink text-adm-surface' : 'border-adm-line bg-adm-surface hover:border-adm-ink',
+                            method === m ? 'border-adm-ink bg-adm-ink text-adm-surface' : 'border-adm-line bg-adm-surface hover:border-adm-ink',
                           )}
                         >
-                          {m.label}
+                          {tc.methods[m]}
                         </button>
                       ))}
                     </div>
                   )}
 
                   <label className="block">
-                    <span className={field.label}>Nota (opcional)</span>
-                    <input value={notes} onChange={e => setNotes(e.target.value)} maxLength={300} placeholder={mode === 'credit' ? 'Ej. paga el viernes' : ''} className={field.input} />
+                    <span className={field.label}>{t.note}</span>
+                    <input value={notes} onChange={e => setNotes(e.target.value)} maxLength={300} placeholder={mode === 'credit' ? t.creditNotePlaceholder : ''} className={field.input} />
                   </label>
 
                   <button type="button" onClick={() => runAction(mode)} disabled={isPending || items.length === 0} className={cn(btn.dark, 'min-h-12 text-sm')}>
-                    {isPending ? 'Guardando…' : `${mode === 'sale' ? 'Registrar compra' : 'Anotar fiado'} · ${money(total)}`}
+                    {isPending ? t.saving : `${mode === 'sale' ? t.logSale : t.logCredit} · ${money(total)}`}
                   </button>
                 </div>
               )}
@@ -561,7 +554,7 @@ export function ScanClient({ gymSlug, products, members }: { gymSlug: string; pr
 
         {log.length > 0 && (
           <div className="rounded-2xl border border-adm-line bg-adm-surface">
-            <p className="border-b border-adm-line-soft px-5 py-3.5 text-[15px] font-bold">En este turno</p>
+            <p className="border-b border-adm-line-soft px-5 py-3.5 text-[15px] font-bold">{t.thisShift}</p>
             <ul>
               {log.map(l => (
                 <li key={l.id} className="flex items-center gap-3 border-t border-adm-line-soft px-5 py-3 text-sm first:border-t-0">

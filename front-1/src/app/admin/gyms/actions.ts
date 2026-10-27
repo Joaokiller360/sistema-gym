@@ -65,6 +65,7 @@ const createGymSchema = z.object({
   subscriptionPlan: z.string().optional(),
   owner: ownerSchema.optional(),
   advancedReportsEnabled: z.boolean().optional(),
+  whatsappPhone: z.string().max(20).regex(/^\+?[\d\s-]*$/, 'WhatsApp: solo números, con código de país').nullable().optional(),
 })
 
 export type CreateGymInput = z.infer<typeof createGymSchema>
@@ -80,6 +81,7 @@ export async function createGymAction(data: CreateGymInput): Promise<{ error: st
     ...(parsed.data.logoUrl ? { logoUrl: parsed.data.logoUrl } : {}),
     ...(parsed.data.subscriptionPlan ? { subscriptionPlan: parsed.data.subscriptionPlan } : {}),
     ...(parsed.data.owner ? { owner: parsed.data.owner } : {}),
+    ...(parsed.data.whatsappPhone ? { whatsappPhone: parsed.data.whatsappPhone } : {}),
   }
 
   const result = await apiFetchWithError<{ id: string }>('/admin/gyms', token, {
@@ -99,11 +101,11 @@ export async function updateGymAction(gymId: string, data: Partial<CreateGymInpu
   const parsed = updateGymSchema.safeParse(data)
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Datos inválidos' }
   const token = await getToken()
-  const result = await apiFetch(`/admin/gyms/${gymId}`, token, {
+  const result = await apiFetchWithError(`/admin/gyms/${gymId}`, token, {
     method: 'PATCH',
     body: JSON.stringify(parsed.data),
   })
-  if (!result) return { error: 'Error al actualizar el gimnasio' }
+  if ('error' in result) return { error: result.error || 'Error al actualizar el gimnasio' }
   updateTag('admin-gyms')
   updateTag(`admin-gym-${gymId}`)
   const slug = (data as Partial<CreateGymInput>).slug

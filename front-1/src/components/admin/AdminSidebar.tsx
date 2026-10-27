@@ -18,9 +18,10 @@ import {
   LifeBuoy,
   CalendarClock,
   Mail,
+  MessageCircle,
   type LucideIcon,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, normalizeLogoUrl } from '@/lib/utils'
 import { logoutAction } from '@/lib/logout'
 import { useTheme } from '@/components/providers/ThemeProvider'
 
@@ -28,6 +29,7 @@ export interface AdminNavCounts {
   gyms?: number
   requests?: number
   tickets?: number
+  crm?: number
 }
 
 interface NavItem {
@@ -57,6 +59,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
   {
     group: 'Comunidad',
     items: [
+      { label: 'CRM', href: '/admin/crm', icon: MessageCircle, count: 'crm', countTone: 'alert' },
       { label: 'Comunicaciones', href: '/admin/comunicaciones', icon: Mail },
       { label: 'Soporte', href: '/admin/support', icon: LifeBuoy, count: 'tickets', countTone: 'alert' },
     ],
@@ -70,7 +73,28 @@ const NAV: { group: string; items: NavItem[] }[] = [
 interface AdminSidebarProps {
   user: { email: string }
   saasName?: string
+  logoUrl?: string | null
   counts?: AdminNavCounts
+}
+
+/** Platform logo, falling back to the dumbbell on the brand yellow. */
+function BrandMark({ logoUrl, small = false }: { logoUrl?: string | null; small?: boolean }) {
+  const src = normalizeLogoUrl(logoUrl)
+  return (
+    <div
+      className={cn(
+        'flex shrink-0 items-center justify-center overflow-hidden bg-adm-brand',
+        small ? 'size-7 rounded-md' : 'size-9 rounded-[10px]',
+      )}
+    >
+      {src ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt="" className="size-full object-cover" />
+      ) : (
+        <Dumbbell className={cn('text-adm-night', small ? 'size-3.5' : 'size-[18px]')} aria-hidden="true" />
+      )}
+    </div>
+  )
 }
 
 function CountBadge({ value, tone, active }: { value: number; tone: NavItem['countTone']; active: boolean }) {
@@ -100,6 +124,7 @@ function NavContent({
   isPending,
   onLogout,
   saasName,
+  logoUrl,
   counts,
 }: {
   user: { email: string }
@@ -108,6 +133,7 @@ function NavContent({
   isPending: boolean
   onLogout: () => void
   saasName: string
+  logoUrl?: string | null
   counts: AdminNavCounts
 }) {
   const { theme, toggle } = useTheme()
@@ -117,9 +143,7 @@ function NavContent({
     <div className="adm-night flex h-full flex-col bg-adm-night px-3.5 pb-4 pt-5 text-white">
       <div className="flex items-center justify-between gap-2 px-2 pb-5">
         <div className="flex items-center gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-adm-brand">
-            <Dumbbell className="size-[18px] text-adm-night" aria-hidden="true" />
-          </div>
+          <BrandMark logoUrl={logoUrl} />
           <div className="leading-tight">
             <p className="text-[17px] font-extrabold tracking-tight [font-stretch:112%]">{saasName}</p>
             <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#85857f]">Super Admin</p>
@@ -207,7 +231,7 @@ function NavContent({
   )
 }
 
-export function AdminSidebar({ user, saasName = 'GymOS', counts = {} }: AdminSidebarProps) {
+export function AdminSidebar({ user, saasName = 'GymOS', logoUrl, counts = {} }: AdminSidebarProps) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -225,7 +249,7 @@ export function AdminSidebar({ user, saasName = 'GymOS', counts = {} }: AdminSid
     })
   }
 
-  const shared = { user, pathname, isPending, onLogout: handleLogout, saasName, counts }
+  const shared = { user, pathname, isPending, onLogout: handleLogout, saasName, logoUrl, counts }
 
   return (
     <>
@@ -235,9 +259,7 @@ export function AdminSidebar({ user, saasName = 'GymOS', counts = {} }: AdminSid
 
       <div className="adm-night fixed inset-x-0 top-0 z-40 flex h-14 items-center justify-between border-b border-white/10 bg-adm-night px-4 lg:hidden">
         <div className="flex items-center gap-2">
-          <div className="flex size-7 items-center justify-center rounded-md bg-adm-brand">
-            <Dumbbell className="size-3.5 text-adm-night" aria-hidden="true" />
-          </div>
+          <BrandMark logoUrl={logoUrl} small />
           <span className="text-sm font-extrabold text-white">{saasName} Admin</span>
         </div>
         <button

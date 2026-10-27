@@ -8,8 +8,11 @@ import { createSaleAction, createProductAction, updateProductAction, deleteProdu
 import { createHandlers, type FieldType, inferFieldType } from '@/lib/input-validation'
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { useIntlLocale, useT } from '@/i18n/client'
+import { commonMessages } from '@/i18n/common'
+import { storeMessages } from './messages'
 
-interface Category {
+export interface Category {
   id: string
   name: string
   imageUrl: string | null
@@ -23,7 +26,7 @@ interface Member {
 }
 
 
-interface Product {
+export interface Product {
   id: string
   name: string
   description: string | null
@@ -65,7 +68,7 @@ interface CreditPeriodItem {
   product: { name: string }
 }
 
-interface CutSummary {
+export interface CutSummary {
   salesCount: number
   total: number
   byMethod: { method: string; count: number; total: number }[]
@@ -95,7 +98,6 @@ interface Props {
   gymSlug: string
   gymName: string
   products: Product[]
-  categories: Category[]
   dailyCut: CutSummary | null
   monthlyCut: CutSummary | null
   activeTab: string
@@ -103,26 +105,24 @@ interface Props {
   monthParam: string
   members: Member[]
   pendingCredits: PendingCredit[]
-  canDelete?: boolean
   canDeleteSales?: boolean
+  /** Monthly totals are owner-only; front-desk staff work with the daily cut */
+  showMonthly?: boolean
 }
 
-const METHOD_LABELS: Record<string, string> = {
-  CASH: 'Efectivo', CARD: 'Tarjeta', TRANSFER: 'Transferencia', OTHER: 'Otro',
-}
+const METHODS = ['CASH', 'CARD', 'TRANSFER', 'OTHER']
 
 // Fixed per method so a method keeps its color across days and months
 const METHOD_COLORS: Record<string, string> = {
   CASH: 'var(--accent)', CARD: '#5EEAD4', TRANSFER: '#FFFFFF', OTHER: '#A7C9C4',
 }
 
+// Labels live in storeMessages.tabs. Products and categories are managed under Inventory.
 const TABS = [
-  { id: 'sell', label: 'Vender', icon: ShoppingCart },
-  { id: 'credits', label: 'Créditos', icon: CreditCard },
-  { id: 'products', label: 'Productos', icon: Package },
-  { id: 'categories', label: 'Categorías', icon: Tag },
-  { id: 'daily', label: 'Corte del día', icon: Calendar },
-  { id: 'monthly', label: 'Corte del mes', icon: BarChart2 },
+  { id: 'sell', icon: ShoppingCart },
+  { id: 'credits', icon: CreditCard },
+  { id: 'daily', icon: Calendar },
+  { id: 'monthly', icon: BarChart2 },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -141,14 +141,6 @@ function tintFor(id: string | null | undefined) {
   let h = 0
   for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0
   return TINTS[h % TINTS.length]
-}
-
-function money(n: number) {
-  return `$${n.toLocaleString('es-AR')}`
-}
-
-function plural(n: number, one: string, many: string) {
-  return `${n} ${n === 1 ? one : many}`
 }
 
 function initials(name: string) {
@@ -171,20 +163,26 @@ function shiftMonth(month: string, delta: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
-function longDate(date: string) {
-  return new Date(`${date}T12:00:00`).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'short' })
+/** Messages plus locale-aware formatters shared by every tab. */
+function useStoreText() {
+  const t = useT(storeMessages)
+  const tc = useT(commonMessages)
+  const intl = useIntlLocale()
+  return {
+    t,
+    tc,
+    intl,
+    money: (n: number) => `$${n.toLocaleString(intl)}`,
+    longDate: (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString(intl, { weekday: 'long', day: 'numeric', month: 'short' }),
+    monthName: (month: string) => {
+      const [y, m] = month.split('-').map(Number)
+      return new Date(y, m - 1, 1).toLocaleDateString(intl, { month: 'long', year: 'numeric' })
+    },
+    ageLabel: (days: number) => (days <= 0 ? t.today : days === 1 ? t.yesterday : t.days(days)),
+  }
 }
 
-function monthName(month: string) {
-  const [y, m] = month.split('-').map(Number)
-  return new Date(y, m - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
-}
-
-function ageLabel(days: number) {
-  if (days <= 0) return 'Hoy'
-  if (days === 1) return 'Ayer'
-  return `${days} días`
-}
+type StoreText = ReturnType<typeof useStoreText>
 
 function niceCeil(n: number) {
   if (n <= 0) return 1
@@ -193,28 +191,31 @@ function niceCeil(n: number) {
   return (s <= 1 ? 1 : s <= 2 ? 2 : s <= 2.5 ? 2.5 : s <= 5 ? 5 : 10) * p
 }
 
-export function StoreTabs({ gymSlug, gymName, products, categories, dailyCut, monthlyCut, activeTab, dateParam, monthParam, members, pendingCredits, canDelete = false, canDeleteSales = false }: Props) {
+export function StoreTabs({ gymSlug, gymName, products, dailyCut, monthlyCut, activeTab, dateParam, monthParam, members, pendingCredits, canDeleteSales = false, showMonthly = true }: Props) {
   const router = useRouter()
+  const { t } = useStoreText()
   const [tab, setTab] = useState(activeTab)
 
-  function changeTab(t: TabId) {
-    setTab(t)
-    router.push(`?tab=${t}`)
+  function changeTab(id: TabId) {
+    setTab(id)
+    router.push(`?tab=${id}`)
   }
 
-  const current = TABS.find(t => t.id === tab) ?? TABS[0]
+  const tabs = showMonthly ? TABS : TABS.filter(x => x.id !== 'monthly')
+  const current = tabs.find(x => x.id === tab) ?? tabs[0]
   const creditMembers = new Set(pendingCredits.map(c => c.memberId)).size
 
   return (
     <div className="font-admin space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1">
-          <p className="font-admin-mono text-xs uppercase tracking-[0.08em] text-zinc-500">{gymName} · Tienda</p>
-          <h1 className="text-4xl font-black leading-none tracking-tight">{current.label}</h1>
+          <p className="font-admin-mono text-xs uppercase tracking-[0.08em] text-zinc-500">{t.eyebrow(gymName)}</p>
+          <h1 className="text-4xl font-black leading-none tracking-tight">{t.tabs[current.id]}</h1>
         </div>
-        <nav aria-label="Secciones de la tienda" className="flex flex-wrap gap-1 rounded-2xl border border-zinc-200 bg-white p-1">
-          {TABS.map(({ id, label, icon: Icon }) => {
+        <nav aria-label={t.sections} className="flex flex-wrap gap-1 rounded-2xl border border-zinc-200 bg-white p-1">
+          {tabs.map(({ id, icon: Icon }) => {
             const active = current.id === id
+            const label = t.tabs[id]
             return (
               <button
                 key={id}
@@ -246,12 +247,11 @@ export function StoreTabs({ gymSlug, gymName, products, categories, dailyCut, mo
           cut={dailyCut}
           dateParam={dateParam}
           pendingTotal={pendingCredits.reduce((s, c) => s + c.unitPrice * c.quantity, 0)}
+          showMonthly={showMonthly}
           onNavigate={changeTab}
         />
       )}
       {current.id === 'credits' && <CreditsTab gymSlug={gymSlug} pendingCredits={pendingCredits} onNavigate={changeTab} />}
-      {current.id === 'products' && <ProductsTab gymSlug={gymSlug} products={products} categories={categories} canDelete={canDelete} />}
-      {current.id === 'categories' && <CategoriesTab gymSlug={gymSlug} categories={categories} products={products} monthlyCut={monthlyCut} monthParam={monthParam} canDelete={canDelete} />}
       {current.id === 'daily' && <DailyCutTab cut={dailyCut} dateParam={dateParam} gymSlug={gymSlug} canDelete={canDeleteSales} onNavigate={changeTab} />}
       {current.id === 'monthly' && <MonthlyCutTab cut={monthlyCut} monthParam={monthParam} gymSlug={gymSlug} canDelete={canDeleteSales} onNavigate={changeTab} />}
     </div>
@@ -261,13 +261,13 @@ export function StoreTabs({ gymSlug, gymName, products, categories, dailyCut, mo
 // ── Shared pieces ───────────────────────────────────────────
 type Bar = { key: string; label: string; total: number; pct: number; color: string }
 
-function methodBars(cut: CutSummary | null, withCount = false): Bar[] {
+function methodBars(cut: CutSummary | null, s: StoreText, withCount = false): Bar[] {
   if (!cut || cut.total <= 0) return []
   return [...cut.byMethod]
     .sort((a, b) => b.total - a.total)
     .map(m => ({
       key: m.method,
-      label: `${METHOD_LABELS[m.method] ?? m.method}${withCount ? ` · ${plural(m.count, 'venta', 'ventas')}` : ''}`,
+      label: `${s.tc.methods[m.method] ?? m.method}${withCount ? ` · ${s.t.sales(m.count)}` : ''}`,
       total: m.total,
       pct: Math.round((m.total / cut.total) * 100),
       color: METHOD_COLORS[m.method] ?? '#A7C9C4',
@@ -284,6 +284,7 @@ function CashBand({ label, eyebrow, total, subtitle, bars, emptyBars, actions, c
   actions?: React.ReactNode
   children?: React.ReactNode
 }) {
+  const { t, money } = useStoreText()
   return (
     <section aria-label={label} className="flex flex-wrap items-stretch justify-between gap-6 rounded-[22px] bg-[#0E2A28] p-6 text-white sm:p-7">
       <div className="flex min-w-0 flex-[1_1_260px] flex-col gap-2.5">
@@ -308,7 +309,7 @@ function CashBand({ label, eyebrow, total, subtitle, bars, emptyBars, actions, c
             ))}
           </div>
         ) : (
-          <p className="text-sm text-[#A7C9C4]">{emptyBars ?? 'Sin ventas todavía'}</p>
+          <p className="text-sm text-[#A7C9C4]">{emptyBars ?? t.noSalesYet}</p>
         )}
         {actions && <div className="flex flex-wrap justify-end gap-2">{actions}</div>}
       </div>
@@ -393,12 +394,14 @@ function ShareBar({ pct, title }: { pct: number; title?: string }) {
 }
 
 function MethodPicker({ value, onChange, dark }: { value: string; onChange: (v: string) => void; dark?: boolean }) {
+  const { t, tc } = useStoreText()
   return (
-    <div role="group" aria-label="Método de pago" className="grid grid-cols-2 gap-2">
-      {Object.entries(METHOD_LABELS).map(([v, label]) => {
+    <div role="group" aria-label={t.paymentMethod} className="grid grid-cols-2 gap-2">
+      {METHODS.map(v => {
+        const label = tc.methods[v]
         const active = value === v
         const cls = dark
-          ? active ? 'border-white bg-white text-[#111111] font-bold' : 'border-[#3A3A3A] text-[#E4E5E6] hover:border-[#5A5A5A]'
+          ? active ? 'border-white bg-[#ffffff] text-[#111111] font-bold' : 'border-[#3A3A3A] text-[#E4E5E6] hover:border-[#5A5A5A]'
           : active ? 'border-black bg-black text-white hover:bg-zinc-800 font-bold' : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300'
         return (
           <button key={v} type="button" onClick={() => onChange(v)} aria-pressed={active}
@@ -413,7 +416,7 @@ function MethodPicker({ value, onChange, dark }: { value: string; onChange: (v: 
 }
 
 // ── Sell Tab ────────────────────────────────────────────────
-function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pendingTotal, onNavigate }: {
+function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pendingTotal, showMonthly, onNavigate }: {
   gymSlug: string
   products: Product[]
   lowStock: Product[]
@@ -421,9 +424,9 @@ function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pending
   cut: CutSummary | null
   dateParam: string
   pendingTotal: number
+  showMonthly: boolean
   onNavigate: (t: TabId) => void
 }) {
-  const router = useRouter()
   const [cart, setCart] = useState<CartItem[]>([])
   const [mode, setMode] = useState<'sell' | 'credito'>('sell')
   const [method, setMethod] = useState('CASH')
@@ -434,6 +437,8 @@ function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pending
   const [categoryId, setCategoryId] = useState<string | null>(null)
   const [showConfirm, setShowConfirm] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const text = useStoreText()
+  const { t, money, longDate } = text
 
   function addToCart(product: Product) {
     setCart(prev => {
@@ -489,10 +494,9 @@ function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pending
         notes: notes.trim() || undefined,
       })
       if (result.error) { toast.error(result.error); return }
-      toast.success('Venta registrada')
+      toast.success(t.sold)
       setCart([])
       setNotes('')
-      router.refresh()
     })
   }
 
@@ -505,62 +509,61 @@ function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pending
       })
       setShowConfirm(false)
       if (result.error) { toast.error(result.error); return }
-      toast.success('Crédito asignado')
+      toast.success(t.creditAssigned)
       setCart([])
       setNotes('')
       setMemberId('')
       setMemberSearch('')
-      router.refresh()
     })
   }
 
   const isToday = dateParam === localISODate(new Date())
   const salesCount = cut?.salesCount ?? 0
   const average = salesCount ? Math.round((cut?.total ?? 0) / salesCount) : 0
-  const lowNames = lowStock.slice(0, 3).map(p => p.name).join(', ') + (lowStock.length > 3 ? ` y ${lowStock.length - 3} más` : '')
+  const lowNames = lowStock.slice(0, 3).map(p => p.name).join(', ') + (lowStock.length > 3 ? t.andMore(lowStock.length - 3) : '')
 
   return (
     <div className="space-y-6">
       <CashBand
-        label="Caja de hoy"
-        eyebrow={`${isToday ? 'Caja de hoy' : 'Caja del día'} · ${longDate(dateParam)}`}
+        label={t.todayCash}
+        eyebrow={`${isToday ? t.todayCash : t.dayCash} · ${longDate(dateParam)}`}
         total={cut?.total ?? 0}
-        subtitle={`${plural(salesCount, 'venta', 'ventas')} · ticket promedio ${money(average)} · ${money(pendingTotal)} en crédito sin cobrar`}
-        bars={methodBars(cut)}
+        subtitle={t.sellSubtitle(t.sales(salesCount), money(average), money(pendingTotal))}
+        bars={methodBars(cut, text)}
         actions={
           <>
-            <BandButton onClick={() => onNavigate('monthly')}>Ver corte del mes</BandButton>
-            <BandButton primary onClick={() => onNavigate('daily')}>Ver corte del día</BandButton>
+            {showMonthly && <BandButton onClick={() => onNavigate('monthly')}>{t.seeMonthCut}</BandButton>}
+            <BandButton primary onClick={() => onNavigate('daily')}>{t.seeDayCut}</BandButton>
           </>
         }
       >
         {lowStock.length > 0 && (
           <p className="mt-1.5 flex flex-wrap items-center gap-2 text-[13px] text-[#E2EFED]">
-            <span className="rounded-md bg-[#FDBA74] px-2 py-0.5 font-admin-mono text-[11px] font-bold text-[#111111]">Stock bajo · {lowStock.length}</span>
+            <span className="rounded-md bg-[#FDBA74] px-2 py-0.5 font-admin-mono text-[11px] font-bold text-[#111111]">{t.lowStock(lowStock.length)}</span>
             {lowNames}
           </p>
         )}
       </CashBand>
 
       <div className="flex flex-wrap items-start gap-6">
-        <section aria-label="Catálogo" className="min-w-0 flex-[999_1_560px] space-y-4">
+        <section aria-label={t.catalog} className="min-w-0 flex-[999_1_560px] space-y-4">
           {products.length === 0 ? (
-            <EmptyState>No hay productos disponibles en stock</EmptyState>
+            <EmptyState>{t.noStock}</EmptyState>
           ) : (
             <>
               <div className="flex flex-wrap gap-3">
-                <SearchField label="Buscar producto" value={query} onChange={setQuery} placeholder="Buscar producto" />
+                <SearchField label={t.searchProduct} value={query} onChange={setQuery} placeholder={t.searchProduct} />
               </div>
               {categoryChips.length > 0 && (
-                <div role="group" aria-label="Filtrar por categoría" className="flex flex-wrap gap-2">
-                  <Chip active={!categoryId} onClick={() => setCategoryId(null)} count={products.length}>Todos</Chip>
+                <div role="group" aria-label={t.filterByCategory} className="flex flex-wrap gap-2">
+                  <Chip active={!categoryId} onClick={() => setCategoryId(null)} count={products.length}>{t.all}</Chip>
                   {categoryChips.map(c => (
                     <Chip key={c.id} active={categoryId === c.id} onClick={() => setCategoryId(c.id)} count={c.count}>{c.name}</Chip>
                   ))}
                 </div>
               )}
               {visible.length === 0 ? (
-                <EmptyState icon={Search}>Ningún producto coincide con la búsqueda</EmptyState>
+                <EmptyState icon={Search}>{t.noProductMatch}</EmptyState>
               ) : (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3">
                   {visible.map(p => {
@@ -584,7 +587,7 @@ function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pending
                           <span className={`absolute right-2.5 top-2.5 rounded-md px-2 py-0.5 font-admin-mono text-[11px] font-bold ${
                             low ? 'bg-[#111111] text-white' : 'bg-white/85 text-[#111111]'
                           }`}>
-                            {low ? `Quedan ${p.stock}` : `${p.stock} en stock`}
+                            {low ? t.left(p.stock) : t.inStock(p.stock)}
                           </span>
                         </div>
                         <div className="flex flex-1 flex-col gap-2 p-3.5">
@@ -609,43 +612,43 @@ function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pending
           )}
         </section>
 
-        <aside aria-label="Ticket actual" className="flex max-w-full flex-[1_1_340px] flex-col overflow-hidden rounded-[20px] bg-[#111111] text-white ring-1 ring-white/10 lg:sticky lg:top-6">
+        <aside aria-label={t.currentTicket} className="flex max-w-full flex-[1_1_340px] flex-col overflow-hidden rounded-[20px] bg-[#111111] text-white ring-1 ring-white/10 lg:sticky lg:top-6">
           <div className="flex items-center justify-between px-[22px] pb-4 pt-5">
-            <h2 className="text-xl font-extrabold tracking-tight">Ticket</h2>
-            <span className="font-admin-mono text-xs text-[#B5B7B9]">{plural(units, 'artículo', 'artículos')}</span>
+            <h2 className="text-xl font-extrabold tracking-tight">{t.ticket}</h2>
+            <span className="font-admin-mono text-xs text-[#B5B7B9]">{t.articles(units)}</span>
           </div>
 
-          <div role="group" aria-label="Tipo de operación" className="mx-[22px] grid grid-cols-2 gap-1 rounded-xl bg-[#262626] p-1">
+          <div role="group" aria-label={t.opType} className="mx-[22px] grid grid-cols-2 gap-1 rounded-xl bg-[#262626] p-1">
             <button type="button" onClick={() => setMode('sell')} aria-pressed={mode === 'sell'}
-              className={`h-10 rounded-[9px] text-sm transition-colors ${mode === 'sell' ? 'bg-white font-bold text-[#111111]' : 'font-semibold text-[#D4D5D6] hover:text-white'}`}
+              className={`h-10 rounded-[9px] text-sm transition-colors ${mode === 'sell' ? 'bg-[#ffffff] font-bold text-[#111111]' : 'font-semibold text-[#D4D5D6] hover:text-white'}`}
             >
-              Venta
+              {t.sale}
             </button>
             <button type="button" onClick={() => setMode('credito')} aria-pressed={mode === 'credito'}
               className={`h-10 rounded-[9px] text-sm transition-colors ${mode === 'credito' ? 'bg-[#FDBA74] font-bold text-[#111111]' : 'font-semibold text-[#D4D5D6] hover:text-white'}`}
             >
-              A crédito
+              {t.onCredit}
             </button>
           </div>
 
           {cart.length === 0 ? (
-            <p className="px-[22px] py-8 text-center text-sm text-[#B5B7B9]">Toca un producto para agregarlo</p>
+            <p className="px-[22px] py-8 text-center text-sm text-[#B5B7B9]">{t.tapProduct}</p>
           ) : (
             <ul className="mt-4 flex flex-col px-[22px]">
               {cart.map(({ product, quantity }) => (
                 <li key={product.id} className="flex items-center gap-3 border-b border-dashed border-[#3A3A3A] py-3.5">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{product.name}</p>
-                    <p className="font-admin-mono text-xs text-[#B5B7B9]">{money(product.price)} c/u</p>
+                    <p className="font-admin-mono text-xs text-[#B5B7B9]">{t.each(money(product.price))}</p>
                   </div>
                   <div className="flex items-center gap-1 rounded-[10px] bg-[#262626] p-0.5">
-                    <button type="button" aria-label={`Quitar un ${product.name}`} onClick={() => changeQty(product.id, -1)}
+                    <button type="button" aria-label={t.removeOne(product.name)} onClick={() => changeQty(product.id, -1)}
                       className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-white/10"
                     >
                       <Minus className="h-3.5 w-3.5" />
                     </button>
                     <span className="min-w-5 text-center font-admin-mono text-sm font-bold">{quantity}</span>
-                    <button type="button" aria-label={`Agregar un ${product.name}`} onClick={() => changeQty(product.id, 1)} disabled={quantity >= product.stock}
+                    <button type="button" aria-label={t.addOne(product.name)} onClick={() => changeQty(product.id, 1)} disabled={quantity >= product.stock}
                       className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-white/10 disabled:opacity-30"
                     >
                       <Plus className="h-3.5 w-3.5" />
@@ -660,16 +663,16 @@ function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pending
           <div className="flex flex-col gap-2.5 px-[22px] pt-[18px]">
             {mode === 'sell' ? (
               <>
-                <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[#B5B7B9]">Método de pago</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.06em] text-[#B5B7B9]">{t.paymentMethod}</p>
                 <MethodPicker value={method} onChange={setMethod} dark />
               </>
             ) : (
               <div className="relative flex flex-col gap-1.5">
-                <label htmlFor="credit-member" className="text-xs font-semibold uppercase tracking-[0.06em] text-[#B5B7B9]">Socio</label>
+                <label htmlFor="credit-member" className="text-xs font-semibold uppercase tracking-[0.06em] text-[#B5B7B9]">{t.member}</label>
                 <input
                   id="credit-member"
                   type="text"
-                  placeholder="Buscar socio…"
+                  placeholder={t.searchMember}
                   value={memberSearch}
                   onChange={e => { setMemberSearch(e.target.value); setMemberId('') }}
                   className="h-11 rounded-[10px] border border-[#3A3A3A] bg-[#1B1B1B] px-3.5 text-sm text-white outline-none placeholder:text-[#8A8C8E] focus:border-[#FDBA74]"
@@ -693,11 +696,11 @@ function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pending
                 {memberId && <p className="text-xs font-semibold text-[#FDBA74]">✓ {memberSearch}</p>}
               </div>
             )}
-            <label htmlFor="sale-notes" className="mt-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-[#B5B7B9]">Nota</label>
+            <label htmlFor="sale-notes" className="mt-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-[#B5B7B9]">{t.note}</label>
             <input
               id="sale-notes"
               type="text"
-              placeholder="Opcional"
+              placeholder={t.optional}
               value={notes}
               onChange={e => setNotes(e.target.value)}
               className="h-11 rounded-[10px] border border-[#3A3A3A] bg-[#1B1B1B] px-3.5 text-sm text-white outline-none placeholder:text-[#8A8C8E] focus:border-white"
@@ -707,7 +710,7 @@ function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pending
 
           <div className="mt-5 flex flex-col gap-3.5 border-t border-[#2E2E2E] px-[22px] pb-[22px] pt-5">
             <div className="flex items-baseline justify-between">
-              <span className="text-sm text-[#B5B7B9]">{mode === 'sell' ? 'Total' : 'Total a fiar'}</span>
+              <span className="text-sm text-[#B5B7B9]">{mode === 'sell' ? t.total : t.creditTotal}</span>
               <span className="font-admin-mono text-4xl font-bold tracking-[-0.03em]">{money(total)}</span>
             </div>
             {mode === 'sell' ? (
@@ -717,7 +720,7 @@ function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pending
                 onClick={handleSell}
                 className="h-14 rounded-[14px] bg-accent text-[17px] font-extrabold text-accent-foreground transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-40"
               >
-                {isPending ? 'Procesando…' : `Cobrar ${money(total)}`}
+                {isPending ? t.processing : t.charge(money(total))}
               </button>
             ) : (
               <button
@@ -726,7 +729,7 @@ function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pending
                 onClick={() => setShowConfirm(true)}
                 className="h-14 rounded-[14px] bg-[#FDBA74] text-[17px] font-extrabold text-[#111111] transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-40"
               >
-                {isPending ? 'Asignando…' : `Fiar ${money(total)}`}
+                {isPending ? t.assigning : t.giveCredit(money(total))}
               </button>
             )}
           </div>
@@ -736,9 +739,9 @@ function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pending
       <AlertDialog open={showConfirm} onOpenChange={open => { if (!open) setShowConfirm(false) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar crédito</AlertDialogTitle>
+            <AlertDialogTitle>{t.confirmCredit}</AlertDialogTitle>
             <AlertDialogDescription>
-              {memberSearch} — deuda pendiente, no se cobra ahora.
+              {t.creditDebt(memberSearch)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="px-6 pb-2 space-y-1.5">
@@ -749,16 +752,16 @@ function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pending
               </div>
             ))}
             <div className="flex justify-between text-sm font-black border-t pt-2">
-              <span>Total deuda</span>
+              <span>{t.debtTotal}</span>
               <span className="text-amber-600">{money(total)}</span>
             </div>
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={isPending}>{t.cancel}</AlertDialogCancel>
             <button onClick={confirmAssign} disabled={isPending}
               className="inline-flex items-center justify-center rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50 transition-all"
             >
-              {isPending ? 'Asignando…' : 'Confirmar crédito'}
+              {isPending ? t.assigning : t.confirmCredit}
             </button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -770,7 +773,7 @@ function SellTab({ gymSlug, products, lowStock, members, cut, dateParam, pending
 // ── Products Tab ────────────────────────────────────────────
 type ProductStatusFilter = 'all' | 'low' | 'inactive'
 
-function ProductsTab({ gymSlug, products, categories, canDelete }: { gymSlug: string; products: Product[]; categories: Category[]; canDelete: boolean }) {
+export function ProductsTab({ gymSlug, products, categories, canDelete }: { gymSlug: string; products: Product[]; categories: Category[]; canDelete: boolean }) {
   const router = useRouter()
   const [modalOpen, setModalOpen] = useState(false)
   const [editProduct, setEditProduct] = useState<Product | null>(null)
@@ -779,6 +782,7 @@ function ProductsTab({ gymSlug, products, categories, canDelete }: { gymSlug: st
   const [status, setStatus] = useState<ProductStatusFilter>('all')
   const [categoryId, setCategoryId] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const { t, money } = useStoreText()
 
   function handleSaved() {
     setModalOpen(false)
@@ -802,8 +806,7 @@ function ProductsTab({ gymSlug, products, categories, canDelete }: { gymSlug: st
       const result = await deleteProductAction(gymSlug, deleteTarget.id)
       setDeleteTarget(null)
       if (result.error) { toast.error(result.error); return }
-      toast.success('Producto eliminado')
-      router.refresh()
+      toast.success(t.productDeleted)
     })
   }
 
@@ -820,16 +823,16 @@ function ProductsTab({ gymSlug, products, categories, canDelete }: { gymSlug: st
   )
 
   const statusOptions: { id: ProductStatusFilter; label: string; count: number }[] = [
-    { id: 'all', label: 'Todos', count: products.length },
-    { id: 'low', label: 'Stock bajo', count: lowCount },
-    { id: 'inactive', label: 'Inactivos', count: inactiveCount },
+    { id: 'all', label: t.all, count: products.length },
+    { id: 'low', label: t.lowStockFilter, count: lowCount },
+    { id: 'inactive', label: t.inactiveFilter, count: inactiveCount },
   ]
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <SearchField label="Buscar producto" value={query} onChange={setQuery} placeholder="Buscar producto" />
-        <div role="group" aria-label="Filtrar por estado" className="flex gap-1 rounded-xl border border-zinc-200 bg-white p-1">
+        <SearchField label={t.searchProduct} value={query} onChange={setQuery} placeholder={t.searchProduct} />
+        <div role="group" aria-label={t.filterByStatus} className="flex gap-1 rounded-xl border border-zinc-200 bg-white p-1">
           {statusOptions.map(o => (
             <button key={o.id} type="button" onClick={() => setStatus(o.id)} aria-pressed={status === o.id}
               className={`h-10 rounded-[9px] px-3.5 text-[13px] transition-colors ${
@@ -846,13 +849,13 @@ function ProductsTab({ gymSlug, products, categories, canDelete }: { gymSlug: st
           className="flex h-12 items-center gap-2 rounded-xl bg-accent px-[18px] text-sm font-extrabold text-accent-foreground transition-opacity hover:opacity-90"
         >
           <Plus className="h-4 w-4" />
-          Nuevo producto
+          {t.newProduct}
         </button>
       </div>
 
       {categories.length > 0 && (
-        <div role="group" aria-label="Filtrar por categoría" className="flex flex-wrap gap-2">
-          <Chip active={!categoryId} onClick={() => setCategoryId(null)} count={products.length}>Todas</Chip>
+        <div role="group" aria-label={t.filterByCategory} className="flex flex-wrap gap-2">
+          <Chip active={!categoryId} onClick={() => setCategoryId(null)} count={products.length}>{t.allFem}</Chip>
           {categories.map(c => (
             <Chip key={c.id} active={categoryId === c.id} onClick={() => setCategoryId(c.id)} count={products.filter(p => p.categoryId === c.id).length}>{c.name}</Chip>
           ))}
@@ -862,7 +865,7 @@ function ProductsTab({ gymSlug, products, categories, canDelete }: { gymSlug: st
       <Dialog open={modalOpen} onOpenChange={open => { if (!open) closeModal() }}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>{editProduct ? 'Editar producto' : 'Nuevo producto'}</DialogTitle>
+            <DialogTitle>{editProduct ? t.editProduct : t.newProduct}</DialogTitle>
           </DialogHeader>
           <ProductForm
             gymSlug={gymSlug}
@@ -875,9 +878,9 @@ function ProductsTab({ gymSlug, products, categories, canDelete }: { gymSlug: st
       </Dialog>
 
       {products.length === 0 ? (
-        <EmptyState>No hay productos creados</EmptyState>
+        <EmptyState>{t.noProducts}</EmptyState>
       ) : visible.length === 0 ? (
-        <EmptyState icon={Search}>Ningún producto coincide con los filtros</EmptyState>
+        <EmptyState icon={Search}>{t.noProductFilterMatch}</EmptyState>
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
           {visible.map(p => {
@@ -901,13 +904,13 @@ function ProductsTab({ gymSlug, products, categories, canDelete }: { gymSlug: st
                     <span className={`shrink-0 rounded-md px-2 py-0.5 font-admin-mono text-[11px] font-bold ${
                       p.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-600'
                     }`}>
-                      {p.isActive ? 'Activo' : 'Inactivo'}
+                      {p.isActive ? t.active : t.inactive}
                     </span>
                   </div>
                   <div className="flex flex-wrap items-baseline gap-x-2.5">
                     <span className="font-admin-mono text-xl font-bold">{money(p.price)}</span>
                     <span className="text-xs text-zinc-500">
-                      {p.cost != null ? `costo ${money(p.cost)} · margen ${margin}%` : 'sin costo cargado'}
+                      {p.cost != null ? t.costMargin(money(p.cost), margin) : t.noCost}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -915,15 +918,15 @@ function ProductsTab({ gymSlug, products, categories, canDelete }: { gymSlug: st
                       <span className={`block h-1.5 rounded-full ${low ? 'bg-[#C2410C]' : 'bg-[#1fad9d]'}`} style={{ width: `${Math.round((p.stock / maxStock) * 100)}%` }} />
                     </span>
                     <span className={`font-admin-mono text-xs ${low ? 'font-bold text-amber-700' : 'text-zinc-600'}`}>
-                      {p.stock === 0 ? 'Sin stock' : low ? `Quedan ${p.stock}` : `${p.stock} en stock`}
+                      {p.stock === 0 ? t.outOfStock : low ? t.left(p.stock) : t.inStock(p.stock)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-zinc-500">{p._count.saleItems} vendidos</span>
+                    <span className="text-xs text-zinc-500">{t.soldCount(p._count.saleItems)}</span>
                     <span className="flex gap-1">
                       <button
                         type="button"
-                        aria-label={`Editar ${p.name}`}
+                        aria-label={t.edit(p.name)}
                         onClick={() => { setEditProduct(p); setModalOpen(true) }}
                         className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-zinc-200 text-zinc-600 transition-colors hover:border-zinc-300 hover:text-black"
                       >
@@ -932,7 +935,7 @@ function ProductsTab({ gymSlug, products, categories, canDelete }: { gymSlug: st
                       {canDelete && (
                         <button
                           type="button"
-                          aria-label={`Eliminar ${p.name}`}
+                          aria-label={t.delete(p.name)}
                           disabled={isPending}
                           onClick={() => setDeleteTarget({ id: p.id, name: p.name })}
                           className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-zinc-200 text-red-600 transition-colors hover:bg-red-50 disabled:opacity-40"
@@ -952,7 +955,7 @@ function ProductsTab({ gymSlug, products, categories, canDelete }: { gymSlug: st
             className="flex min-h-[150px] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-300 text-sm font-bold text-zinc-600 transition-colors hover:border-zinc-400 hover:text-zinc-900"
           >
             <Plus className="h-5 w-5" />
-            Agregar producto
+            {t.addProduct}
           </button>
         </div>
       )}
@@ -960,19 +963,19 @@ function ProductsTab({ gymSlug, products, categories, canDelete }: { gymSlug: st
       <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar producto?</AlertDialogTitle>
+            <AlertDialogTitle>{t.deleteProductTitle}</AlertDialogTitle>
             <AlertDialogDescription>
-              &ldquo;{deleteTarget?.name}&rdquo; será eliminado permanentemente. Esta acción no se puede deshacer.
+              {t.deleteProductBody(deleteTarget?.name ?? '')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={isPending}>{t.cancel}</AlertDialogCancel>
             <button
               onClick={confirmDelete}
               disabled={isPending}
               className="inline-flex items-center justify-center rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 transition-all"
             >
-              {isPending ? 'Eliminando…' : 'Eliminar'}
+              {isPending ? t.deleting : t.deleteBtn}
             </button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -991,6 +994,7 @@ function ProductForm({ gymSlug, product, categories, onSave, onCancel }: {
 }) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const { t } = useStoreText()
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -1013,7 +1017,7 @@ function ProductForm({ gymSlug, product, categories, onSave, onCancel }: {
         : await createProductAction(gymSlug, data)
 
       if (result.error) { setError(result.error); return }
-      toast.success(product ? 'Producto actualizado' : 'Producto creado')
+      toast.success(product ? t.productUpdated : t.productCreated)
       onSave()
     })
   }
@@ -1021,42 +1025,42 @@ function ProductForm({ gymSlug, product, categories, onSave, onCancel }: {
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <FormField label="Nombre *" name="name" defaultValue={product?.name} placeholder="Proteína whey" />
+          <FormField label={t.nameReq} name="name" defaultValue={product?.name} placeholder={t.namePlaceholder} />
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-zinc-600">Categoría</label>
+            <label className="text-xs font-semibold text-zinc-600">{t.category}</label>
             <select
               name="categoryId"
               defaultValue={product?.categoryId ?? ''}
               className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1fad9d]"
             >
-              <option value="">Sin categoría</option>
+              <option value="">{t.noCategory}</option>
               {categories.map(c => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
           </div>
         </div>
-        <FormField label="Descripción" name="description" defaultValue={product?.description ?? ''} placeholder="Descripción opcional" fieldType="text" />
-        <FormField label="URL de imagen" name="imageUrl" defaultValue={product?.imageUrl ?? ''} placeholder="https://..." fieldType="url" />
+        <FormField label={t.description} name="description" defaultValue={product?.description ?? ''} placeholder={t.descriptionPlaceholder} fieldType="text" />
+        <FormField label={t.imageUrl} name="imageUrl" defaultValue={product?.imageUrl ?? ''} placeholder="https://..." fieldType="url" />
         <div className="grid grid-cols-3 gap-3">
-          <FormField label="Precio *" name="price" type="number" defaultValue={String(product?.price ?? '')} placeholder="500" min="0.01" step="0.01" fieldType="price" />
-          <FormField label="Costo" name="cost" type="number" defaultValue={String(product?.cost ?? '')} placeholder="300" min="0" step="0.01" fieldType="price" />
-          <FormField label="Stock *" name="stock" type="number" defaultValue={String(product?.stock ?? '0')} placeholder="10" min="0" step="1" />
+          <FormField label={t.priceReq} name="price" type="number" defaultValue={String(product?.price ?? '')} placeholder="500" min="0.01" step="0.01" fieldType="price" />
+          <FormField label={t.cost} name="cost" type="number" defaultValue={String(product?.cost ?? '')} placeholder="300" min="0" step="0.01" fieldType="price" />
+          <FormField label={t.stockReq} name="stock" type="number" defaultValue={String(product?.stock ?? '0')} placeholder="10" min="0" step="1" />
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-sm font-semibold">Estado:</label>
+          <label className="text-sm font-semibold">{t.statusLabel}</label>
           <select name="isActive" defaultValue={String(product?.isActive ?? true)} className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm">
-            <option value="true">Activo</option>
-            <option value="false">Inactivo</option>
+            <option value="true">{t.active}</option>
+            <option value="false">{t.inactive}</option>
           </select>
         </div>
         {error && <p className="text-xs text-red-600 font-medium">{error}</p>}
         <div className="flex gap-2 pt-1">
           <button type="submit" disabled={isPending} className="rounded-xl bg-black px-5 py-2 text-sm font-bold text-white hover:bg-zinc-800 disabled:opacity-50 transition-all">
-            {isPending ? 'Guardando…' : 'Guardar'}
+            {isPending ? t.saving : t.save}
           </button>
           <button type="button" onClick={onCancel} className="rounded-xl border border-zinc-200 px-5 py-2 text-sm font-semibold text-zinc-600 hover:border-zinc-300 transition-all">
-            Cancelar
+            {t.cancel}
           </button>
         </div>
       </form>
@@ -1080,7 +1084,7 @@ function FormField({ label, name, type = 'text', defaultValue, placeholder, min,
 }
 
 // ── Categories Tab ──────────────────────────────────────────
-function CategoriesTab({ gymSlug, categories, products, monthlyCut, monthParam, canDelete }: {
+export function CategoriesTab({ gymSlug, categories, products, monthlyCut, monthParam, canDelete }: {
   gymSlug: string
   categories: Category[]
   products: Product[]
@@ -1092,6 +1096,7 @@ function CategoriesTab({ gymSlug, categories, products, monthlyCut, monthParam, 
   const [modalOpen, setModalOpen] = useState(false)
   const [editCategory, setEditCategory] = useState<Category | null>(null)
   const [isPending, startTransition] = useTransition()
+  const { t, money, monthName } = useStoreText()
 
   function handleSaved() {
     setModalOpen(false)
@@ -1108,8 +1113,7 @@ function CategoriesTab({ gymSlug, categories, products, monthlyCut, monthParam, 
     startTransition(async () => {
       const result = await deleteCategoryAction(gymSlug, id)
       if (result.error) { toast.error(result.error); return }
-      toast.success('Categoría eliminada')
-      router.refresh()
+      toast.success(t.categoryDeleted)
     })
   }
 
@@ -1131,13 +1135,13 @@ function CategoriesTab({ gymSlug, categories, products, monthlyCut, monthParam, 
 
   return (
     <div className="flex flex-wrap items-start gap-6">
-      <section aria-label="Categorías" className="min-w-0 flex-[999_1_560px] space-y-4">
+      <section aria-label={t.categories} className="min-w-0 flex-[999_1_560px] space-y-4">
         <p className="text-sm text-zinc-500">
-          {plural(categories.length, 'categoría', 'categorías')} · {plural(products.length, 'producto', 'productos')} · ventas de {monthName(monthParam)}
+          {t.categoriesCount(categories.length)} · {t.products(products.length)} · {t.salesOf(monthName(monthParam))}
         </p>
 
         {categories.length === 0 ? (
-          <EmptyState icon={Tag}>No hay categorías creadas</EmptyState>
+          <EmptyState icon={Tag}>{t.noCategories}</EmptyState>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3">
             {categories.map(c => {
@@ -1158,19 +1162,19 @@ function CategoriesTab({ gymSlug, categories, products, monthlyCut, monthParam, 
                     <span className="absolute right-3 top-3 flex gap-1">
                       <button
                         type="button"
-                        aria-label={`Editar ${c.name}`}
+                        aria-label={t.edit(c.name)}
                         onClick={() => { setEditCategory(c); setModalOpen(true) }}
-                        className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-white/85 text-[#111111] transition-colors hover:bg-white"
+                        className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-white/85 text-[#111111] transition-colors hover:bg-[#ffffff]"
                       >
                         <Edit2 className="h-3.5 w-3.5" />
                       </button>
                       {canDelete && (
                         <button
                           type="button"
-                          aria-label={`Eliminar ${c.name}`}
+                          aria-label={t.delete(c.name)}
                           disabled={isPending}
                           onClick={() => handleDelete(c.id)}
-                          className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-white/85 text-[#9A3412] transition-colors hover:bg-white disabled:opacity-40"
+                          className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-white/85 text-[#9A3412] transition-colors hover:bg-[#ffffff] disabled:opacity-40"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -1180,11 +1184,11 @@ function CategoriesTab({ gymSlug, categories, products, monthlyCut, monthParam, 
                   <div className="flex flex-col gap-3 p-4">
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="font-admin-mono text-[22px] font-bold">{money(revenue)}</span>
-                      <span className="text-[13px] text-zinc-500">{share}% de la tienda</span>
+                      <span className="text-[13px] text-zinc-500">{t.storeShare(share)}</span>
                     </div>
-                    <ShareBar pct={share} title={`${c.name}: ${share}% de las ventas del mes`} />
+                    <ShareBar pct={share} title={t.monthShare(c.name, share)} />
                     <p className="text-[13px] text-zinc-600">
-                      {items.length === 0 ? 'Sin productos' : `${plural(items.length, 'producto', 'productos')} · ${names}`}
+                      {items.length === 0 ? t.noProductsInCategory : `${t.products(items.length)} · ${names}`}
                     </p>
                   </div>
                 </article>
@@ -1199,7 +1203,7 @@ function CategoriesTab({ gymSlug, categories, products, monthlyCut, monthParam, 
       <Dialog open={modalOpen} onOpenChange={open => { if (!open) closeModal() }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Editar categoría</DialogTitle>
+            <DialogTitle>{t.editCategory}</DialogTitle>
           </DialogHeader>
           <CategoryForm
             gymSlug={gymSlug}
@@ -1214,11 +1218,11 @@ function CategoriesTab({ gymSlug, categories, products, monthlyCut, monthParam, 
 }
 
 function NewCategoryPanel({ gymSlug }: { gymSlug: string }) {
-  const router = useRouter()
   const [name, setName] = useState('')
   const [imageUrl, setImageUrl] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const { t } = useStoreText()
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -1226,10 +1230,9 @@ function NewCategoryPanel({ gymSlug }: { gymSlug: string }) {
     startTransition(async () => {
       const result = await createCategoryAction(gymSlug, { name, imageUrl })
       if (result.error) { setError(result.error); return }
-      toast.success('Categoría creada')
+      toast.success(t.categoryCreated)
       setName('')
       setImageUrl('')
-      router.refresh()
     })
   }
 
@@ -1239,30 +1242,30 @@ function NewCategoryPanel({ gymSlug }: { gymSlug: string }) {
   return (
     <aside aria-labelledby="new-category" className="max-w-full flex-[1_1_340px] rounded-[20px] bg-[#111111] p-[22px] text-white ring-1 ring-white/10">
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <h2 id="new-category" className="text-xl font-extrabold">Nueva categoría</h2>
+        <h2 id="new-category" className="text-xl font-extrabold">{t.newCategory}</h2>
         <div className="relative flex h-[140px] flex-col items-center justify-center gap-1.5 overflow-hidden rounded-[14px] border-2 border-dashed border-[#3A3A3A] text-[13px] text-[#B5B7B9]">
           {preview ? (
             <img src={preview} alt="" className="absolute inset-0 h-full w-full object-cover" />
           ) : (
             <>
               <ImagePlus className="h-6 w-6" />
-              Vista previa de la imagen
+              {t.imagePreview}
             </>
           )}
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="new-category-name" className="text-xs font-semibold uppercase tracking-[0.06em] text-[#B5B7B9]">Nombre</label>
-          <input id="new-category-name" required value={name} onChange={e => setName(e.target.value)} placeholder="Suplementos" className={inputCls} {...createHandlers('text')} />
+          <label htmlFor="new-category-name" className="text-xs font-semibold uppercase tracking-[0.06em] text-[#B5B7B9]">{t.name}</label>
+          <input id="new-category-name" required value={name} onChange={e => setName(e.target.value)} placeholder={t.categoryPlaceholder} className={inputCls} {...createHandlers('text')} />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="new-category-image" className="text-xs font-semibold uppercase tracking-[0.06em] text-[#B5B7B9]">URL de imagen</label>
+          <label htmlFor="new-category-image" className="text-xs font-semibold uppercase tracking-[0.06em] text-[#B5B7B9]">{t.imageUrl}</label>
           <input id="new-category-image" type="url" value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://..." className={inputCls} {...createHandlers('url')} />
         </div>
         {error && <p className="text-xs font-medium text-[#FCA5A5]">{error}</p>}
         <button type="submit" disabled={isPending || !name.trim()}
           className="h-[52px] rounded-[14px] bg-accent text-[15px] font-extrabold text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
         >
-          {isPending ? 'Creando…' : 'Crear categoría'}
+          {isPending ? t.creating : t.createCategory}
         </button>
       </form>
     </aside>
@@ -1278,6 +1281,7 @@ function CategoryForm({ gymSlug, category, onSave, onCancel }: {
 }) {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const { t } = useStoreText()
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -1294,7 +1298,7 @@ function CategoryForm({ gymSlug, category, onSave, onCancel }: {
         : await createCategoryAction(gymSlug, data)
 
       if (result.error) { setError(result.error); return }
-      toast.success(category ? 'Categoría actualizada' : 'Categoría creada')
+      toast.success(category ? t.categoryUpdated : t.categoryCreated)
       onSave()
     })
   }
@@ -1302,16 +1306,16 @@ function CategoryForm({ gymSlug, category, onSave, onCancel }: {
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <FormField label="Nombre *" name="name" defaultValue={category?.name} placeholder="Suplementos" />
-        <FormField label="URL de imagen" name="imageUrl" defaultValue={category?.imageUrl ?? ''} placeholder="https://..." fieldType="url" />
+        <FormField label={t.nameReq} name="name" defaultValue={category?.name} placeholder={t.categoryPlaceholder} />
+        <FormField label={t.imageUrl} name="imageUrl" defaultValue={category?.imageUrl ?? ''} placeholder="https://..." fieldType="url" />
       </div>
       {error && <p className="text-xs text-red-600 font-medium">{error}</p>}
       <div className="flex gap-2 pt-1">
         <button type="submit" disabled={isPending} className="rounded-xl bg-black px-5 py-2 text-sm font-bold text-white hover:bg-zinc-800 disabled:opacity-50 transition-all">
-          {isPending ? 'Guardando…' : 'Guardar'}
+          {isPending ? t.saving : t.save}
         </button>
         <button type="button" onClick={onCancel} className="rounded-xl border border-zinc-200 px-5 py-2 text-sm font-semibold text-zinc-600 hover:border-zinc-300 transition-all">
-          Cancelar
+          {t.cancel}
         </button>
       </div>
     </form>
@@ -1332,7 +1336,6 @@ function CreditsTab({ gymSlug, pendingCredits, onNavigate }: {
   pendingCredits: PendingCredit[]
   onNavigate: (t: TabId) => void
 }) {
-  const router = useRouter()
   const [search, setSearch] = useState('')
   const [onlyOld, setOnlyOld] = useState(false)
   const [openId, setOpenId] = useState<string | null>(null)
@@ -1340,6 +1343,7 @@ function CreditsTab({ gymSlug, pendingCredits, onNavigate }: {
   const [payTarget, setPayTarget] = useState<{ creditIds: string[]; memberName: string; total: number; memberId: string } | null>(null)
   const [payMethod, setPayMethod] = useState('CASH')
   const [isPending, startTransition] = useTransition()
+  const { t, money, ageLabel, intl } = useStoreText()
 
   const { groups, aging, grandTotal } = useMemo(() => {
     const now = new Date().getTime()
@@ -1364,12 +1368,12 @@ function CreditsTab({ gymSlug, pendingCredits, onNavigate }: {
       groups: [...map.values()].sort((a, b) => b.oldestDays - a.oldestDays),
       grandTotal: total,
       aging: [
-        { key: 'today', label: 'Hoy', total: buckets.today, pct: pct(buckets.today), color: '#FFFFFF' },
-        { key: 'week', label: `1 a ${OLD_CREDIT_DAYS} días`, total: buckets.week, pct: pct(buckets.week), color: '#5EEAD4' },
-        { key: 'old', label: `Más de ${OLD_CREDIT_DAYS} días`, total: buckets.old, pct: pct(buckets.old), color: '#FDBA74' },
+        { key: 'today', label: t.today, total: buckets.today, pct: pct(buckets.today), color: '#FFFFFF' },
+        { key: 'week', label: t.oneToDays(OLD_CREDIT_DAYS), total: buckets.week, pct: pct(buckets.week), color: '#5EEAD4' },
+        { key: 'old', label: t.moreThanDays(OLD_CREDIT_DAYS), total: buckets.old, pct: pct(buckets.old), color: '#FDBA74' },
       ],
     }
-  }, [pendingCredits])
+  }, [pendingCredits, t])
 
   const oldCount = groups.filter(g => g.oldestDays > OLD_CREDIT_DAYS).length
   const q = search.trim().toLowerCase()
@@ -1380,16 +1384,15 @@ function CreditsTab({ gymSlug, pendingCredits, onNavigate }: {
       const result = await payCreditsAction(gymSlug, creditIds, method, memberId)
       setPayTarget(null)
       if (result.error) { toast.error(result.error); return }
-      toast.success('Créditos cobrados')
-      router.refresh()
+      toast.success(t.creditsPaid)
     })
   }
 
   if (groups.length === 0) {
     return (
       <EmptyState icon={CreditCard}>
-        No hay créditos pendientes
-        <button type="button" onClick={() => onNavigate('sell')} className="mt-2 text-sm font-bold text-[#0e7a70] hover:underline">Fiar productos</button>
+        {t.noCredits}
+        <button type="button" onClick={() => onNavigate('sell')} className="mt-2 text-sm font-bold text-[#0e7a70] hover:underline">{t.giveProducts}</button>
       </EmptyState>
     )
   }
@@ -1399,18 +1402,18 @@ function CreditsTab({ gymSlug, pendingCredits, onNavigate }: {
   return (
     <div className="space-y-6">
       <CashBand
-        label="Resumen de créditos"
-        eyebrow="Por cobrar"
+        label={t.creditsSummary}
+        eyebrow={t.toCollect}
         total={grandTotal}
-        subtitle={`${plural(groups.length, 'socio', 'socios')} · ${plural(pendingCredits.length, 'producto fiado', 'productos fiados')} · el más antiguo, ${oldest === 0 ? 'de hoy' : `hace ${plural(oldest, 'día', 'días')}`}`}
+        subtitle={t.creditsSubtitle(t.members(groups.length), t.creditItems(pendingCredits.length), oldest === 0 ? t.fromToday : t.daysAgo(t.days(oldest)))}
         bars={aging}
       />
 
       <div className="flex flex-wrap items-center gap-3">
-        <SearchField label="Buscar socio" value={search} onChange={setSearch} placeholder="Buscar socio" />
-        <div role="group" aria-label="Filtrar" className="flex gap-2">
-          <Chip active={!onlyOld} onClick={() => setOnlyOld(false)} count={groups.length}>Todos</Chip>
-          <Chip active={onlyOld} onClick={() => setOnlyOld(true)} count={oldCount}>Más de {OLD_CREDIT_DAYS} días</Chip>
+        <SearchField label={t.searchMemberLabel} value={search} onChange={setSearch} placeholder={t.searchMemberLabel} />
+        <div role="group" aria-label={t.filter} className="flex gap-2">
+          <Chip active={!onlyOld} onClick={() => setOnlyOld(false)} count={groups.length}>{t.all}</Chip>
+          <Chip active={onlyOld} onClick={() => setOnlyOld(true)} count={oldCount}>{t.moreThanDays(OLD_CREDIT_DAYS)}</Chip>
         </div>
         <button
           type="button"
@@ -1418,12 +1421,12 @@ function CreditsTab({ gymSlug, pendingCredits, onNavigate }: {
           className="flex h-12 items-center gap-2 rounded-xl bg-black px-[18px] text-sm font-bold text-white transition-colors hover:bg-zinc-800"
         >
           <Plus className="h-4 w-4" />
-          Fiar productos
+          {t.giveProducts}
         </button>
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState icon={Search}>Ningún socio coincide con la búsqueda</EmptyState>
+        <EmptyState icon={Search}>{t.noMemberMatch}</EmptyState>
       ) : (
         <ul className="flex flex-col gap-2.5">
           {filtered.map(g => {
@@ -1441,7 +1444,7 @@ function CreditsTab({ gymSlug, pendingCredits, onNavigate }: {
                     <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-[13px] font-extrabold">{initials(g.name)}</span>
                     <span className="min-w-0">
                       <span className="block truncate text-[15px] font-bold">{g.name}</span>
-                      <span className="block text-[13px] text-zinc-500">{plural(g.items.length, 'producto pendiente', 'productos pendientes')}</span>
+                      <span className="block text-[13px] text-zinc-500">{t.pendingItems(g.items.length)}</span>
                     </span>
                     <span className={`ml-auto shrink-0 rounded-md px-2 py-1 font-admin-mono text-[11px] font-bold ${old ? 'bg-[#FDBA74] text-[#111111]' : 'bg-zinc-100 text-zinc-900'}`}>
                       {ageLabel(g.oldestDays)}
@@ -1453,7 +1456,7 @@ function CreditsTab({ gymSlug, pendingCredits, onNavigate }: {
                     onClick={() => setPayTarget({ creditIds: g.items.map(c => c.id), memberName: g.name, total: g.total, memberId: g.memberId })}
                     className="h-11 rounded-xl border border-current px-4 text-sm font-bold transition-colors hover:bg-zinc-50"
                   >
-                    Cobrar todo
+                    {t.chargeAll}
                   </button>
                 </div>
 
@@ -1466,20 +1469,20 @@ function CreditsTab({ gymSlug, pendingCredits, onNavigate }: {
                             {credit.product.name} <span className="font-admin-mono font-medium text-zinc-500">×{credit.quantity}</span>
                             {credit.notes && <span className="block text-xs font-normal italic text-zinc-500">{credit.notes}</span>}
                           </span>
-                          <span className="text-[13px] text-zinc-500">{new Date(credit.createdAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}</span>
+                          <span className="text-[13px] text-zinc-500">{new Date(credit.createdAt).toLocaleDateString(intl, { day: 'numeric', month: 'short' })}</span>
                           <span className="w-20 text-right font-admin-mono text-sm font-bold">{money(credit.unitPrice * credit.quantity)}</span>
                           <button
                             type="button"
                             onClick={() => setPayTarget({ creditIds: [credit.id], memberName: g.name, total: credit.unitPrice * credit.quantity, memberId: g.memberId })}
                             className="h-9 rounded-[10px] border border-zinc-200 bg-white px-3 text-[13px] font-semibold text-zinc-600 transition-colors hover:border-zinc-300"
                           >
-                            Cobrar
+                            {t.chargeOne}
                           </button>
                         </li>
                       ))}
                     </ul>
                     <div className="flex flex-wrap items-center justify-end gap-2.5 px-[18px] py-3.5">
-                      <span className="mr-auto text-[13px] text-zinc-500 sm:pl-[54px]">Cobrar todo con</span>
+                      <span className="mr-auto text-[13px] text-zinc-500 sm:pl-[54px]">{t.chargeAllWith}</span>
                       <div className="w-full sm:w-auto sm:min-w-[280px]">
                         <MethodPicker value={inlineMethod} onChange={setInlineMethod} />
                       </div>
@@ -1489,7 +1492,7 @@ function CreditsTab({ gymSlug, pendingCredits, onNavigate }: {
                         onClick={() => pay(g.items.map(c => c.id), inlineMethod, g.memberId)}
                         className="h-11 rounded-xl bg-accent px-[18px] text-sm font-extrabold text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
                       >
-                        {isPending ? 'Procesando…' : `Cobrar ${money(g.total)}`}
+                        {isPending ? t.processing : t.charge(money(g.total))}
                       </button>
                     </div>
                   </div>
@@ -1503,21 +1506,21 @@ function CreditsTab({ gymSlug, pendingCredits, onNavigate }: {
       <AlertDialog open={!!payTarget} onOpenChange={open => { if (!open) setPayTarget(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cobrar crédito</AlertDialogTitle>
+            <AlertDialogTitle>{t.chargeCredit}</AlertDialogTitle>
             <AlertDialogDescription>
               {payTarget?.memberName} — {money(payTarget?.total ?? 0)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="px-6 pb-2">
-            <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Método de pago</p>
+            <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">{t.paymentMethod}</p>
             <MethodPicker value={payMethod} onChange={setPayMethod} />
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={isPending}>{t.cancel}</AlertDialogCancel>
             <button onClick={() => payTarget && pay(payTarget.creditIds, payMethod, payTarget.memberId)} disabled={isPending}
               className="inline-flex items-center justify-center rounded-xl bg-[#1fad9d] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0e7a70] disabled:opacity-50 transition-all"
             >
-              {isPending ? 'Procesando…' : `Cobrar ${money(payTarget?.total ?? 0)}`}
+              {isPending ? t.processing : t.charge(money(payTarget?.total ?? 0))}
             </button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1528,17 +1531,18 @@ function CreditsTab({ gymSlug, pendingCredits, onNavigate }: {
 
 // ── Cut Tabs ────────────────────────────────────────────────
 function PeriodStepper({ type, value, onChange }: { type: 'date' | 'month'; value: string; onChange: (v: string) => void }) {
+  const { t } = useStoreText()
   const now = new Date()
   const max = type === 'date' ? localISODate(now) : localISODate(now).slice(0, 7)
   const shift = (d: number) => (type === 'date' ? shiftDate(value, d) : shiftMonth(value, d))
-  const unit = type === 'date' ? 'Día' : 'Mes'
+  const unit = type === 'date' ? t.day : t.month
   const stepCls = 'flex h-11 w-11 items-center justify-center rounded-xl border border-zinc-200 bg-white transition-colors hover:border-zinc-300 disabled:opacity-40'
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <button type="button" aria-label={`${unit} anterior`} onClick={() => onChange(shift(-1))} className={stepCls}>
+      <button type="button" aria-label={t.prev(unit)} onClick={() => onChange(shift(-1))} className={stepCls}>
         <ChevronLeft className="h-[18px] w-[18px]" />
       </button>
-      <label className="sr-only" htmlFor={`period-${type}`}>{type === 'date' ? 'Fecha del corte' : 'Mes del corte'}</label>
+      <label className="sr-only" htmlFor={`period-${type}`}>{type === 'date' ? t.cutDate : t.cutMonth}</label>
       <input
         id={`period-${type}`}
         type={type}
@@ -1547,12 +1551,12 @@ function PeriodStepper({ type, value, onChange }: { type: 'date' | 'month'; valu
         onChange={e => { if (e.target.value) onChange(e.target.value) }}
         className="h-11 rounded-xl border border-zinc-200 bg-white px-3.5 text-[15px] font-semibold focus:outline-none focus:ring-2 focus:ring-[#1fad9d]"
       />
-      <button type="button" aria-label={`${unit} siguiente`} onClick={() => onChange(shift(1))} disabled={value >= max} className={stepCls}>
+      <button type="button" aria-label={t.next(unit)} onClick={() => onChange(shift(1))} disabled={value >= max} className={stepCls}>
         <ChevronRight className="h-[18px] w-[18px]" />
       </button>
       {value !== max && (
         <button type="button" onClick={() => onChange(max)} className="h-11 rounded-xl px-3.5 text-sm font-bold text-[#0e7a70] hover:bg-zinc-100">
-          {type === 'date' ? 'Hoy' : 'Este mes'}
+          {type === 'date' ? t.today : t.thisMonth}
         </button>
       )}
     </div>
@@ -1560,10 +1564,10 @@ function PeriodStepper({ type, value, onChange }: { type: 'date' | 'month'; valu
 }
 
 function SalesPanel({ sales, gymSlug, canDelete, showDate }: { sales: Sale[]; gymSlug: string; canDelete: boolean; showDate?: boolean }) {
-  const router = useRouter()
   const [expanded, setExpanded] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Sale | null>(null)
   const [isPending, startTransition] = useTransition()
+  const { t, tc, money, intl } = useStoreText()
 
   function confirmDeleteSale() {
     if (!deleteTarget) return
@@ -1571,8 +1575,7 @@ function SalesPanel({ sales, gymSlug, canDelete, showDate }: { sales: Sale[]; gy
       const result = await deleteSaleAction(gymSlug, deleteTarget.id)
       setDeleteTarget(null)
       if (result.error) { toast.error(result.error); return }
-      toast.success('Venta eliminada y stock restaurado')
-      router.refresh()
+      toast.success(t.saleDeleted)
     })
   }
 
@@ -1581,25 +1584,25 @@ function SalesPanel({ sales, gymSlug, canDelete, showDate }: { sales: Sale[]; gy
 
   return (
     <Panel
-      title="Detalle de ventas"
+      title={t.salesDetail}
       action={sorted.length > 8 && (
         <button type="button" onClick={() => setExpanded(e => !e)} className="text-[13px] font-bold text-[#0e7a70] hover:underline">
-          {expanded ? 'Ver menos' : `Ver las ${sorted.length}`}
+          {expanded ? t.seeLess : t.seeAll(sorted.length)}
         </button>
       )}
     >
       <ul className="px-5 pb-2">
         {shown.map(sale => {
           const d = new Date(sale.createdAt)
-          const time = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
-          const when = showDate ? `${d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })} ${time}` : time
+          const time = d.toLocaleTimeString(intl, { hour: '2-digit', minute: '2-digit' })
+          const when = showDate ? `${d.toLocaleDateString(intl, { day: '2-digit', month: '2-digit' })} ${time}` : time
           return (
             <li key={sale.id} className="flex items-center gap-3 border-b border-dashed border-zinc-200 py-2.5 last:border-0">
               <span className="shrink-0 font-admin-mono text-[13px] text-zinc-500">{when}</span>
               <span className="min-w-0 flex-1">
                 <span className="block text-sm">{sale.items.map(i => `${i.product.name} ×${i.quantity}`).join(', ')}</span>
                 <span className="block text-xs text-zinc-500">
-                  {METHOD_LABELS[sale.method] ?? sale.method}
+                  {tc.methods[sale.method] ?? sale.method}
                   {sale.notes && <span className="italic"> — {sale.notes}</span>}
                 </span>
               </span>
@@ -1607,7 +1610,7 @@ function SalesPanel({ sales, gymSlug, canDelete, showDate }: { sales: Sale[]; gy
               {canDelete && (
                 <button
                   type="button"
-                  aria-label={`Anular venta de las ${time}`}
+                  aria-label={t.voidSaleAt(time)}
                   disabled={isPending}
                   onClick={() => setDeleteTarget(sale)}
                   className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-red-600 transition-colors hover:bg-red-50 disabled:opacity-40"
@@ -1623,19 +1626,19 @@ function SalesPanel({ sales, gymSlug, canDelete, showDate }: { sales: Sale[]; gy
       <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Anular venta?</AlertDialogTitle>
+            <AlertDialogTitle>{t.voidSaleTitle}</AlertDialogTitle>
             <AlertDialogDescription>
-              Se eliminará la venta de {money(deleteTarget?.total ?? 0)} y se restaurará el stock de los productos. Esta acción no se puede deshacer.
+              {t.voidSaleBody(money(deleteTarget?.total ?? 0))}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={isPending}>{t.cancel}</AlertDialogCancel>
             <button
               onClick={confirmDeleteSale}
               disabled={isPending}
               className="inline-flex items-center justify-center rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 transition-all"
             >
-              {isPending ? 'Anulando…' : 'Anular venta'}
+              {isPending ? t.voiding : t.voidSale}
             </button>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1645,13 +1648,14 @@ function SalesPanel({ sales, gymSlug, canDelete, showDate }: { sales: Sale[]; gy
 }
 
 function ProductBreakdown({ title, rows, limit }: { title: string; rows: CutSummary['byProduct']; limit?: number }) {
+  const { t, money } = useStoreText()
   const sorted = [...rows].sort((a, b) => b.total - a.total).slice(0, limit)
   const max = sorted[0]?.total ?? 0
   return (
     <Panel title={title}>
       <ol className="px-5 pb-4 pt-2">
         {sorted.map((p, i) => (
-          <li key={`${p.name}-${i}`} title={`${p.name}: ${p.quantity} unidades, ${money(p.total)}`}
+          <li key={`${p.name}-${i}`} title={t.unitsTotal(p.name, p.quantity, money(p.total))}
             className="grid grid-cols-[minmax(0,1fr)_56px_88px] items-center gap-3 border-b border-dashed border-zinc-200 py-2.5 last:border-0"
           >
             <span className="flex min-w-0 flex-col gap-1.5">
@@ -1668,6 +1672,7 @@ function ProductBreakdown({ title, rows, limit }: { title: string; rows: CutSumm
 }
 
 function CreditsInPeriod({ credits, title, onNavigate }: { credits: CutSummary['credits']; title: string; onNavigate: (t: TabId) => void }) {
+  const { t, money } = useStoreText()
   const top = [...credits.byMember].sort((a, b) => b.total - a.total)
   return (
     <section className="flex min-w-0 flex-col gap-3 rounded-[18px] border border-amber-200 bg-amber-50 px-5 py-[18px]">
@@ -1676,7 +1681,7 @@ function CreditsInPeriod({ credits, title, onNavigate }: { credits: CutSummary['
         <span className="font-admin-mono text-[22px] font-bold text-amber-900">{money(credits.total)}</span>
       </div>
       <p className="text-[13px] text-amber-800">
-        {plural(credits.count, 'producto', 'productos')} · {plural(credits.byMember.length, 'socio', 'socios')} · no entra en el total de caja hasta que se cobra
+        {t.creditsNote(t.products(credits.count), t.members(credits.byMember.length))}
       </p>
       {top.length > 0 && (
         <ul>
@@ -1689,7 +1694,7 @@ function CreditsInPeriod({ credits, title, onNavigate }: { credits: CutSummary['
         </ul>
       )}
       <button type="button" onClick={() => onNavigate('credits')} className="self-start text-[13px] font-bold text-amber-900 hover:underline">
-        Ver créditos
+        {t.seeCredits}
       </button>
     </section>
   )
@@ -1699,6 +1704,8 @@ function DailyCutTab({ cut, dateParam, gymSlug, canDelete, onNavigate }: {
   cut: CutSummary | null; dateParam: string; gymSlug: string; canDelete: boolean; onNavigate: (t: TabId) => void
 }) {
   const router = useRouter()
+  const text = useStoreText()
+  const { t, money, longDate } = text
   const isToday = dateParam === localISODate(new Date())
   const salesCount = cut?.salesCount ?? 0
   const units = cut?.byProduct.reduce((s, p) => s + p.quantity, 0) ?? 0
@@ -1710,27 +1717,27 @@ function DailyCutTab({ cut, dateParam, gymSlug, canDelete, onNavigate }: {
       <PeriodStepper type="date" value={dateParam} onChange={v => router.push(`?tab=daily&date=${v}`)} />
 
       <CashBand
-        label="Total del día"
-        eyebrow={`${longDate(dateParam)}${isToday ? ' · en curso' : ''}`}
+        label={t.dayTotal}
+        eyebrow={`${longDate(dateParam)}${isToday ? t.inProgress : ''}`}
         total={cut?.total ?? 0}
-        subtitle={`${plural(salesCount, 'venta', 'ventas')} · ${plural(units, 'unidad', 'unidades')} · ticket promedio ${money(average)}`}
-        bars={methodBars(cut, true)}
-        emptyBars="Sin ventas en este día"
-        actions={<BandButton onClick={() => window.print()}><Printer className="h-4 w-4" />Imprimir</BandButton>}
+        subtitle={t.daySubtitle(t.sales(salesCount), t.units(units), money(average))}
+        bars={methodBars(cut, text, true)}
+        emptyBars={t.noSalesDay}
+        actions={<BandButton onClick={() => window.print()}><Printer className="h-4 w-4" />{t.print}</BandButton>}
       />
 
       {salesCount === 0 && !hasCredits ? (
-        <EmptyState icon={Calendar}>Sin movimientos en este día</EmptyState>
+        <EmptyState icon={Calendar}>{t.noMovesDay}</EmptyState>
       ) : (
         <div className="flex flex-wrap items-start gap-6">
           {(cut?.byProduct.length ?? 0) > 0 && (
             <div className="min-w-0 flex-[1_1_420px]">
-              <ProductBreakdown title="Por producto" rows={cut!.byProduct} />
+              <ProductBreakdown title={t.byProduct} rows={cut!.byProduct} />
             </div>
           )}
           <div className="flex min-w-0 flex-[1_1_420px] flex-col gap-4">
             {(cut?.sales.length ?? 0) > 0 && <SalesPanel sales={cut!.sales} gymSlug={gymSlug} canDelete={canDelete} />}
-            {hasCredits && <CreditsInPeriod credits={cut!.credits} title="Fiado este día" onNavigate={onNavigate} />}
+            {hasCredits && <CreditsInPeriod credits={cut!.credits} title={t.creditThisDay} onNavigate={onNavigate} />}
           </div>
         </div>
       )}
@@ -1742,6 +1749,8 @@ function MonthlyCutTab({ cut, monthParam, gymSlug, canDelete, onNavigate }: {
   cut: CutSummary | null; monthParam: string; gymSlug: string; canDelete: boolean; onNavigate: (t: TabId) => void
 }) {
   const router = useRouter()
+  const text = useStoreText()
+  const { t, money, monthName } = text
   const [y, m] = monthParam.split('-').map(Number)
   const daysInMonth = new Date(y, m, 0).getDate()
   const now = new Date()
@@ -1759,28 +1768,28 @@ function MonthlyCutTab({ cut, monthParam, gymSlug, canDelete, onNavigate }: {
       <PeriodStepper type="month" value={monthParam} onChange={v => router.push(`?tab=monthly&month=${v}`)} />
 
       <CashBand
-        label="Total del mes"
-        eyebrow={`${name}${isCurrent ? ` · 1 al ${lastDay}` : ''}`}
+        label={t.monthTotal}
+        eyebrow={`${name}${isCurrent ? t.monthRange(lastDay) : ''}`}
         total={total}
-        subtitle={`${plural(salesCount, 'venta', 'ventas')} · ticket promedio ${money(average)} · ${money(perDay)} por día`}
-        bars={methodBars(cut)}
-        emptyBars="Sin ventas en este mes"
+        subtitle={t.monthSubtitle(t.sales(salesCount), money(average), money(perDay))}
+        bars={methodBars(cut, text)}
+        emptyBars={t.noSalesMonth}
       />
 
       {salesCount === 0 && !hasCredits ? (
-        <EmptyState icon={BarChart2}>Sin movimientos en este mes</EmptyState>
+        <EmptyState icon={BarChart2}>{t.noMovesMonth}</EmptyState>
       ) : (
         <>
           {salesCount > 0 && <DailySalesChart sales={cut!.sales} year={y} month={m} daysInMonth={daysInMonth} lastDay={lastDay} today={isCurrent ? lastDay : null} />}
           <div className="flex flex-wrap items-start gap-6">
             {(cut?.byProduct.length ?? 0) > 0 && (
               <div className="min-w-0 flex-[1_1_420px]">
-                <ProductBreakdown title="Productos más vendidos" rows={cut!.byProduct} limit={5} />
+                <ProductBreakdown title={t.topProducts} rows={cut!.byProduct} limit={5} />
               </div>
             )}
             {hasCredits && (
               <div className="min-w-0 flex-[1_1_420px]">
-                <CreditsInPeriod credits={cut!.credits} title={`Fiado en ${name.split(' ')[0]}`} onNavigate={onNavigate} />
+                <CreditsInPeriod credits={cut!.credits} title={t.creditIn(name.split(' ')[0])} onNavigate={onNavigate} />
               </div>
             )}
           </div>
@@ -1792,6 +1801,7 @@ function MonthlyCutTab({ cut, monthParam, gymSlug, canDelete, onNavigate }: {
 }
 
 function DailySalesChart({ sales, year, month, daysInMonth, lastDay, today }: { sales: Sale[]; year: number; month: number; daysInMonth: number; lastDay: number; today: number | null }) {
+  const { t, money, intl } = useStoreText()
   const totals = Array<number>(daysInMonth).fill(0)
   for (const s of sales) {
     const d = new Date(s.createdAt)
@@ -1800,13 +1810,13 @@ function DailySalesChart({ sales, year, month, daysInMonth, lastDay, today }: { 
   const max = Math.max(0, ...totals)
   const scaleMax = niceCeil(max)
   const best = totals.indexOf(max)
-  const monthShort = new Date(year, month - 1, 1).toLocaleDateString('es-AR', { month: 'short' })
+  const monthShort = new Date(year, month - 1, 1).toLocaleDateString(intl, { month: 'short' })
   const bestLabel = max > 0
-    ? new Date(year, month - 1, best + 1).toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })
+    ? new Date(year, month - 1, best + 1).toLocaleDateString(intl, { weekday: 'short', day: 'numeric', month: 'short' })
     : ''
 
   return (
-    <Panel title="Ventas por día" action={max > 0 && <span className="text-[13px] text-zinc-500">Mejor día: {bestLabel} · {money(max)}</span>}>
+    <Panel title={t.salesPerDay} action={max > 0 && <span className="text-[13px] text-zinc-500">{t.bestDay(bestLabel, money(max))}</span>}>
       <div className="overflow-x-auto px-5 pb-4 pt-2">
         <div className="flex min-w-[640px] gap-3">
           <div aria-hidden="true" className="flex h-[200px] w-14 flex-col justify-between pt-6 text-right font-admin-mono text-[11px] text-zinc-500">
@@ -1817,7 +1827,7 @@ function DailySalesChart({ sales, year, month, daysInMonth, lastDay, today }: { 
           <div className="flex flex-1 flex-col gap-1.5">
             <div
               role="img"
-              aria-label={`Ventas diarias de ${monthShort}. Mejor día ${bestLabel} con ${money(max)}.`}
+              aria-label={t.dailyAria(monthShort, bestLabel, money(max))}
               className="relative flex h-[200px] items-end gap-1 border-b border-zinc-300 pt-6"
             >
               <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-6 border-t border-zinc-100" />

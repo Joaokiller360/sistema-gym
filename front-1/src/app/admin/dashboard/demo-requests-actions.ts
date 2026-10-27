@@ -1,5 +1,6 @@
 'use server'
 
+import { refresh } from 'next/cache'
 import { cookies } from 'next/headers'
 import { apiFetch } from '@/lib/api'
 
@@ -21,5 +22,7 @@ export async function updateDemoRequestStatusAction(
     body: JSON.stringify({ status }),
   })
   if (!result) return { error: 'Error al actualizar el estado' }
+  // Re-render the current page in this same round trip
+  refresh()
   return {}
 }
