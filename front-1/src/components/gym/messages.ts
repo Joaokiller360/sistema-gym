@@ -50,6 +50,8 @@ export const shellMessages = defineMessages({
     languageHint: 'Solo cambia cómo ves el panel en tu cuenta.',
     languageNames: { es: 'Español', en: 'English' },
     languageSaved: 'Idioma actualizado',
+    tour: 'Recorrido guiado',
+    tourOpen: 'Ver recorrido guiado',
   },
   en: {
     nav: {
@@ -99,5 +101,7 @@ export const shellMessages = defineMessages({
     languageHint: 'Only changes how you see the panel on your account.',
     languageNames: { es: 'Español', en: 'English' },
     languageSaved: 'Language updated',
+    tour: 'Guided tour',
+    tourOpen: 'Start guided tour',
   },
 })

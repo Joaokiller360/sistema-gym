@@ -1,3 +1,6 @@
+import { getT } from '@/i18n/server'
+import { commonMessages } from '@/i18n/common'
+
 const API_URL = process.env.API_URL ?? 'http://localhost:3001/api/v1'
 
 /**
@@ -76,20 +79,21 @@ export async function apiFetchWithError<T>(
     const json = parseJson(text) as { message?: unknown } | null
 
     if (!res.ok) {
+      const t = await getT(commonMessages)
       const msg = json?.message
         ? Array.isArray(json.message) ? json.message.join(', ') : String(json.message)
         : res.status >= 500 && json === null
-          ? 'No se pudo conectar con el servidor'
-          : `Error ${res.status}`
+          ? t.serverUnreachable
+          : t.errorStatus(res.status)
       if (process.env.NODE_ENV !== 'production') {
         console.error(`[apiFetchWithError] ${options?.method ?? 'GET'} ${path} → ${res.status}:`, json ? JSON.stringify(json) : describeBody(text))
       }
       return { error: msg }
     }
-    if (json === null) return { error: 'Respuesta inválida del servidor' }
+    if (json === null) return { error: (await getT(commonMessages)).invalidResponse }
 
     return { data: json as T }
   } catch {
-    return { error: 'Error de conexión con el servidor' }
+    return { error: (await getT(commonMessages)).connectionError }
   }
 }
