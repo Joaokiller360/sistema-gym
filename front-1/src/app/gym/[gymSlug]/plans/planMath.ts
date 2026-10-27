@@ -1,4 +1,6 @@
 import type { Plan } from '@/types'
+import { DEFAULT_LOCALE, INTL_LOCALE, type Locale } from '@/i18n/config'
+import { plansMessages } from './messages'
 
 // Row swatch per plan position; paused plans go grey
 export const PLAN_COLORS = ['#2cc4b2', '#38bdf8', '#fbbf24', '#a78bfa', '#f472b6', '#fb923c']
@@ -17,23 +19,25 @@ export function pricePerDay(p: PlanShape & Pick<Plan, 'price'>) {
   return p.price / trainableDays(p)
 }
 
-export function durationLabel(days: number) {
-  const named: Record<number, string> = { 30: '1 mes', 60: '2 meses', 90: '3 meses', 180: '6 meses', 365: '1 año' }
-  return named[days] ?? `${days} días`
+export function durationLabel(days: number, locale: Locale = DEFAULT_LOCALE) {
+  const t = plansMessages[locale].math
+  return t.durations[days] ?? t.days(days)
 }
 
-export function accessLabel(p: PlanShape) {
-  if (p.visitLimit != null) return `${p.visitLimit} días`
-  if (p.daysPerWeek == null) return 'Ilimitado'
-  return p.daysPerWeek === 7 ? 'Diario' : `${p.daysPerWeek}×/sem`
+export function accessLabel(p: PlanShape, locale: Locale = DEFAULT_LOCALE) {
+  const t = plansMessages[locale].math
+  if (p.visitLimit != null) return t.days(p.visitLimit)
+  if (p.daysPerWeek == null) return t.unlimited
+  return p.daysPerWeek === 7 ? t.daily : t.perWeek(p.daysPerWeek)
 }
 
-export function peopleLabel(maxMembers: number) {
-  return maxMembers > 1 ? `Para ${maxMembers}` : 'Individual'
+export function peopleLabel(maxMembers: number, locale: Locale = DEFAULT_LOCALE) {
+  const t = plansMessages[locale].math
+  return maxMembers > 1 ? t.forPeople(maxMembers) : t.individual
 }
 
-export function money(value: number, currency: string, decimals = 0) {
-  return value.toLocaleString('es-AR', {
+export function money(value: number, currency: string, decimals = 0, locale: Locale = DEFAULT_LOCALE) {
+  return value.toLocaleString(INTL_LOCALE[locale], {
     style: 'currency',
     currency,
     minimumFractionDigits: decimals,
