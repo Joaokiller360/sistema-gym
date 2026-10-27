@@ -24,28 +24,28 @@ export class PlansController {
 
   @Post()
   @UseGuards(RolesGuard)
-  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER)
   create(@Req() req: any, @Body() body: CreatePlanDto) {
     return this.plansService.create(req.gymId, body);
   }
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER)
   update(@Param('id') id: string, @Req() req: any, @Body() body: UpdatePlanDto) {
     return this.plansService.update(id, req.gymId, body);
   }
 
   @Patch(':id/toggle')
   @UseGuards(RolesGuard)
-  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER)
   toggle(@Param('id') id: string, @Req() req: any) {
     return this.plansService.toggle(id, req.gymId);
   }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.GYM_OWNER)
   remove(@Param('id') id: string, @Req() req: any) {
     return this.plansService.remove(id, req.gymId);
   }

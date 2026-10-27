@@ -31,7 +31,7 @@ export class BranchesController {
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles(Role.GYM_OWNER, Role.GYM_ADMIN)
+  @Roles(Role.GYM_OWNER)
   update(@Param('id') id: string, @Req() req: any, @Body() body: UpdateBranchDto) {
     return this.branchesService.update(id, req.gymId, body);
   }
