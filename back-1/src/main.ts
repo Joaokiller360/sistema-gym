@@ -8,7 +8,8 @@ import { MoneyTransformInterceptor } from './common/interceptors/money-transform
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // rawBody: the WhatsApp webhook verifies Meta's HMAC signature over the exact bytes
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
 
   app.use(helmet({
     crossOriginResourcePolicy: { policy: 'same-site' },

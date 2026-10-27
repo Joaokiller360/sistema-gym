@@ -43,6 +43,7 @@ import { Resend } from 'resend';
 import { PrismaService } from '../prisma/prisma.service';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { calculateProration, centsToDecimal } from '../common/utils/proration.util';
+import { parseWhatsapp } from '../notifications/whatsapp.service';
 
 const GRACE_DAYS = 5;
 
@@ -85,6 +86,7 @@ export class SuperAdminService {
 
   async createGym(data: any) {
     const { owner, ...gymData } = data;
+    if ('whatsappPhone' in gymData) gymData.whatsappPhone = parseWhatsapp(gymData.whatsappPhone);
 
     const planKey = gymData.subscriptionPlan ?? 'BASIC';
     const subPlan = await this.prisma.subscriptionPlan.findFirst({ where: { key: planKey } });
@@ -513,6 +515,10 @@ export class SuperAdminService {
 
   async updateGym(id: string, data: any) {
     await this.assertGymExists(id);
+    if ('whatsappPhone' in data) {
+      data.whatsappPhone = parseWhatsapp(data.whatsappPhone);
+      data.memberLimitAlertLevel = 0;
+    }
     return this.prisma.gym.update({
       where: { id },
       data,

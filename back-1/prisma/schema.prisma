@@ -111,6 +111,10 @@ model Gym {
   subscriptionGraceEndsAt DateTime?
   trialEndsAt             DateTime?
   advancedReportsEnabled  Boolean  @default(false)
+  /// Owner's WhatsApp number (E.164, digits only) for plan-limit alerts
+  whatsappPhone           String?
+  /// Highest member-limit threshold (%) already alerted; reset when usage drops
+  memberLimitAlertLevel   Int      @default(0)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -134,6 +138,7 @@ model Gym {
   productSales        ProductSale[]
   memberCredits       MemberProductCredit[]
   supportTickets      SupportTicket[]
+  waConversations     WaConversation[]
 
   @@map("gyms")
 }
@@ -809,4 +814,61 @@ model AdminCommunication {
 
   @@index([sentAt(sort: Desc)])
   @@map("admin_communications")
+}
+
+// ── CRM: WhatsApp conversations with gym owners ─────────────
+
+enum WaDirection {
+  IN
+  OUT
+}
+
+enum CrmStatus {
+  OPEN
+  PENDING
+  CLOSED
+}
+
+model WaConversation {
+  id            String    @id @default(uuid())
+  /// E.164 digits only, as Meta sends it
+  phone         String    @unique
+  /// WhatsApp profile name of the contact
+  contactName   String?
+  status        CrmStatus @default(OPEN)
+  notes         String?
+  unreadCount   Int       @default(0)
+  lastMessageAt DateTime  @default(now())
+  /// Free-form replies are only allowed within 24 h of this (Meta customer service window)
+  lastInboundAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  gymId    String?
+  gym      Gym?        @relation(fields: [gymId], references: [id], onDelete: SetNull)
+  messages WaMessage[]
+
+  @@index([gymId])
+  @@index([status, lastMessageAt])
+  @@map("wa_conversations")
+}
+
+model WaMessage {
+  id          String      @id @default(uuid())
+  direction   WaDirection
+  body        String
+  /// text | template | image | audio | document | …
+  type        String      @default("text")
+  waMessageId String?     @unique
+  /// sent | delivered | read | failed (from Meta status webhooks)
+  status      String?
+  error       String?
+  sentById    String?
+  createdAt   DateTime    @default(now())
+
+  conversationId String
+  conversation   WaConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("wa_messages")
 }

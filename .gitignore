@@ -25,3 +25,5 @@ prisma/dev.db
 skills-lock.json
 .claude
 .agents
+# WhatsApp (Meta) message templates — local notes only
+back-1/docs/whatsapp-templates.md

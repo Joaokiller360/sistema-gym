@@ -8,6 +8,7 @@ import { Resend } from 'resend';
 const sanitizeHtml = require('sanitize-html') as (input: string, opts: object) => string;
 import { PrismaService } from '../prisma/prisma.service';
 import { isGymOpen, GymSchedule } from '../common/utils/timezone.util';
+import { parseWhatsapp } from '../notifications/whatsapp.service';
 
 function sanitizeText(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
@@ -82,7 +83,7 @@ export class GymsService {
       throw new ForbiddenException('No autorizado');
     }
 
-    const OWNER_ALLOWED = ['name', 'address', 'country', 'timezone', 'currency', 'schedule', 'phone', 'email'];
+    const OWNER_ALLOWED = ['name', 'address', 'country', 'timezone', 'currency', 'schedule', 'phone', 'email', 'whatsappPhone'];
     const SUPER_ALLOWED = [...OWNER_ALLOWED, 'slug', 'isActive', 'subscriptionPlan', 'subscriptionStatus', 'subscriptionExpiresAt', 'subscriptionGraceEndsAt', 'ownerId'];
 
     const TEXT_FIELDS = new Set(['name', 'address', 'phone', 'email']);
@@ -92,8 +93,21 @@ export class GymsService {
       if (!allowed.includes(k)) continue;
       safeData[k] = TEXT_FIELDS.has(k) ? sanitizeText(v) ?? v : v;
     }
+    if ('whatsappPhone' in safeData) {
+      safeData.whatsappPhone = parseWhatsapp(safeData.whatsappPhone);
+      // A new number should get the current alert again
+      safeData.memberLimitAlertLevel = 0;
+    }
 
     return this.prisma.gym.update({ where: { id }, data: safeData });
+  }
+
+  // Kept off the public findBySlug payload: the owner's phone is private
+  async getWhatsappSettings(id: string, callerId: string, role?: string) {
+    const gym = await this.prisma.gym.findUnique({ where: { id }, select: { ownerId: true, whatsappPhone: true } });
+    if (!gym) throw new NotFoundException('Gym not found');
+    if (role !== 'SUPER_ADMIN' && gym.ownerId !== callerId) throw new ForbiddenException('No autorizado');
+    return { whatsappPhone: gym.whatsappPhone };
   }
 
   async remove(id: string) {
