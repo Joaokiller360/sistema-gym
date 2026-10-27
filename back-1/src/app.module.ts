@@ -28,6 +28,7 @@ import { ContentModule } from './content/content.module';
 import { DemoRequestsModule } from './demo-requests/demo-requests.module';
 import { AccessRequestsModule } from './access-requests/access-requests.module';
 import { WalletModule } from './wallet/wallet.module';
+import { CrmModule } from './crm/crm.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { WalletModule } from './wallet/wallet.module';
     DemoRequestsModule,
     AccessRequestsModule,
     WalletModule,
+    CrmModule,
   ],
   controllers: [AppController],
   providers: [

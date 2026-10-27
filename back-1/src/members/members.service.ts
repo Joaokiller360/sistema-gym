@@ -1,10 +1,14 @@
 import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
+import { PlanLimitAlertsService } from '../notifications/plan-limit-alerts.service';
 
 @Injectable()
 export class MembersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly planLimitAlerts: PlanLimitAlertsService,
+  ) {}
 
   async findAll(gymId: string, query: any) {
     const { search, status, branchId } = query;
@@ -49,6 +53,7 @@ export class MembersService {
       if (planDef?.maxMembers != null) {
         const currentCount = await this.prisma.member.count({ where: { gymId } });
         if (currentCount >= planDef.maxMembers) {
+          void this.planLimitAlerts.checkMemberLimit(gymId);
           throw new ForbiddenException(
             `Límite de miembros alcanzado. El plan ${planDef.label} permite hasta ${planDef.maxMembers} miembros. Actualizá tu plan para agregar más.`,
           );
@@ -56,7 +61,9 @@ export class MembersService {
       }
     }
     try {
-      return await this.prisma.member.create({ data: { ...data, gymId } });
+      const member = await this.prisma.member.create({ data: { ...data, gymId } });
+      void this.planLimitAlerts.checkMemberLimit(gymId);
+      return member;
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
         throw new ConflictException(`Ya existe un miembro con el nombre "${data.firstName} ${data.lastName}" en este gimnasio.`);
@@ -98,7 +105,9 @@ export class MembersService {
 
   async remove(id: string, gymId: string) {
     await this.assertExists(id, gymId);
-    return this.prisma.member.delete({ where: { id } });
+    const deleted = await this.prisma.member.delete({ where: { id } });
+    void this.planLimitAlerts.checkMemberLimit(gymId);
+    return deleted;
   }
 
   private async assertExists(id: string, gymId: string) {

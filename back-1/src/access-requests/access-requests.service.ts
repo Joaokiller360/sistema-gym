@@ -5,6 +5,7 @@ import * as bcrypt from 'bcrypt';
 const sanitizeHtml = require('sanitize-html') as (input: string, opts: object) => string;
 import { Resend } from 'resend';
 import { PrismaService } from '../prisma/prisma.service';
+import { normalizePhone } from '../notifications/whatsapp.service';
 import { CreateAccessRequestDto } from './dto/create-access-request.dto';
 import { AccessRequestStatus } from '@prisma/client';
 
@@ -274,7 +275,16 @@ export class AccessRequestsService {
       });
 
       const createdGym = await tx.gym.create({
-        data: { name: clean, slug, ownerId: user.id, isActive: true, subscriptionStatus: 'TRIAL' },
+        data: {
+          name: clean, slug, ownerId: user.id, isActive: true, subscriptionStatus: 'TRIAL',
+          // The phone left on the request becomes the owner's WhatsApp for alerts
+          // (without a country code it can't be dialed, so it's left empty)
+          whatsappPhone: record.phone?.trim().startsWith('+')
+            ? normalizePhone(record.phone)
+            : record.callingCode && record.phone
+              ? normalizePhone(`${record.callingCode}${record.phone}`)
+              : null,
+        },
         select: { id: true, slug: true },
       });
 

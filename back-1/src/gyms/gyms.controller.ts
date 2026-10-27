@@ -41,6 +41,13 @@ export class GymsController {
     return this.gymsService.getStatus(slug);
   }
 
+  @Get(':id/whatsapp')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.GYM_OWNER, Role.SUPER_ADMIN)
+  getWhatsappSettings(@Param('id') id: string, @Req() req: any) {
+    return this.gymsService.getWhatsappSettings(id, req.user?.userId, req.user?.role);
+  }
+
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.GYM_OWNER, Role.SUPER_ADMIN)
