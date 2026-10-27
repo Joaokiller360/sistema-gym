@@ -3,6 +3,10 @@
 import { cookies } from 'next/headers'
 import { updateTag } from 'next/cache'
 import { apiFetch, apiFetchWithError } from '@/lib/api'
+import { getT } from '@/i18n/server'
+import { attendanceMessages } from './messages'
+
+const messages = async () => (await getT(attendanceMessages)).actions
 
 async function getToken() {
   const store = await cookies()
@@ -14,7 +18,7 @@ export async function checkInAction(
   memberId: string,
   groupId?: string,
 ): Promise<{ error?: string; visitsRemaining?: number | null }> {
-  if (!memberId.trim()) return { error: 'ID de miembro requerido' }
+  if (!memberId.trim()) return { error: (await messages()).memberIdRequired }
   const token = await getToken()
   const result = await apiFetchWithError<{ visitsRemaining: number | null }>('/attendance/checkin', token, {
     method: 'POST',
@@ -22,11 +26,12 @@ export async function checkInAction(
     headers: { 'x-gym-slug': gymSlug },
   })
   if ('error' in result) {
+    const t = await messages()
     const lower = result.error.toLowerCase()
     const msg = lower.includes('already checked in')
-      ? 'El miembro ya tiene una entrada registrada hoy'
+      ? t.alreadyCheckedIn
       : lower.includes('no active membership')
-      ? 'El miembro no tiene una membresía activa'
+      ? t.noActiveMembership
       : result.error
     return { error: msg }
   }
@@ -44,7 +49,7 @@ export async function checkOutAction(
     body: JSON.stringify({ memberId }),
     headers: { 'x-gym-slug': gymSlug },
   })
-  if (!result) return { error: 'Error al registrar salida' }
+  if (!result) return { error: (await messages()).checkOutFailed }
   updateTag(`attendance-${gymSlug}`)
   return {}
 }
@@ -58,7 +63,7 @@ export async function deleteAttendanceAction(
     method: 'DELETE',
     headers: { 'x-gym-slug': gymSlug },
   })
-  if (result === null) return { error: 'Error al eliminar registro' }
+  if (result === null) return { error: (await messages()).deleteFailed }
   updateTag(`attendance-${gymSlug}`)
   return {}
 }
@@ -67,14 +72,14 @@ export async function createGroupAction(
   gymSlug: string,
   name: string,
 ): Promise<{ error?: string }> {
-  if (!name.trim()) return { error: 'Nombre requerido' }
+  if (!name.trim()) return { error: (await messages()).nameRequired }
   const token = await getToken()
   const result = await apiFetch('/attendance/groups', token, {
     method: 'POST',
     body: JSON.stringify({ name: name.trim() }),
     headers: { 'x-gym-slug': gymSlug },
   })
-  if (!result) return { error: 'Error al crear grupo' }
+  if (!result) return { error: (await messages()).createGroupFailed }
   updateTag(`attendance-groups-${gymSlug}`)
   return {}
 }
@@ -88,7 +93,7 @@ export async function deleteGroupAction(
     method: 'DELETE',
     headers: { 'x-gym-slug': gymSlug },
   })
-  if (result === null) return { error: 'Error al eliminar grupo' }
+  if (result === null) return { error: (await messages()).deleteGroupFailed }
   updateTag(`attendance-groups-${gymSlug}`)
   return {}
 }

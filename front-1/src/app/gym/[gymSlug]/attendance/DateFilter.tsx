@@ -2,6 +2,8 @@
 
 import { useRouter } from 'next/navigation'
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useT } from '@/i18n/client'
+import { attendanceMessages } from './messages'
 
 interface Props {
   value: string
@@ -17,6 +19,7 @@ function shift(dateStr: string, days: number) {
 export function DateFilter({ value, today }: Props) {
   const router = useRouter()
   const isToday = value === today
+  const t = useT(attendanceMessages).date
 
   function go(date: string) {
     router.push(date === today ? '?' : `?date=${date}`)
@@ -26,7 +29,7 @@ export function DateFilter({ value, today }: Props) {
     <div className="flex items-center overflow-hidden rounded-xl border border-adm-line bg-adm-surface">
       <button
         type="button"
-        aria-label="Día anterior"
+        aria-label={t.prev}
         onClick={() => go(shift(value, -1))}
         className="flex h-11 w-11 items-center justify-center text-adm-ink transition-colors hover:bg-adm-chip"
       >
@@ -34,8 +37,8 @@ export function DateFilter({ value, today }: Props) {
       </button>
       <label className="flex h-11 items-center gap-2 border-x border-adm-line px-3.5 text-sm font-semibold">
         <CalendarDays className="h-4 w-4" aria-hidden="true" />
-        {isToday && <span>Hoy</span>}
-        <span className="sr-only">Fecha</span>
+        {isToday && <span>{t.today}</span>}
+        <span className="sr-only">{t.date}</span>
         <input
           type="date"
           value={value}
@@ -46,7 +49,7 @@ export function DateFilter({ value, today }: Props) {
       </label>
       <button
         type="button"
-        aria-label="Día siguiente"
+        aria-label={t.next}
         disabled={isToday}
         onClick={() => go(shift(value, 1))}
         className="flex h-11 w-11 items-center justify-center text-adm-ink transition-colors hover:bg-adm-chip disabled:text-adm-muted/50 disabled:hover:bg-transparent"

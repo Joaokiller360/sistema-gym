@@ -6,6 +6,9 @@ import { Plus, X } from 'lucide-react'
 import { AttendanceGroup } from '@/types'
 import { createGroupAction, deleteGroupAction } from './actions'
 import { groupColor } from './groupColors'
+import { useT } from '@/i18n/client'
+import { commonMessages } from '@/i18n/common'
+import { attendanceMessages } from './messages'
 
 interface Props {
   gymSlug: string
@@ -21,6 +24,8 @@ export function GroupsCard({ gymSlug, groups, counts, isToday }: Props) {
   const [nameError, setNameError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const t = useT(attendanceMessages).groups
+  const tc = useT(commonMessages)
 
   function handleNameChange(val: string) {
     const letters = val.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]/g, '')
@@ -32,7 +37,7 @@ export function GroupsCard({ gymSlug, groups, counts, isToday }: Props) {
   function closeModal() { setShowModal(false) }
 
   function handleCreate() {
-    if (!newGroupName.trim()) { setNameError('Nombre requerido'); return }
+    if (!newGroupName.trim()) { setNameError(t.nameRequired); return }
     startTransition(async () => {
       const res = await createGroupAction(gymSlug, newGroupName)
       if (res.error) setNameError(res.error)
@@ -52,29 +57,29 @@ export function GroupsCard({ gymSlug, groups, counts, isToday }: Props) {
   return (
     <section aria-labelledby="grupos-h" className="flex flex-col gap-3.5 rounded-[20px] border border-adm-line bg-adm-surface px-6 py-5">
       <div className="flex items-center justify-between">
-        <h2 id="grupos-h" className="text-[15px] font-extrabold">Turnos del gimnasio</h2>
+        <h2 id="grupos-h" className="text-[15px] font-extrabold">{t.title}</h2>
         <button
           type="button"
           onClick={openModal}
           className="inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-adm-line bg-adm-surface px-3 text-[13px] font-bold transition-colors hover:bg-adm-chip"
         >
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-          Nuevo
+          {t.new}
         </button>
       </div>
 
       {groups.length === 0 ? (
-        <p className="text-[13px] text-adm-muted">Sin turnos aún. Creá uno para organizar la asistencia.</p>
+        <p className="text-[13px] text-adm-muted">{t.empty}</p>
       ) : (
         <ul className="flex flex-col">
           {groups.map((g, i) => (
             <li key={g.id} className="flex items-center gap-2.5 border-t border-adm-line-soft py-2.5">
               <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${groupColor(i).dot}`} />
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">{g.name}</span>
-              <span className="text-[13px] text-adm-muted">{counts[g.id] ?? 0}{isToday ? ' hoy' : ''}</span>
+              <span className="text-[13px] text-adm-muted">{counts[g.id] ?? 0}{isToday ? t.today : ''}</span>
               <button
                 type="button"
-                aria-label={`Eliminar turno ${g.name}`}
+                aria-label={t.deleteShift(g.name)}
                 onClick={() => handleDelete(g.id)}
                 disabled={isPending}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-adm-muted transition-colors hover:bg-adm-bad-bg hover:text-adm-bad-fg disabled:opacity-40"
@@ -93,25 +98,25 @@ export function GroupsCard({ gymSlug, groups, counts, isToday }: Props) {
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeModal} />
           <div role="dialog" aria-modal="true" aria-labelledby="new-group-h" className="admin-surface relative w-full max-w-sm space-y-5 rounded-2xl bg-adm-surface p-6 shadow-xl">
             <div className="flex items-center justify-between">
-              <h3 id="new-group-h" className="text-base font-bold">Nuevo turno</h3>
-              <button type="button" aria-label="Cerrar" onClick={closeModal} className="text-adm-muted transition-colors hover:text-adm-ink">
+              <h3 id="new-group-h" className="text-base font-bold">{t.newShift}</h3>
+              <button type="button" aria-label={t.close} onClick={closeModal} className="text-adm-muted transition-colors hover:text-adm-ink">
                 <X className="h-4 w-4" />
               </button>
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="new-group-name" className="text-xs font-bold uppercase tracking-[0.08em] text-adm-muted">Nombre</label>
+              <label htmlFor="new-group-name" className="text-xs font-bold uppercase tracking-[0.08em] text-adm-muted">{t.name}</label>
               <input
                 id="new-group-name"
                 autoFocus
                 value={newGroupName}
                 onChange={e => handleNameChange(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') closeModal() }}
-                placeholder="Ej. Mañana"
+                placeholder={t.namePlaceholder}
                 maxLength={50}
                 className="h-11 w-full rounded-xl border border-adm-line bg-adm-subtle px-4 text-sm outline-none transition-colors focus:border-[#1fad9d]"
               />
               {nameError && <p className="text-xs font-medium text-adm-bad-fg">{nameError}</p>}
-              <p className="text-xs text-adm-muted">Solo letras. Primera letra en mayúscula automática.</p>
+              <p className="text-xs text-adm-muted">{t.nameHint}</p>
             </div>
             <div className="flex gap-3">
               <button
@@ -120,14 +125,14 @@ export function GroupsCard({ gymSlug, groups, counts, isToday }: Props) {
                 disabled={isPending || !newGroupName.trim()}
                 className="h-11 flex-1 rounded-xl bg-[#0e7a70] text-sm font-bold text-white transition-colors hover:bg-[#095a52] disabled:opacity-50"
               >
-                {isPending ? 'Creando…' : 'Crear turno'}
+                {isPending ? t.creating : t.create}
               </button>
               <button
                 type="button"
                 onClick={closeModal}
                 className="h-11 rounded-xl border border-adm-line px-4 text-sm font-semibold text-adm-muted transition-colors hover:text-adm-ink"
               >
-                Cancelar
+                {tc.cancel}
               </button>
             </div>
           </div>

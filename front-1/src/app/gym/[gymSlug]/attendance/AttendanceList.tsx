@@ -6,6 +6,8 @@ import { Trash2, Users } from 'lucide-react'
 import { Attendance, AttendanceGroup } from '@/types'
 import { deleteAttendanceAction } from './actions'
 import { groupColor, initials } from './groupColors'
+import { useIntlLocale, useT } from '@/i18n/client'
+import { attendanceMessages } from './messages'
 
 interface AttendanceWithMember extends Attendance {
   member?: { id: string; firstName: string; lastName: string } | null
@@ -31,23 +33,25 @@ export function AttendanceList({ gymSlug, records, groups, timezone, date }: Pro
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [, startTransition] = useTransition()
+  const t = useT(attendanceMessages).list
+  const intl = useIntlLocale()
 
   const fmt = (iso: string) =>
-    new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone })
+    new Date(iso).toLocaleTimeString(intl, { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone })
 
   const groupIdx = new Map(groups.map((g, i) => [g.id, i]))
-  const groupName = (r: AttendanceWithMember) => groups.find(g => g.id === r.groupId)?.name ?? 'Sin turno'
+  const groupName = (r: AttendanceWithMember) => groups.find(g => g.id === r.groupId)?.name ?? t.noShift
   const keyOf = (r: AttendanceWithMember) => r.groupId ?? NO_GROUP
 
   const sorted = [...records].sort((a, b) => b.checkIn.localeCompare(a.checkIn))
   const visible = filter ? sorted.filter(r => keyOf(r) === filter) : sorted
 
   const tabs = [
-    { key: '', label: 'Todos', count: records.length },
+    { key: '', label: t.all, count: records.length },
     ...groups.map(g => ({ key: g.id, label: g.name, count: records.filter(r => r.groupId === g.id).length })),
   ]
   const ungroupedCount = records.filter(r => !r.groupId).length
-  if (groups.length > 0 && ungroupedCount > 0) tabs.push({ key: NO_GROUP, label: 'Sin turno', count: ungroupedCount })
+  if (groups.length > 0 && ungroupedCount > 0) tabs.push({ key: NO_GROUP, label: t.noShift, count: ungroupedCount })
 
   // Bucket visible records by hour, newest first
   const slots: { hour: string; items: AttendanceWithMember[] }[] = []
@@ -74,14 +78,14 @@ export function AttendanceList({ gymSlug, records, groups, timezone, date }: Pro
   function exportCsv() {
     const esc = (v: string) => `"${v.replace(/"/g, '""')}"`
     const rows = [
-      ['Hora', 'Miembro', 'Turno'],
+      t.csvHeaders,
       ...[...records].sort((a, b) => a.checkIn.localeCompare(b.checkIn)).map(r => [fmt(r.checkIn), memberName(r), groupName(r)]),
     ]
     const csv = '﻿' + rows.map(row => row.map(esc).join(',')).join('\n')
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
     const a = document.createElement('a')
     a.href = url
-    a.download = `asistencia-${date}.csv`
+    a.download = t.csvName(date)
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -89,25 +93,25 @@ export function AttendanceList({ gymSlug, records, groups, timezone, date }: Pro
   return (
     <section aria-labelledby="registro-h" className="min-w-0 flex-[999_1_560px] overflow-hidden rounded-[20px] border border-adm-line bg-adm-surface">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-adm-line-soft px-6 py-5">
-        <h2 id="registro-h" className="text-xl font-extrabold">Registro del día</h2>
+        <h2 id="registro-h" className="text-xl font-extrabold">{t.title}</h2>
         {records.length > 0 && tabs.length > 1 && (
-          <div role="tablist" aria-label="Filtrar por turno" className="flex flex-wrap gap-1.5">
-            {tabs.map(t => {
-              const on = filter === t.key
+          <div role="tablist" aria-label={t.filterByShift} className="flex flex-wrap gap-1.5">
+            {tabs.map(tab => {
+              const on = filter === tab.key
               return (
                 <button
-                  key={t.key || 'all'}
+                  key={tab.key || 'all'}
                   type="button"
                   role="tab"
                   aria-selected={on}
-                  onClick={() => setFilter(t.key)}
+                  onClick={() => setFilter(tab.key)}
                   className={`h-9 rounded-full border px-3 text-[13px] font-bold transition-colors ${
                     on
                       ? 'border-adm-ink bg-adm-ink text-adm-surface'
                       : 'border-adm-line bg-adm-surface text-adm-muted hover:text-adm-ink'
                   }`}
                 >
-                  {t.label} <span className="opacity-75">{t.count}</span>
+                  {tab.label} <span className="opacity-75">{tab.count}</span>
                 </button>
               )
             })}
@@ -123,8 +127,8 @@ export function AttendanceList({ gymSlug, records, groups, timezone, date }: Pro
             <Users className="h-5 w-5 text-adm-muted" aria-hidden="true" />
           </div>
           <div className="text-center">
-            <p className="text-sm font-semibold">Sin registros</p>
-            <p className="mt-0.5 text-[13px] text-adm-muted">No hay asistencia registrada para este día</p>
+            <p className="text-sm font-semibold">{t.empty}</p>
+            <p className="mt-0.5 text-[13px] text-adm-muted">{t.emptyHint}</p>
           </div>
         </div>
       ) : (
@@ -153,7 +157,7 @@ export function AttendanceList({ gymSlug, records, groups, timezone, date }: Pro
                       )}
                       <button
                         type="button"
-                        aria-label={`Eliminar registro de ${name}`}
+                        aria-label={t.deleteRecord(name)}
                         onClick={() => handleDelete(r.id)}
                         disabled={deletingId === r.id}
                         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-adm-muted transition-colors hover:bg-adm-bad-bg hover:text-adm-bad-fg disabled:opacity-40"
@@ -171,11 +175,11 @@ export function AttendanceList({ gymSlug, records, groups, timezone, date }: Pro
 
       <div className="flex items-center justify-between gap-3 bg-adm-subtle px-6 py-3.5 text-[13px] text-adm-muted">
         <span>
-          {records.length} {records.length === 1 ? 'registro' : 'registros'} · {uniqueMembers} {uniqueMembers === 1 ? 'miembro único' : 'miembros únicos'}
+          {t.records(records.length)} · {t.unique(uniqueMembers)}
         </span>
         {records.length > 0 && (
           <button type="button" onClick={exportCsv} className="font-bold text-[#0e7a70] hover:text-[#095a52] dark:text-adm-ok-fg">
-            Exportar CSV
+            {t.exportCsv}
           </button>
         )}
       </div>

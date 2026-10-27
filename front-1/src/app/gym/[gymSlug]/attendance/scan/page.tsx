@@ -1,6 +1,8 @@
 import { cookies } from 'next/headers'
 import { apiFetch } from '@/lib/api'
 import { ScanClient, type ScanMember, type ScanProduct } from './ScanClient'
+import { getT } from '@/i18n/server'
+import { attendanceMessages } from '../messages'
 
 interface Props {
   params: Promise<{ gymSlug: string }>
@@ -10,6 +12,7 @@ export default async function ScanPage({ params }: Props) {
   const { gymSlug } = await params
   const cookieStore = await cookies()
   const token = cookieStore.get('session')?.value ?? ''
+  const t = (await getT(attendanceMessages)).scan
 
   const [products, members] = await Promise.all([
     apiFetch<(ScanProduct & { isActive: boolean })[]>('/store/products', token, {
@@ -39,10 +42,10 @@ export default async function ScanPage({ params }: Props) {
   return (
     <div className="admin-surface mx-auto flex w-full max-w-[1180px] flex-col gap-6 px-4 py-8 sm:px-6 lg:px-10">
       <header>
-        <p className="text-[13px] font-medium text-adm-muted">Recepción</p>
-        <h1 className="mt-1 text-3xl font-extrabold leading-none tracking-tight [font-stretch:115%] sm:text-[40px]">Escanear QR</h1>
+        <p className="text-[13px] font-medium text-adm-muted">{t.frontDesk}</p>
+        <h1 className="mt-1 text-3xl font-extrabold leading-none tracking-tight [font-stretch:115%] sm:text-[40px]">{t.title}</h1>
         <p className="mt-2.5 max-w-xl text-[13px] text-adm-muted">
-          El socio muestra la credencial de su Wallet, o lo buscás por nombre. Después podés registrar su asistencia, una compra o un fiado.
+          {t.intro}
         </p>
       </header>
       <ScanClient gymSlug={gymSlug} products={available} members={memberList} />
