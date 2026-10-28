@@ -1,12 +1,12 @@
 'use client'
 
-import { Fragment, useCallback, useEffect, useRef, useState, useTransition } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore, useTransition } from 'react'
 import Link from 'next/link'
 import {
   AlertTriangle, ArrowLeft, Check, CheckCheck, Clock, ExternalLink, Inbox, Loader2, MessageCircle, Pencil, Search, Send, Trash2, Download, UserPen, X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { EmptyState, GymMark, Meter, Pill, btn, chip, field, initials, type Tone } from '@/components/admin/ui'
+import { EmptyState, GymMark, Meter, btn, chip, field, initials } from '@/components/admin/ui'
 import {
   AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
   AlertDialogTitle,
@@ -14,6 +14,7 @@ import {
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import { Dialog, DialogClose, DialogOverlay, DialogPortal, DialogTitle } from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
+import { NewChatDialog } from './NewChatDialog'
 import {
   deleteConversationAction, deleteMessageAction, editMessageAction, getConversationAction, listConversationsAction, markReadAction, replyAction, sendContactTemplateAction,
   updateConversationAction, type CrmList, type CrmMessage, type CrmStatus, type CrmThread,
@@ -21,13 +22,34 @@ import {
 
 const POLL_MS = 10_000
 
-type Filter = CrmStatus | 'ALL'
+/** ACTIVE = still needs something from either side (OPEN + PENDING) */
+type Filter = 'ACTIVE' | 'CLOSED' | 'ALL'
 
-const STATUS: Record<CrmStatus, { label: string; filter: string; tone: Tone }> = {
-  OPEN: { label: 'Por responder', filter: 'Por responder', tone: 'warn' },
-  PENDING: { label: 'Esperando al gym', filter: 'Esperando', tone: 'info' },
-  CLOSED: { label: 'Cerrada', filter: 'Cerradas', tone: 'neutral' },
+const FILTERS: { key: Filter; label: string }[] = [
+  { key: 'ACTIVE', label: 'Activas' },
+  { key: 'CLOSED', label: 'Cerradas' },
+  { key: 'ALL', label: 'Todas' },
+]
+
+const STATUS: Record<CrmStatus, { label: string; short: string }> = {
+  OPEN: { label: 'Por responder', short: 'Por responder' },
+  PENDING: { label: 'Esperando al gym', short: 'Esperando' },
+  CLOSED: { label: 'Cerrada', short: 'Cerrada' },
 }
+
+/** Meta's customer service window */
+const WINDOW_MS = 24 * 3600_000
+/** Unanswered chats whose window closes sooner than this go to the top */
+const HOT_MS = 4 * 3600_000
+
+type Group = 'URGENT' | CrmStatus
+
+const GROUPS: { key: Group; title: string }[] = [
+  { key: 'URGENT', title: 'Se cierra el chat libre' },
+  { key: 'OPEN', title: 'Por responder' },
+  { key: 'PENDING', title: 'Esperando al gym' },
+  { key: 'CLOSED', title: 'Cerradas' },
+]
 
 const QUICK_REPLIES = [
   { label: 'Saludo', text: '¡Hola! Gracias por escribirnos. ¿En qué te podemos ayudar?' },
@@ -51,6 +73,19 @@ function fmtTime(iso: string) {
 
 function fmtDay(iso: string) {
   return new Date(iso).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
+}
+
+function fmtClock(iso: string) {
+  return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+}
+
+const noop = () => () => {}
+// The server formats in its own time zone and ICU build (e.g. "a. m." with a narrow space), so
+// dates only render once hydrated, in the viewer's time zone
+const useHydrated = () => useSyncExternalStore(noop, () => true, () => false)
+
+function LocalTime({ iso, format }: { iso: string; format: (iso: string) => string }) {
+  return useHydrated() ? format(iso) : null
 }
 
 function displayName(c: { alias: string | null; contactName: string | null; gym: { name: string } | null; phone: string }) {
@@ -167,13 +202,36 @@ function ContactEditor({ thread, allTags, onChanged }: { thread: CrmThread; allT
   )
 }
 
-/** Time left in Meta's 24 h window, e.g. "18 h". */
-function windowLeft(lastInboundAt: string | null) {
-  if (!lastInboundAt) return null
-  const ms = new Date(lastInboundAt).getTime() + 24 * 3600_000 - Date.now()
-  if (ms <= 0) return null
+/** Ms left in Meta's 24 h window; 0 once closed. */
+function windowMs(lastInboundAt: string | null) {
+  if (!lastInboundAt) return 0
+  return Math.max(0, new Date(lastInboundAt).getTime() + WINDOW_MS - Date.now())
+}
+
+/** e.g. "18 h", "1 h 20 min", "12 min" */
+function fmtLeft(ms: number) {
   const h = Math.floor(ms / 3600_000)
-  return h > 0 ? `${h} h` : `${Math.max(1, Math.floor(ms / 60_000))} min`
+  const min = Math.floor((ms % 3600_000) / 60_000)
+  if (h >= 4) return `${h} h`
+  if (h > 0) return min ? `${h} h ${min} min` : `${h} h`
+  return `${Math.max(1, min)} min`
+}
+
+/** What's left of the window as a shrinking bar; orange in the last HOT_MS. */
+function Fuse({ ms, className }: { ms: number; className?: string }) {
+  return (
+    <span aria-hidden="true" className={cn('block h-1 flex-1 overflow-hidden rounded-full bg-adm-line-soft', className)}>
+      <span
+        className={cn('block h-full rounded-full', ms < HOT_MS ? 'bg-adm-high-fg' : 'bg-adm-ink')}
+        style={{ width: `${Math.max(2, (ms / WINDOW_MS) * 100)}%` }}
+      />
+    </span>
+  )
+}
+
+function groupOf(c: { status: CrmStatus; lastInboundAt: string | null }): Group {
+  const ms = c.status === 'OPEN' ? windowMs(c.lastInboundAt) : 0
+  return ms > 0 && ms < HOT_MS ? 'URGENT' : c.status
 }
 
 function useVisiblePoll(fn: () => void) {
@@ -364,6 +422,7 @@ function Bubble({ m, conversationId, onChanged }: { m: CrmMessage; conversationI
             ? 'rounded-br-md bg-adm-ink text-adm-surface'
             : 'rounded-bl-md border border-adm-line bg-adm-surface text-adm-ink',
           m.status === 'failed' && 'border border-adm-bad-line bg-adm-bad-bg text-adm-bad-fg',
+          m.status === 'queued' && 'outline-2 outline-offset-2 outline-dashed outline-adm-brand',
         )}
       >
         {m.type === 'template' && (
@@ -376,7 +435,7 @@ function Bubble({ m, conversationId, onChanged }: { m: CrmMessage; conversationI
           <p className={cn('whitespace-pre-wrap break-words', m.mediaUrl && 'mt-1.5')}>{m.body}</p>
         )}
         <p className={cn('mt-1 flex items-center justify-end gap-1 font-admin-mono text-[11px]', out ? 'opacity-70' : 'text-adm-muted')}>
-          {new Date(m.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+          <LocalTime iso={m.createdAt} format={fmtClock} />
           <Tick m={m} />
         </p>
         {m.error && <p className="mt-1 text-xs font-semibold">{m.error}</p>}
@@ -389,6 +448,7 @@ function Bubble({ m, conversationId, onChanged }: { m: CrmMessage; conversationI
 function Messages({ messages, conversationId, onChanged }: { messages: CrmMessage[]; conversationId: string; onChanged: () => void }) {
   const endRef = useRef<HTMLLIElement>(null)
   const last = messages.at(-1)?.id
+  const hydrated = useHydrated()
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }) }, [last])
 
   if (messages.length === 0) {
@@ -401,7 +461,7 @@ function Messages({ messages, conversationId, onChanged }: { messages: CrmMessag
         const sep = i === 0 || day !== new Date(messages[i - 1].createdAt).toDateString()
         return (
           <Fragment key={m.id}>
-            {sep && (
+            {sep && hydrated && (
               <li className="my-2 self-center rounded-full bg-adm-chip px-3 py-1 text-xs font-semibold capitalize text-adm-muted">
                 {fmtDay(m.createdAt)}
               </li>
@@ -419,8 +479,6 @@ function Composer({ thread, onSent }: { thread: CrmThread; onSent: () => void })
   const [text, setText] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
-  const left = windowLeft(thread.lastInboundAt)
-
   function send() {
     const body = text.trim()
     if (!body || isPending) return
@@ -432,10 +490,10 @@ function Composer({ thread, onSent }: { thread: CrmThread; onSent: () => void })
     })
   }
 
-  function sendTemplate() {
+  function sendTemplate(kind: 'contact' | 'offer') {
     setError(null)
     startTransition(async () => {
-      const res = await sendContactTemplateAction(thread.id)
+      const res = await sendContactTemplateAction(thread.id, kind)
       if (res.error) setError(res.error)
       else onSent()
     })
@@ -448,13 +506,24 @@ function Composer({ thread, onSent }: { thread: CrmThread; onSent: () => void })
           <Clock className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           {thread.lastInboundAt
             ? 'Pasaron más de 24 h desde su último mensaje. WhatsApp solo deja escribirle con una plantilla aprobada; cuando responda, se habilita el chat libre.'
-            : 'El gym todavía no te escribió. Para iniciar la conversación WhatsApp exige una plantilla aprobada.'}
+            : 'Todavía no te escribió. Para iniciar la conversación WhatsApp exige una plantilla aprobada.'}
         </p>
         {error && <p role="alert" className={field.error}>{error}</p>}
-        <button type="button" onClick={sendTemplate} disabled={isPending} className={cn(btn.dark, 'min-h-10 self-start')}>
-          {isPending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Send className="size-4" aria-hidden="true" />}
-          Enviar plantilla de contacto
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {/* Prospects get the sales pitch first; linked gyms the plain contact one */}
+          {(thread.gym ? (['contact', 'offer'] as const) : (['offer', 'contact'] as const)).map((kind, i) => (
+            <button
+              key={kind}
+              type="button"
+              onClick={() => sendTemplate(kind)}
+              disabled={isPending}
+              className={cn(i === 0 ? btn.dark : btn.line, 'min-h-10')}
+            >
+              {isPending && i === 0 ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Send className="size-4" aria-hidden="true" />}
+              {kind === 'offer' ? 'Ofrecer servicios' : 'Plantilla de contacto'}
+            </button>
+          ))}
+        </div>
       </div>
     )
   }
@@ -473,7 +542,6 @@ function Composer({ thread, onSent }: { thread: CrmThread; onSent: () => void })
             {q.label}
           </button>
         ))}
-        {left && <span className="ml-auto font-admin-mono text-xs text-adm-muted">Chat libre por {left} más</span>}
       </div>
       <div className="flex items-end gap-2">
         <label htmlFor="crm-reply" className="sr-only">Respuesta</label>
@@ -517,7 +585,6 @@ function Details({ thread, allTags, onChanged }: { thread: CrmThread; allTags: s
 
   return (
     <aside aria-label="Detalles" className="flex flex-col gap-4 p-4">
-      <ContactEditor thread={thread} allTags={allTags} onChanged={onChanged} />
       {gym ? (
         <div className="flex flex-col gap-3 rounded-xl border border-adm-line-soft p-3.5">
           <div className="flex items-center gap-3">
@@ -540,7 +607,7 @@ function Details({ thread, allTags, onChanged }: { thread: CrmThread; allTags: s
               <span className="text-adm-muted">Plan {gym.plan?.label ?? gym.subscriptionPlan}</span>
               <span className="font-admin-mono font-semibold">{gym.members}{max ? ` / ${max}` : ''} socios</span>
             </p>
-            {usage !== null && <Meter value={usage} className="mt-2" />}
+            {usage !== null && <Meter value={usage} className={cn('mt-2', usage >= 90 && '[&>div]:bg-adm-high-fg')} />}
           </div>
           <Link href={`/admin/gyms/${gym.slug}`} className={cn(btn.line, 'self-start')}>
             <ExternalLink className="size-3.5" aria-hidden="true" /> Ver gimnasio
@@ -548,9 +615,10 @@ function Details({ thread, allTags, onChanged }: { thread: CrmThread; allTags: s
         </div>
       ) : (
         <p className="rounded-xl border border-adm-warn-line bg-adm-warn-bg px-3.5 py-3 text-[13px] text-adm-warn-fg">
-          Este número no coincide con ningún gimnasio. Ponele un nombre arriba para identificarlo, o cargalo como WhatsApp del dueño en el gimnasio para vincularlo.
+          Este número no coincide con ningún gimnasio. Ponele un nombre abajo para identificarlo, o cargalo como WhatsApp del dueño en el gimnasio para vincularlo.
         </p>
       )}
+      <ContactEditor thread={thread} allTags={allTags} onChanged={onChanged} />
 
       <div>
         <label htmlFor="crm-notes" className={field.label}>Notas internas</label>
@@ -582,7 +650,7 @@ export function CrmInbox({
   loadError: string | null
 }) {
   const [list, setList] = useState(initialList)
-  const [filter, setFilter] = useState<Filter>(initialThread ? 'ALL' : 'OPEN')
+  const [filter, setFilter] = useState<Filter>(initialThread?.status === 'CLOSED' ? 'ALL' : 'ACTIVE')
   const [q, setQ] = useState('')
   const [thread, setThread] = useState<CrmThread | null>(initialThread)
   const [selectedId, setSelectedId] = useState<string | null>(initialThread?.id ?? null)
@@ -668,9 +736,22 @@ export function CrmInbox({
   for (const c of list.data) for (const t of c.tags ?? []) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1)
   const allTags = [...tagCounts.keys()].sort((a, b) => tagCounts.get(b)! - tagCounts.get(a)! || a.localeCompare(b))
 
-  const shown = list.data.filter(c => (filter === 'ALL' || c.status === filter) && (!tag || c.tags?.includes(tag)))
+  const shown = list.data.filter(c =>
+    (filter === 'ALL' || (filter === 'CLOSED') === (c.status === 'CLOSED')) && (!tag || c.tags?.includes(tag)),
+  )
   const total = list.data.length
+  const counts: Record<Filter, number> = {
+    ACTIVE: (list.counts.OPEN ?? 0) + (list.counts.PENDING ?? 0),
+    CLOSED: list.counts.CLOSED ?? 0,
+    ALL: total,
+  }
+  // Server order (latest first) within each group; the urgent one by time left
+  const groups = GROUPS
+    .map(g => ({ ...g, rows: shown.filter(c => groupOf(c) === g.key) }))
+    .filter(g => g.rows.length > 0)
+  groups.find(g => g.key === 'URGENT')?.rows.sort((a, b) => windowMs(a.lastInboundAt) - windowMs(b.lastInboundAt))
   const active = thread && thread.id === selectedId ? thread : null
+  const activeLeft = active?.windowOpen ? windowMs(active.lastInboundAt) : 0
 
   return (
     <div className="flex flex-col gap-4">
@@ -685,101 +766,118 @@ export function CrmInbox({
         </p>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div role="group" aria-label="Estado" className="flex flex-wrap gap-2">
-          {(['OPEN', 'PENDING', 'CLOSED', 'ALL'] as const).map(f => (
-            <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)} className={chip(filter === f)}>
-              {f === 'ALL' ? 'Todas' : STATUS[f].filter}
-              <span className="font-admin-mono text-xs opacity-75">{f === 'ALL' ? total : list.counts[f] ?? 0}</span>
-            </button>
-          ))}
-        </div>
-        <label className="relative ml-auto min-w-0 flex-[0_1_280px]">
-          <span className="sr-only">Buscar</span>
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-adm-muted" aria-hidden="true" />
-          <input
-            type="search"
-            value={q}
-            onChange={e => setQ(e.target.value)}
-            placeholder="Gym, nombre o número"
-            className={cn(field.input, 'pl-9')}
-          />
-        </label>
-      </div>
-
-      {allTags.length > 0 && (
-        <div role="group" aria-label="Etiquetas" className="flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-xs font-semibold text-adm-muted">Etiquetas</span>
-          {allTags.map(t => (
-            <button key={t} type="button" aria-pressed={tag === t} onClick={() => setTag(tag === t ? null : t)} className={cn(chip(tag === t), 'min-h-7 px-2.5 text-xs')}>
-              {t}
-              <span className="font-admin-mono opacity-75">{tagCounts.get(t)}</span>
-            </button>
-          ))}
-          {tag && (
-            <button type="button" onClick={() => setTag(null)} className={btn.link}>Quitar filtro</button>
-          )}
-        </div>
-      )}
-
       {error && <p role="alert" className={field.error}>{error}</p>}
 
       <div className="flex h-[calc(100dvh-260px)] min-h-[520px] overflow-hidden rounded-2xl border border-adm-line bg-adm-surface">
         {/* List: hidden on small screens while a thread is open */}
         <section
           aria-label="Conversaciones"
-          className={cn('flex w-full min-w-0 flex-col border-adm-line md:w-[340px] md:shrink-0 md:border-r', selectedId && 'hidden md:flex')}
+          className={cn('flex w-full min-w-0 flex-col border-adm-line md:w-90 md:shrink-0 md:border-r', selectedId && 'hidden md:flex')}
         >
+          <div className="flex flex-col gap-2.5 border-b border-adm-line-soft p-3.5">
+            <div className="flex items-center gap-2">
+              <label className="relative min-w-0 flex-1">
+                <span className="sr-only">Buscar</span>
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-adm-muted" aria-hidden="true" />
+                <input
+                  type="search"
+                  value={q}
+                  onChange={e => setQ(e.target.value)}
+                  placeholder="Gym, nombre o número"
+                  className={cn(field.input, 'min-h-10 bg-adm-subtle pl-9')}
+                />
+              </label>
+              <NewChatDialog onCreated={id => { setFilter('ALL'); open(id); void reloadList() }} />
+            </div>
+            <div role="group" aria-label="Filtros" className="flex flex-wrap gap-1.5">
+              {FILTERS.map(f => (
+                <button key={f.key} type="button" aria-pressed={filter === f.key} onClick={() => setFilter(f.key)} className={cn(chip(filter === f.key), 'min-h-8 gap-1.5 px-3 text-xs font-bold')}>
+                  {f.label}
+                  <span className="font-admin-mono opacity-75">{counts[f.key]}</span>
+                </button>
+              ))}
+              {allTags.map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  aria-pressed={tag === t}
+                  onClick={() => setTag(tag === t ? null : t)}
+                  className={cn(chip(tag === t), 'min-h-8 gap-1.5 px-3 text-xs', tag !== t && 'border-dashed text-adm-muted')}
+                >
+                  {t}
+                  <span className="font-admin-mono opacity-75">{tagCounts.get(t)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
           {shown.length === 0 ? (
             <EmptyState icon={<Inbox className="size-8" />}>
               {total === 0 ? 'Todavía no hay conversaciones. Aparecen cuando un dueño escribe o le llega un aviso.' : 'Nada en este filtro.'}
             </EmptyState>
           ) : (
-            <ul className="flex-1 overflow-y-auto">
-              {shown.map(c => {
-                const on = c.id === selectedId
-                return (
-                  <li key={c.id}>
-                    <button
-                      type="button"
-                      aria-current={on ? 'true' : undefined}
-                      onClick={() => open(c.id)}
-                      className={cn(
-                        'flex w-full items-start gap-3 border-b border-adm-line-soft px-4 py-3.5 text-left transition-colors',
-                        on ? 'bg-[#fffde0] shadow-[inset_3px_0_0_var(--adm-ink)] dark:bg-[#24230f]' : 'hover:bg-adm-subtle',
-                      )}
-                    >
-                      {c.gym
-                        ? <GymMark name={c.gym.name} logoUrl={c.gym.logoUrl} />
-                        : <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-adm-chip text-xs font-extrabold">{initials(c.alias || c.contactName || '#')}</span>}
-                      <span className="flex min-w-0 flex-1 flex-col gap-1">
-                        <span className="flex items-baseline justify-between gap-2">
-                          <span className={cn('truncate text-sm', c.unreadCount > 0 ? 'font-extrabold' : 'font-bold')}>{displayName(c)}</span>
-                          <span className="shrink-0 font-admin-mono text-[11px] text-adm-muted">{fmtTime(c.lastMessageAt)}</span>
-                        </span>
-                        <span className="flex items-center gap-2">
-                          <span className={cn('min-w-0 flex-1 truncate text-[13px]', c.unreadCount > 0 ? 'font-semibold text-adm-ink' : 'text-adm-muted')}>
-                            {c.lastMessage ? `${c.lastMessage.direction === 'OUT' ? 'Vos: ' : ''}${c.lastMessage.body}` : '—'}
-                          </span>
-                          {c.unreadCount > 0 && (
-                            <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#1fad9d] px-1.5 text-[11px] font-extrabold text-white">
-                              {c.unreadCount}
+            <div className="flex-1 overflow-y-auto">
+              {groups.map(g => (
+                <section key={g.key} aria-labelledby={`crm-group-${g.key}`}>
+                  <h3 id={`crm-group-${g.key}`} className={cn('flex justify-between px-4 pt-3.5 pb-1.5 text-[11px] font-extrabold uppercase tracking-[0.06em]', g.key === 'URGENT' ? 'text-adm-high-fg' : 'text-adm-muted')}>
+                    {g.title}
+                    <span className="font-admin-mono">{g.rows.length}</span>
+                  </h3>
+                  <ul>
+                    {g.rows.map(c => {
+                      const on = c.id === selectedId
+                      const left = c.status === 'OPEN' ? windowMs(c.lastInboundAt) : 0
+                      return (
+                        <li key={c.id}>
+                          <button
+                            type="button"
+                            aria-current={on ? 'true' : undefined}
+                            onClick={() => open(c.id)}
+                            className={cn(
+                              'flex w-full items-start gap-3 border-b border-adm-line-soft px-4 py-3.5 text-left transition-colors',
+                              on ? 'bg-[#fffde0] shadow-[inset_3px_0_0_var(--adm-ink)] dark:bg-[#24230f]' : 'hover:bg-adm-subtle',
+                            )}
+                          >
+                            {c.gym
+                              ? <GymMark name={c.gym.name} logoUrl={c.gym.logoUrl} />
+                              : <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-adm-chip text-xs font-extrabold">{initials(c.alias || c.contactName || '#')}</span>}
+                            <span className="flex min-w-0 flex-1 flex-col gap-1">
+                              <span className="flex items-baseline justify-between gap-2">
+                                <span className={cn('truncate text-sm', c.unreadCount > 0 ? 'font-extrabold' : 'font-bold')}>{displayName(c)}</span>
+                                <span className="shrink-0 font-admin-mono text-[11px] text-adm-muted"><LocalTime iso={c.lastMessageAt} format={fmtTime} /></span>
+                              </span>
+                              <span className="flex items-center gap-2">
+                                <span className={cn('min-w-0 flex-1 truncate text-[13px]', c.unreadCount > 0 ? 'font-semibold text-adm-ink' : 'text-adm-muted')}>
+                                  {c.lastMessage ? `${c.lastMessage.direction === 'OUT' ? 'Vos: ' : ''}${c.lastMessage.body}` : '—'}
+                                </span>
+                                {c.unreadCount > 0 && (
+                                  <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#1fad9d] px-1.5 text-[11px] font-extrabold text-white">
+                                    {c.unreadCount}
+                                  </span>
+                                )}
+                              </span>
+                              {left > 0 && (
+                                <span className="mt-0.5 flex items-center gap-2" title="Tiempo para responder sin plantilla">
+                                  <Fuse ms={left} />
+                                  <span className={cn('font-admin-mono text-[11px] font-semibold', left < HOT_MS ? 'text-adm-high-fg' : 'text-adm-muted')}>
+                                    {fmtLeft(left)}
+                                  </span>
+                                </span>
+                              )}
+                              {c.tags?.length > 0 && (
+                                <span className="flex flex-wrap gap-1">
+                                  {c.tags.slice(0, 3).map(t => <TagChip key={t}>{t}</TagChip>)}
+                                  {c.tags?.length > 3 && <span className="text-[11px] font-semibold text-adm-muted">+{c.tags.length - 3}</span>}
+                                </span>
+                              )}
                             </span>
-                          )}
-                        </span>
-                        {(filter === 'ALL' || c.tags?.length > 0) && (
-                          <span className="flex flex-wrap gap-1">
-                            {filter === 'ALL' && <Pill tone={STATUS[c.status].tone}>{STATUS[c.status].label}</Pill>}
-                            {c.tags?.slice(0, 3).map(t => <TagChip key={t}>{t}</TagChip>)}
-                            {c.tags?.length > 3 && <span className="text-[11px] font-semibold text-adm-muted">+{c.tags.length - 3}</span>}
-                          </span>
-                        )}
-                      </span>
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </section>
+              ))}
+            </div>
           )}
         </section>
 
@@ -804,17 +902,24 @@ export function CrmInbox({
                     <h2 className="truncate text-base font-extrabold">{displayName(active)}</h2>
                     <p className="truncate font-admin-mono text-xs text-adm-muted">{subtitle(active)}</p>
                   </div>
-                  <label className="flex items-center gap-2">
-                    <span className="sr-only">Estado</span>
-                    <select
-                      value={active.status}
-                      onChange={e => changeStatus(e.target.value as CrmStatus)}
-                      disabled={isPending}
-                      className="min-h-9 rounded-lg border border-adm-line bg-adm-surface px-2.5 text-[13px] font-semibold"
-                    >
-                      {(Object.keys(STATUS) as CrmStatus[]).map(s => <option key={s} value={s}>{STATUS[s].label}</option>)}
-                    </select>
-                  </label>
+                  <div role="group" aria-label="Estado" className="flex gap-0.5 rounded-[10px] bg-adm-chip p-0.5">
+                    {(Object.keys(STATUS) as CrmStatus[]).map(s => (
+                      <button
+                        key={s}
+                        type="button"
+                        aria-pressed={active.status === s}
+                        onClick={() => { if (active.status !== s) changeStatus(s) }}
+                        disabled={isPending}
+                        title={STATUS[s].label}
+                        className={cn(
+                          'min-h-8 rounded-lg px-3 text-[13px] transition-colors disabled:opacity-60',
+                          active.status === s ? 'bg-adm-ink font-bold text-adm-surface' : 'font-semibold text-adm-muted hover:text-adm-ink',
+                        )}
+                      >
+                        {STATUS[s].short}
+                      </button>
+                    ))}
+                  </div>
                   {active.gym && (
                     <Link href={`/admin/gyms/${active.gym.slug}`} className={cn(btn.line, 'xl:hidden')}>
                       {active.gym.members}{active.gym.plan?.maxMembers ? `/${active.gym.plan.maxMembers}` : ''} socios
@@ -845,6 +950,21 @@ export function CrmInbox({
                     <Trash2 className="size-4" aria-hidden="true" />
                   </button>
                 </header>
+                {activeLeft > 0 && (
+                  <div
+                    className={cn(
+                      'flex items-center gap-3 border-b px-4 py-2.5 text-[13px]',
+                      activeLeft < HOT_MS ? 'border-adm-warn-line bg-adm-warn-bg text-adm-warn-fg' : 'border-adm-line-soft text-adm-muted',
+                    )}
+                  >
+                    <Clock className="size-4 shrink-0" aria-hidden="true" />
+                    <p className="shrink-0 font-bold">
+                      Chat libre por <span className="font-admin-mono">{fmtLeft(activeLeft)}</span>
+                    </p>
+                    <Fuse ms={activeLeft} className="h-1.5" />
+                    <p className="hidden shrink-0 text-xs sm:block">Después, solo con plantilla</p>
+                  </div>
+                )}
                 <div className={cn('min-h-0 flex-1 overflow-y-auto bg-adm-subtle', loadingThread && 'opacity-70')}>
                   <Messages messages={active.messages} conversationId={active.id} onChanged={reloadActive} />
                 </div>
