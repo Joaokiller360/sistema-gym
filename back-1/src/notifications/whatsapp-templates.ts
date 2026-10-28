@@ -8,6 +8,8 @@ export const TEMPLATES = {
     process.env.WHATSAPP_TEMPLATE_LIMIT_REACHED ??
     'gymos_limite_plan_alcanzado',
   contact: process.env.WHATSAPP_TEMPLATE_CONTACT ?? 'gymos_contacto',
+  // Marketing: first message to prospects that aren't customers yet
+  offer: process.env.WHATSAPP_TEMPLATE_OFFER ?? 'gymos_oferta',
 };
 
 // Local copy of each body so the CRM shows what the owner actually received
@@ -16,6 +18,8 @@ const BODIES: Record<string, string> = {
     'Hola {{1}} 👋\n\nTu gimnasio *{{2}}* ya usa el {{3}}% de los socios incluidos en tu plan: {{4}} de {{5}} en el plan {{6}}.\n\nCuando llegues al límite no vas a poder registrar socios nuevos. Si esperás seguir creciendo, te recomendamos pasarte a un plan superior.',
   [TEMPLATES.limitReached]:
     'Hola {{1}}, tu gimnasio *{{2}}* llegó al máximo de {{3}} socios del plan {{4}}.\n\nDesde ahora no se pueden registrar socios nuevos. Para seguir sumando, actualizá tu plan o liberá lugares dando de baja socios que ya no asisten.',
+  [TEMPLATES.offer]:
+    'Hola {{1}} 👋 Te escribimos desde {{2}}.\n\nAyudamos a gimnasios a manejar socios, cobros y asistencias desde un solo lugar.\n\n¿Te gustaría que te contemos cómo funciona? Respondé este mensaje y te asesoramos.',
   [TEMPLATES.contact]:
     'Hola {{1}}, te escribimos desde {{2}} por tu gimnasio *{{3}}*. Respondé este mensaje y seguimos la conversación por acá.',
 };

@@ -19,6 +19,15 @@ type Outbound =
 
 const ZERNIO_API = 'https://zernio.com/api/v1';
 
+type ZernioError = { error?: string | { message?: string }; message?: string };
+
+function zernioReason(data: ZernioError | null) {
+  return (
+    (typeof data?.error === 'string' ? data.error : data?.error?.message) ??
+    data?.message
+  );
+}
+
 /**
  * WhatsApp sender. Goes through Zernio when ZERNIO_API_KEY is set (the number is
  * connected there), otherwise straight to Meta's Cloud API. Business-initiated
@@ -170,6 +179,80 @@ export class WhatsappService {
     };
   }
 
+  /** Photo and "about" the gyms see on the business number. Only through Zernio. */
+  async getBusinessProfile(): Promise<{
+    profilePictureUrl: string | null;
+    about: string | null;
+  }> {
+    this.assertZernio();
+    const params = new URLSearchParams({
+      accountId: process.env.ZERNIO_WHATSAPP_ACCOUNT_ID!,
+    });
+    const res = await fetch(
+      `${ZERNIO_API}/whatsapp/business-profile?${params}`,
+      {
+        headers: { Authorization: `Bearer ${process.env.ZERNIO_API_KEY}` },
+        signal: AbortSignal.timeout(15_000),
+      },
+    );
+    const data = (await res.json().catch(() => null)) as
+      | (ZernioError & {
+          businessProfile?: { profilePictureUrl?: string; about?: string };
+        })
+      | null;
+    if (!res.ok) throw this.zernioFailure('business-profile', res.status, data);
+    return {
+      profilePictureUrl: data?.businessProfile?.profilePictureUrl || null,
+      about: data?.businessProfile?.about || null,
+    };
+  }
+
+  /** JPEG/PNG up to 5 MB; Zernio runs Meta's resumable upload and applies it to the profile. */
+  async setProfilePhoto(file: {
+    buffer: Buffer;
+    mimetype: string;
+    originalname: string;
+  }) {
+    this.assertZernio();
+    const form = new FormData();
+    form.append('accountId', process.env.ZERNIO_WHATSAPP_ACCOUNT_ID!);
+    form.append(
+      'file',
+      new Blob([new Uint8Array(file.buffer)], { type: file.mimetype }),
+      file.originalname,
+    );
+    const res = await fetch(`${ZERNIO_API}/whatsapp/business-profile/photo`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${process.env.ZERNIO_API_KEY}` },
+      body: form,
+      signal: AbortSignal.timeout(30_000),
+    });
+    const data = (await res.json().catch(() => null)) as ZernioError | null;
+    if (!res.ok) throw this.zernioFailure('profile photo', res.status, data);
+  }
+
+  private assertZernio() {
+    if (!this.viaZernio) {
+      throw new BadRequestException(
+        'El perfil de WhatsApp solo se puede editar con Zernio configurado (ZERNIO_API_KEY y ZERNIO_WHATSAPP_ACCOUNT_ID)',
+      );
+    }
+  }
+
+  private zernioFailure(
+    label: string,
+    status: number,
+    data: ZernioError | null,
+  ) {
+    this.logger.error(
+      `[WhatsApp/Zernio] ${label} → ${status}: ${JSON.stringify(data)}`,
+    );
+    const reason = zernioReason(data);
+    return new BadRequestException(
+      reason ? `${reason} (${status})` : `Zernio respondió ${status}`,
+    );
+  }
+
   /**
    * Templates open (or reuse) the thread by phone number; free text can only go
    * into a thread Zernio already knows, i.e. one the contact or a template started.
@@ -216,11 +299,11 @@ export class WhatsappService {
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(15_000),
     });
-    const data = (await res.json().catch(() => null)) as {
-      data?: { messageId?: string; conversationId?: string };
-      error?: string | { message?: string };
-      message?: string;
-    } | null;
+    const data = (await res.json().catch(() => null)) as
+      | (ZernioError & {
+          data?: { messageId?: string; conversationId?: string };
+        })
+      | null;
     if (res.ok) {
       return {
         ok: true,
@@ -231,9 +314,7 @@ export class WhatsappService {
     this.logger.error(
       `[WhatsApp/Zernio] ${label} → ${res.status}: ${JSON.stringify(data)}`,
     );
-    const reason =
-      (typeof data?.error === 'string' ? data.error : data?.error?.message) ??
-      data?.message;
+    const reason = zernioReason(data);
     return {
       ok: false,
       error: reason

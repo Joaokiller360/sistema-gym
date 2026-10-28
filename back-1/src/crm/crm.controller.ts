@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -7,8 +8,12 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { Role } from '../common/enums/role.enum';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -17,6 +22,8 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CrmService } from './crm.service';
 import {
   SendMessageDto,
+  SendTemplateDto,
+  SetAlertsDto,
   StartConversationDto,
   UpdateConversationDto,
 } from './dto/crm.dto';
@@ -30,6 +37,35 @@ export class CrmController {
   @Get('config')
   config() {
     return this.crm.config();
+  }
+
+  @Patch('alerts')
+  setAlerts(@Body() dto: SetAlertsDto) {
+    return this.crm.setAlertsPaused(dto.paused);
+  }
+
+  @Get('profile')
+  profile() {
+    return this.crm.profile();
+  }
+
+  /** Kept in memory only: the bytes go straight on to Zernio/Meta */
+  @Post('profile/photo')
+  @UseInterceptors(
+    FileInterceptor('photo', {
+      storage: memoryStorage(),
+      fileFilter: (_req, file, cb) => {
+        if (!['image/jpeg', 'image/png'].includes(file.mimetype)) {
+          return cb(new BadRequestException('Solo JPG o PNG'), false);
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+    }),
+  )
+  setProfilePhoto(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Falta la foto');
+    return this.crm.setProfilePhoto(file);
   }
 
   @Get('summary')
@@ -48,7 +84,7 @@ export class CrmController {
 
   @Post('conversations')
   start(@Body() dto: StartConversationDto) {
-    return this.crm.start(dto.gymId);
+    return this.crm.start(dto);
   }
 
   @Get('conversations/:id')
@@ -100,8 +136,9 @@ export class CrmController {
   @Post('conversations/:id/template')
   sendTemplate(
     @Param('id') id: string,
+    @Body() dto: SendTemplateDto,
     @CurrentUser('userId') adminId: string,
   ) {
-    return this.crm.sendContactTemplate(id, adminId);
+    return this.crm.sendContactTemplate(id, adminId, dto.kind);
   }
 }

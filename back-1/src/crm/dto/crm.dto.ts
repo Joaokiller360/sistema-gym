@@ -3,13 +3,20 @@ import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsEnum,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
 } from 'class-validator';
+
+export class SetAlertsDto {
+  @IsBoolean()
+  paused: boolean;
+}
 
 export class SendMessageDto {
   @IsString()
@@ -61,7 +68,27 @@ export class UpdateConversationDto {
   gymId?: string | null;
 }
 
+/** Either a gym (uses its WhatsApp) or a free number, e.g. a prospect */
 export class StartConversationDto {
+  @IsOptional()
   @IsUUID()
-  gymId: string;
+  gymId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  phone?: string;
+
+  /** Shown as the conversation's alias and used in the greeting */
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  name?: string;
+}
+
+export class SendTemplateDto {
+  /** contact = existing customer, offer = sales pitch. Defaults by whether a gym is linked. */
+  @IsOptional()
+  @IsIn(['contact', 'offer'])
+  kind?: 'contact' | 'offer';
 }

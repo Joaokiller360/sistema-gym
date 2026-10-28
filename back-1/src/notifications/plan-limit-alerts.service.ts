@@ -77,6 +77,15 @@ export class PlanLimitAlertsService {
     }
     if (!gym.whatsappPhone || !max || !plan) return;
 
+    // Paused from the CRM: keep the level as is so the alert goes out once resumed
+    const settings = await this.prisma.platformSettings.findFirst({
+      select: { whatsappAlertsPaused: true },
+    });
+    if (settings?.whatsappAlertsPaused) {
+      this.logger.log(`[PlanLimit] Alerts paused, held back for gym ${gymId}`);
+      return;
+    }
+
     const owner = gym.owner?.name.split(' ')[0] || gym.name;
     const sent =
       level === 100

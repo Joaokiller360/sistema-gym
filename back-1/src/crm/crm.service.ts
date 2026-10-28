@@ -14,9 +14,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   WhatsappService,
   normalizePhone,
+  parseWhatsapp,
 } from '../notifications/whatsapp.service';
 import { TEMPLATES } from '../notifications/whatsapp-templates';
-import { UpdateConversationDto } from './dto/crm.dto';
+import { StartConversationDto, UpdateConversationDto } from './dto/crm.dto';
 
 /** Meta's customer service window: free-form replies only within 24 h of the contact's last message */
 const WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -138,13 +139,37 @@ export class CrmService {
     private readonly whatsapp: WhatsappService,
   ) {}
 
-  config() {
+  async config() {
+    const settings = await this.prisma.platformSettings.findFirst({
+      select: { whatsappAlertsPaused: true },
+    });
     return {
       enabled: this.whatsapp.enabled,
       webhookSigned:
         !!process.env.ZERNIO_WEBHOOK_SECRET ||
         !!process.env.WHATSAPP_APP_SECRET,
+      alertsPaused: settings?.whatsappAlertsPaused ?? false,
     };
+  }
+
+  /** Pausing holds the plan-limit alerts back; they go out on the next check once resumed. */
+  async setAlertsPaused(paused: boolean) {
+    await this.prisma.platformSettings.upsert({
+      where: { id: '1' },
+      create: { id: '1', whatsappAlertsPaused: paused },
+      update: { whatsappAlertsPaused: paused },
+    });
+    return { alertsPaused: paused };
+  }
+
+  profile() {
+    return this.whatsapp.getBusinessProfile();
+  }
+
+  /** Meta takes a moment to serve the new photo, so the fresh profile may still show the old one */
+  async setProfilePhoto(file: Express.Multer.File) {
+    await this.whatsapp.setProfilePhoto(file);
+    return this.whatsapp.getBusinessProfile();
   }
 
   async summary() {
@@ -285,7 +310,36 @@ export class CrmService {
   }
 
   /** Opens (or reuses) the thread for a gym's WhatsApp number. Sending still needs a template. */
-  async start(gymId: string) {
+  async start(dto: StartConversationDto) {
+    if (dto.gymId) return this.startForGym(dto.gymId);
+    if (!dto.phone) throw new BadRequestException('Ingresá un número');
+    const phone = parseWhatsapp(dto.phone)!;
+    const alias = dto.name?.trim() || undefined;
+    // Might be a customer already: link the gym like an inbound message would
+    const gym = await this.prisma.gym.findFirst({
+      where: { whatsappPhone: phone },
+      select: { id: true },
+    });
+    const existing = await this.prisma.waConversation.findUnique({
+      where: { phone },
+      select: { id: true, alias: true },
+    });
+    if (existing) {
+      if (alias && !existing.alias) {
+        await this.prisma.waConversation.update({
+          where: { id: existing.id },
+          data: { alias },
+        });
+      }
+      return { id: existing.id };
+    }
+    return this.prisma.waConversation.create({
+      data: { phone, alias, gymId: gym?.id, status: 'PENDING' },
+      select: { id: true },
+    });
+  }
+
+  private async startForGym(gymId: string) {
     const gym = await this.prisma.gym.findUnique({
       where: { id: gymId },
       select: { id: true, whatsappPhone: true },
@@ -411,7 +465,11 @@ export class CrmService {
   }
 
   /** Re-opens the 24 h window with the approved contact template. */
-  async sendContactTemplate(id: string, adminId: string) {
+  async sendContactTemplate(
+    id: string,
+    adminId: string,
+    kind?: 'contact' | 'offer',
+  ) {
     const conv = await this.prisma.waConversation.findUnique({
       where: { id },
       include: {
@@ -427,15 +485,20 @@ export class CrmService {
       conv.alias?.split(' ')[0] ||
       conv.contactName?.split(' ')[0] ||
       'equipo';
+    const saas = platform?.saasName ?? 'GymOS';
+    const offer = (kind ?? (conv.gym ? 'contact' : 'offer')) === 'offer';
+    const template = offer ? TEMPLATES.offer : TEMPLATES.contact;
     const ok = await this.whatsapp.sendTemplate(
       conv.phone,
-      TEMPLATES.contact,
-      [name, platform?.saasName ?? 'GymOS', conv.gym?.name ?? 'tu gimnasio'],
+      template,
+      offer
+        ? [name === 'equipo' ? 'qué tal' : name, saas]
+        : [name, saas, conv.gym?.name ?? 'tu gimnasio'],
       adminId,
     );
     if (!ok)
       throw new BadRequestException(
-        'WhatsApp rechazó la plantilla. Revisá que esté aprobada (ver log del back).',
+        `WhatsApp rechazó la plantilla ${template}. Revisá que esté aprobada (ver log del back).`,
       );
     return { ok: true };
   }

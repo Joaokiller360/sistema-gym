@@ -721,6 +721,8 @@ model PlatformSettings {
   landingShowPlans    Boolean  @default(true)
   availableSlots      Json     @default("[]")
   termsContent        String?
+  /// Manual kill switch for automatic WhatsApp alerts (e.g. while a template awaits Meta's approval)
+  whatsappAlertsPaused Boolean @default(false)
   updatedAt           DateTime @updatedAt
 
   @@map("platform_settings")
