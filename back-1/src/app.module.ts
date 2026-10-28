@@ -29,6 +29,7 @@ import { DemoRequestsModule } from './demo-requests/demo-requests.module';
 import { AccessRequestsModule } from './access-requests/access-requests.module';
 import { WalletModule } from './wallet/wallet.module';
 import { CrmModule } from './crm/crm.module';
+import { BackupsModule } from './backups/backups.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { CrmModule } from './crm/crm.module';
     AccessRequestsModule,
     WalletModule,
     CrmModule,
+    BackupsModule,
   ],
   controllers: [AppController],
   providers: [

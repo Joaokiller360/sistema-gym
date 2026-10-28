@@ -19,6 +19,7 @@ import {
   CalendarClock,
   Mail,
   MessageCircle,
+  DatabaseBackup,
   type LucideIcon,
 } from 'lucide-react'
 import { cn, normalizeLogoUrl } from '@/lib/utils'
@@ -66,7 +67,10 @@ const NAV: { group: string; items: NavItem[] }[] = [
   },
   {
     group: 'Plataforma',
-    items: [{ label: 'Configuración', href: '/admin/settings', icon: SlidersHorizontal }],
+    items: [
+      { label: 'Configuración', href: '/admin/settings', icon: SlidersHorizontal },
+      { label: 'Copias de seguridad', href: '/admin/backups', icon: DatabaseBackup },
+    ],
   },
 ]
 

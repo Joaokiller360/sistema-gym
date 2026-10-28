@@ -17,7 +17,9 @@ FROM node:20-alpine AS production
 
 WORKDIR /app
 
-RUN apk add --no-cache openssl su-exec && \
+# pg_dump for the backups: it must be the server's major version or newer
+RUN (apk add --no-cache postgresql18-client || apk add --no-cache postgresql17-client) && \
+    apk add --no-cache openssl su-exec && \
     addgroup -S appgroup && adduser -S appuser -G appgroup
 
 COPY package*.json ./
