@@ -1,4 +1,5 @@
 import { CrmStatus } from '@prisma/client';
+import { PartialType } from '@nestjs/mapped-types';
 import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -8,11 +9,14 @@ import {
   IsEnum,
   IsIn,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
   Matches,
+  Max,
   MaxLength,
+  Min,
   ValidateIf,
 } from 'class-validator';
 import {
@@ -264,4 +268,43 @@ export class SetAwayDto {
   @IsOptional()
   @IsIn(['presence', 'always'])
   mode?: 'presence' | 'always';
+}
+
+/** Catalog item; price in units (49.9), stored in cents */
+export class ProductDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  @IsSafeName()
+  name: string;
+
+  @IsOptional()
+  @CleanText()
+  @IsString()
+  @MaxLength(900)
+  description?: string;
+
+  /** null = "consultar" */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(10_000_000)
+  price?: number | null;
+
+  @IsOptional()
+  @Matches(/^[A-Z]{3}$/, { message: 'Moneda inválida (ej. USD, ARS)' })
+  currency?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
+}
+
+export class UpdateProductDto extends PartialType(ProductDto) {}
+
+export class SendProductDto {
+  @IsOptional()
+  @IsUUID()
+  replyToId?: string;
 }

@@ -3,7 +3,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore, useTransition } from 'react'
 import Link from 'next/link'
 import {
-  AlertTriangle, ArrowLeft, Check, CheckCheck, Clock, ExternalLink, FileText, Inbox, Loader2, MessageCircle, Paperclip, Pencil, Plus, Reply, Search, Send, Trash2, Download, UserPen, X, Zap,
+  AlertTriangle, ArrowLeft, Check, CheckCheck, Clock, ExternalLink, FileText, Inbox, Loader2, MessageCircle, Paperclip, Pencil, Plus, Reply, ShoppingBag, Search, Send, Trash2, Download, UserPen, X, Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { textError } from '@/lib/text-rules'
@@ -17,6 +17,7 @@ import { Dialog, DialogClose, DialogOverlay, DialogPortal, DialogTitle } from '@
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { CreateAccountDialog } from './CreateAccountDialog'
 import { NewChatDialog } from './NewChatDialog'
+import { ProductPicker } from './ProductPicker'
 import { QuickRepliesDialog } from './QuickRepliesDialog'
 import { TemplatePicker } from './TemplatePicker'
 import {
@@ -621,6 +622,7 @@ function Composer({
   const file = attachment?.file ?? null
   const [instant, setInstant] = useState(thread.instantSend)
   const [templatesOpen, setTemplatesOpen] = useState(false)
+  const [productsOpen, setProductsOpen] = useState(false)
   // Review status of the contact/offer templates, for the buttons shown when the window is closed
   const [builtIn, setBuiltIn] = useState<Partial<Record<'contact' | 'offer', string>> | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -803,6 +805,9 @@ function Composer({
           <button type="button" onClick={() => setTemplatesOpen(true)} disabled={isPending} aria-label="Enviar plantilla" title="Enviar plantilla" className={cn(btn.icon, 'size-10')}>
             <FileText className="size-4.5" aria-hidden="true" />
           </button>
+          <button type="button" onClick={() => setProductsOpen(true)} disabled={isPending} aria-label="Enviar producto del catálogo" title="Enviar producto" className={cn(btn.icon, 'size-10')}>
+            <ShoppingBag className="size-4.5" aria-hidden="true" />
+          </button>
         </div>
         <input ref={fileRef} type="file" accept="image/jpeg,image/png,video/mp4" onChange={pickFile} className="sr-only" tabIndex={-1} aria-hidden="true" />
         <label htmlFor="crm-reply" className="sr-only">{file ? 'Texto del archivo' : 'Respuesta'}</label>
@@ -826,6 +831,13 @@ function Composer({
       </div>
       {error && <p role="alert" className={field.error}>{error}</p>}
       {picker}
+      <ProductPicker
+        conversationId={thread.id}
+        replyToId={replyTo?.id}
+        open={productsOpen}
+        onOpenChange={setProductsOpen}
+        onSent={() => { onClearReply(); onSent() }}
+      />
     </div>
   )
 }

@@ -26,9 +26,9 @@ const fileType = require('file-type') as {
 export const UPLOADS_DIR = join(process.cwd(), 'uploads');
 
 /** Folders under /uploads; nothing else is ever stored or served */
-export type UploadFolder = 'logos' | 'wa-media';
-const FOLDERS: UploadFolder[] = ['logos', 'wa-media'];
-const KEY_RE = /^(logos|wa-media)\/[\w-][\w.-]*$/;
+export type UploadFolder = 'logos' | 'wa-media' | 'catalog';
+const FOLDERS: UploadFolder[] = ['logos', 'wa-media', 'catalog'];
+const KEY_RE = /^(logos|wa-media|catalog)\/[\w-][\w.-]*$/;
 
 const IMAGE_EXT: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -122,6 +122,27 @@ export class StorageService implements OnApplicationBootstrap {
       body,
       detected.mime,
     );
+  }
+
+  /** Bytes of a stored file by its public path (disk first, then MinIO); null when missing */
+  async read(url: string | null | undefined) {
+    const key = url?.startsWith('/uploads/') ? url.slice(9) : null;
+    if (!key || !KEY_RE.test(key)) return null;
+    const type = EXT_TYPE[extname(key)] ?? 'application/octet-stream';
+    const local = await readFile(join(UPLOADS_DIR, key)).catch(() => null);
+    if (local) return { body: local, type };
+    if (!this.enabled) return null;
+    try {
+      const obj = await this.s3.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
+      const bytes = await obj.Body?.transformToByteArray();
+      return bytes
+        ? { body: Buffer.from(bytes), type: obj.ContentType ?? type }
+        : null;
+    } catch {
+      return null;
+    }
   }
 
   /** Removes a file by its public path; anything outside /uploads is ignored */

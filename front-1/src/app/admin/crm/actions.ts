@@ -253,6 +253,62 @@ export async function createAccountAction(
   return res.data
 }
 
+export interface CrmProduct {
+  id: string
+  name: string
+  description: string | null
+  /** In units (the back stores cents); null = "a consultar" */
+  price: number | null
+  currency: string
+  /** /uploads/catalog/… */
+  imageUrl: string | null
+  active: boolean
+}
+
+export async function listProductsAction(): Promise<CrmProduct[] | { error: string }> {
+  const res = await apiFetchWithError<CrmProduct[]>('/admin/crm/products', await token(), { cache: 'no-store' })
+  return 'error' in res ? res : res.data
+}
+
+export async function saveProductAction(
+  id: string | null,
+  data: Partial<Pick<CrmProduct, 'name' | 'description' | 'price' | 'currency' | 'active'>>,
+): Promise<CrmProduct | { error: string }> {
+  const res = await apiFetchWithError<CrmProduct>(id ? `/admin/crm/products/${id}` : '/admin/crm/products', await token(), {
+    method: id ? 'PATCH' : 'POST',
+    body: JSON.stringify(data),
+  })
+  return 'error' in res ? res : res.data
+}
+
+export async function deleteProductAction(id: string) {
+  return post(`/admin/crm/products/${id}`, undefined, 'DELETE')
+}
+
+/** Expects a `photo` field (JPG/PNG, already resized in the browser) */
+export async function uploadProductPhotoAction(id: string, formData: FormData): Promise<{ imageUrl: string } | { error: string }> {
+  const res = await fetch(`${API_URL}/admin/crm/products/${id}/photo`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${await token()}` },
+    body: formData,
+  })
+  const data = (await res.json().catch(() => null)) as { imageUrl?: string; message?: string | string[] } | null
+  if (!res.ok || !data?.imageUrl) {
+    const msg = Array.isArray(data?.message) ? data.message[0] : data?.message
+    return { error: msg ?? 'No se pudo subir la foto' }
+  }
+  return { imageUrl: data.imageUrl }
+}
+
+export async function removeProductPhotoAction(id: string) {
+  return post(`/admin/crm/products/${id}/photo`, undefined, 'DELETE')
+}
+
+/** Photo + description into the chat (text only without a photo) */
+export async function sendProductAction(conversationId: string, productId: string, replyToId?: string) {
+  return post(`/admin/crm/conversations/${conversationId}/products/${productId}`, replyToId ? { replyToId } : {})
+}
+
 /** From a gym's page: open (or create) its thread and jump to it. */
 export async function startConversationAction(gymId: string): Promise<{ error: string }> {
   const res = await apiFetchWithError<{ id: string }>('/admin/crm/conversations', await token(), {
