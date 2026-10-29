@@ -187,6 +187,14 @@ export async function setWaProfilePhotoAction(formData: FormData): Promise<WaPro
   return { profilePictureUrl: data?.profilePictureUrl ?? null, about: data?.about ?? null }
 }
 
+export type AwayMode = 'presence' | 'always'
+export interface AwayConfig { enabled: boolean; message: string; mode: AwayMode }
+
+/** Auto-reply while nobody has the CRM open (or always); fields left out keep their value */
+export async function setAwayAction(data: Partial<AwayConfig>) {
+  return post('/admin/crm/away', data, 'PATCH')
+}
+
 export async function sendContactTemplateAction(id: string, kind?: 'contact' | 'offer') {
   return post(`/admin/crm/conversations/${id}/template`, kind ? { kind } : {})
 }

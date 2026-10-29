@@ -34,6 +34,7 @@ import {
   SendMessageDto,
   SendTemplateDto,
   SetAlertsDto,
+  SetAwayDto,
   StartConversationDto,
   UpdateConversationDto,
 } from './dto/crm.dto';
@@ -120,6 +121,11 @@ export class CrmController {
     return this.crm.deleteQuickReply(qid);
   }
 
+  @Patch('away')
+  setAway(@Body() dto: SetAwayDto) {
+    return this.crm.setAway(dto);
+  }
+
   @Get('summary')
   summary() {
     return this.crm.summary();
@@ -136,6 +142,8 @@ export class CrmController {
       typeof q === 'string'
         ? (cleanText(q) as string).slice(0, 100)
         : undefined;
+    // The CRM polls this every 10 s while visible: that's the team being online
+    void this.crm.touchPresence().catch(() => null);
     return this.crm.list(status, search, tag?.slice(0, 30));
   }
 

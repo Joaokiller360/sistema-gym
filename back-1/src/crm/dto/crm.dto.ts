@@ -238,3 +238,21 @@ export class CreateAccountDto {
   @IsBoolean()
   sendWhatsapp: boolean;
 }
+
+/** Auto-reply while nobody is online; any field left out keeps its value */
+export class SetAwayDto {
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  /** {nombre} becomes the contact's first name */
+  @IsOptional()
+  @CleanText()
+  @IsString()
+  @MaxLength(1000)
+  message?: string;
+
+  @IsOptional()
+  @IsIn(['presence', 'always'])
+  mode?: 'presence' | 'always';
+}

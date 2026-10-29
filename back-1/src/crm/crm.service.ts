@@ -19,6 +19,7 @@ import {
 import { TEMPLATES } from '../notifications/whatsapp-templates';
 import { SuperAdminService } from '../super-admin/super-admin.service';
 import {
+  SetAwayDto,
   CreateAccountDto,
   CreateTemplateDto,
   QuickReplyDto,
@@ -54,6 +55,12 @@ const MEDIA_EXT: Record<string, string> = {
   'video/3gpp': '3gp',
   'application/pdf': 'pdf',
 };
+
+/** No CRM poll for this long = nobody online */
+const PRESENCE_MS = 2 * 60 * 1000;
+/** A contact gets the auto-reply at most once in this period */
+const AWAY_COOLDOWN_MS = 12 * 60 * 60 * 1000;
+type AwayMode = 'presence' | 'always';
 
 const TEMPLATE_STATUS_ES: Record<string, string> = {
   PENDING: 'en revisión',
@@ -170,15 +177,129 @@ export class CrmService {
 
   async config() {
     const settings = await this.prisma.platformSettings.findFirst({
-      select: { whatsappAlertsPaused: true },
+      select: {
+        whatsappAlertsPaused: true,
+        awayEnabled: true,
+        awayMessage: true,
+        awayMode: true,
+      },
     });
     return {
+      away: {
+        enabled: settings?.awayEnabled ?? false,
+        message: settings?.awayMessage ?? '',
+        mode: (settings?.awayMode ?? 'presence') as AwayMode,
+      },
       enabled: this.whatsapp.enabled,
       webhookSigned:
         !!process.env.ZERNIO_WEBHOOK_SECRET ||
         !!process.env.WHATSAPP_APP_SECRET,
       alertsPaused: settings?.whatsappAlertsPaused ?? false,
     };
+  }
+
+  async setAway(dto: SetAwayDto) {
+    const data = {
+      ...(dto.enabled !== undefined && { awayEnabled: dto.enabled }),
+      ...(dto.message !== undefined && {
+        awayMessage: dto.message.trim() || null,
+      }),
+      ...(dto.mode && { awayMode: dto.mode }),
+    };
+    const current = await this.prisma.platformSettings.findFirst({
+      select: { awayEnabled: true, awayMessage: true },
+    });
+    const enabled = data.awayEnabled ?? current?.awayEnabled ?? false;
+    const message =
+      'awayMessage' in data ? data.awayMessage : current?.awayMessage;
+    if (enabled && !message) {
+      throw new BadRequestException(
+        'Escribí el mensaje de la respuesta automática',
+      );
+    }
+    await this.prisma.platformSettings.upsert({
+      where: { id: '1' },
+      create: { id: '1', ...data },
+      update: data,
+    });
+    return { ok: true };
+  }
+
+  /**
+   * Called by the CRM's list poll, which only runs while the tab is visible: that's what
+   * "online" means for the auto-reply. Written at most every 30 s.
+   */
+  async touchPresence() {
+    if (Date.now() - this.lastPresenceWrite < 30_000) return;
+    this.lastPresenceWrite = Date.now();
+    await this.prisma.platformSettings.upsert({
+      where: { id: '1' },
+      create: { id: '1', crmSeenAt: new Date() },
+      update: { crmSeenAt: new Date() },
+    });
+  }
+  private lastPresenceWrite = 0;
+
+  /** At most one auto-reply per contact per AWAY_COOLDOWN_MS; in presence mode only while nobody is online. */
+  private async awayReply(conversationId: string) {
+    const s = await this.prisma.platformSettings.findFirst({
+      select: {
+        awayEnabled: true,
+        awayMessage: true,
+        awayMode: true,
+        crmSeenAt: true,
+      },
+    });
+    if (!s?.awayEnabled || !s.awayMessage) return;
+    if (
+      s.awayMode !== 'always' &&
+      s.crmSeenAt &&
+      Date.now() - s.crmSeenAt.getTime() < PRESENCE_MS
+    ) {
+      return;
+    }
+    // Claim first: two messages arriving together must not both trigger it
+    const { count } = await this.prisma.waConversation.updateMany({
+      where: {
+        id: conversationId,
+        OR: [
+          { awayRepliedAt: null },
+          { awayRepliedAt: { lt: new Date(Date.now() - AWAY_COOLDOWN_MS) } },
+        ],
+      },
+      data: { awayRepliedAt: new Date() },
+    });
+    if (!count) return;
+    const conv = await this.prisma.waConversation.findUniqueOrThrow({
+      where: { id: conversationId },
+      select: {
+        phone: true,
+        alias: true,
+        contactName: true,
+        gym: { select: { owner: { select: { name: true } } } },
+      },
+    });
+    const name =
+      conv.gym?.owner?.name.split(' ')[0] ||
+      conv.alias?.split(' ')[0] ||
+      conv.contactName?.split(' ')[0] ||
+      '';
+    const body = s.awayMessage
+      .replace(/\{nombre\}/gi, name)
+      // "Hola {nombre}!" with no name known: no dangling space
+      .replace(/ +([!,.?])/g, '$1');
+    const msg = await this.prisma.waMessage.create({
+      data: {
+        conversationId,
+        direction: 'OUT',
+        type: 'auto',
+        body,
+        status: 'sending',
+      },
+      select: { id: true },
+    });
+    // No sentById: the chat stays "Por responder", a person still has to answer
+    await this.whatsapp.sendText(conv.phone, body, undefined, msg.id);
   }
 
   /** Pausing holds the plan-limit alerts back; they go out on the next check once resumed. */
@@ -1091,7 +1212,7 @@ export class CrmService {
       select: { id: true },
     });
 
-    return this.prisma.waMessage.create({
+    const saved = await this.prisma.waMessage.create({
       data: {
         conversationId: conv.id,
         direction: 'IN',
@@ -1102,6 +1223,13 @@ export class CrmService {
       },
       select: { id: true, mediaUrl: true },
     });
+    // Not awaited: Zernio wants the webhook answered within 5 s
+    if (m.type !== 'reaction') {
+      void this.awayReply(conv.id).catch((e) =>
+        this.logger.error(`[CRM] Auto-reply for ${conv.id} failed:`, e),
+      );
+    }
+    return saved;
   }
 
   private async storeMedia(messageId: string, url: string) {

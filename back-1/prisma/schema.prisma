@@ -704,26 +704,33 @@ model SupportTicket {
 // ── Platform Settings (singleton) ───────────────────────────
 
 model PlatformSettings {
-  id                   String   @id @default("1")
-  saasName             String   @default("GymSystem")
+  id                   String    @id @default("1")
+  saasName             String    @default("GymSystem")
   logoUrl              String?
   creatorName          String?
   creatorUrl           String?
   footerText           String?
-  footerLinks          Json     @default("[]")
-  footerShowPoweredBy  Boolean  @default(true)
+  footerLinks          Json      @default("[]")
+  footerShowPoweredBy  Boolean   @default(true)
   heroTitle            String?
   heroSubtitle         String?
   heroCtaText          String?
   heroCtaUrl           String?
   primaryColor         String?
-  landingFeatures      Json     @default("[]")
-  landingShowPlans     Boolean  @default(true)
-  availableSlots       Json     @default("[]")
+  landingFeatures      Json      @default("[]")
+  landingShowPlans     Boolean   @default(true)
+  availableSlots       Json      @default("[]")
   termsContent         String?
   /// Manual kill switch for automatic WhatsApp alerts (e.g. while a template awaits Meta's approval)
-  whatsappAlertsPaused Boolean  @default(false)
-  updatedAt            DateTime @updatedAt
+  whatsappAlertsPaused Boolean   @default(false)
+  /// CRM auto-reply to inbound WhatsApp messages
+  awayEnabled          Boolean   @default(false)
+  awayMessage          String?
+  /// presence = only while nobody has the CRM open; always = every time
+  awayMode             String    @default("presence")
+  /// Last poll from an admin with the CRM open and visible (presence for awayMode)
+  crmSeenAt            DateTime?
+  updatedAt            DateTime  @updatedAt
 
   @@map("platform_settings")
 }
@@ -850,6 +857,8 @@ model WaConversation {
   lastInboundAt DateTime?
   /// Replies skip the 1-minute undo queue and go out right away
   instantSend   Boolean   @default(false)
+  /// Last auto-reply, so a contact gets at most one per cooldown
+  awayRepliedAt DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

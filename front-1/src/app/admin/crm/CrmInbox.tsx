@@ -462,6 +462,9 @@ function Bubble({ m, conversationId, onChanged }: { m: CrmMessage; conversationI
             {m.sentById ? 'Plantilla' : 'Aviso automático'}
           </p>
         )}
+        {m.type === 'auto' && (
+          <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.06em] opacity-60">Respuesta automática</p>
+        )}
         {m.mediaUrl && <Media m={m} />}
         {!(m.mediaUrl && MEDIA_ONLY.has(m.body.replace(/ \(abrilo en WhatsApp\)$/, ''))) && (
           <p className={cn('whitespace-pre-wrap break-words', m.mediaUrl && 'mt-1.5')}>{m.body}</p>

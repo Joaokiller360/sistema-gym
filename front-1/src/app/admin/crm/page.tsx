@@ -2,11 +2,12 @@ import { cookies } from 'next/headers'
 import { apiFetch } from '@/lib/api'
 import { AdminPage, PageHeader } from '@/components/admin/ui'
 import { AlertsToggle } from './AlertsToggle'
+import { AwayReply } from './AwayReply'
 import { WaProfilePhoto } from './WaProfilePhoto'
 import { CrmInbox } from './CrmInbox'
-import { getConversationAction, listConversationsAction, listQuickRepliesAction, type CrmThread, type WaProfile } from './actions'
+import { getConversationAction, listConversationsAction, listQuickRepliesAction, type AwayConfig, type CrmThread, type WaProfile } from './actions'
 
-interface CrmConfig { enabled: boolean; webhookSigned: boolean; alertsPaused: boolean }
+interface CrmConfig { enabled: boolean; webhookSigned: boolean; alertsPaused: boolean; away: AwayConfig }
 
 /** Once per request: the client starts its countdowns from this, see useNow in CrmInbox */
 const requestTime = () => Date.now()
@@ -36,6 +37,7 @@ export default async function CrmPage({ searchParams }: Props) {
         actions={(
           <div className="flex flex-wrap items-start gap-2">
             {profile && <WaProfilePhoto initialUrl={profile.profilePictureUrl} />}
+            {config && <AwayReply initial={config.away} />}
             {config && <AlertsToggle initialPaused={config.alertsPaused} />}
           </div>
         )}
