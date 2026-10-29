@@ -4,6 +4,8 @@ import { SuperAdminService } from './super-admin.service';
 
 @Module({
   controllers: [SuperAdminController],
-  providers: [SuperAdminService]
+  providers: [SuperAdminService],
+  // The CRM creates gym accounts from a chat
+  exports: [SuperAdminService],
 })
 export class SuperAdminModule {}

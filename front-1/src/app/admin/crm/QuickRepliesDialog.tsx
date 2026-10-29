@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { textError } from '@/lib/text-rules'
 import { btn, field } from '@/components/admin/ui'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { deleteQuickReplyAction, listQuickRepliesAction, saveQuickReplyAction, type QuickReply } from './actions'
@@ -41,6 +42,8 @@ export function QuickRepliesDialog({
   function save(e: React.FormEvent) {
     e.preventDefault()
     if (!label.trim() || !text.trim()) { setError('Completá el nombre y el mensaje'); return }
+    const bad = textError('label', label)
+    if (bad) { setError(`Nombre del botón: ${bad}`); return }
     setError(null)
     startTransition(async () => {
       const res = await saveQuickReplyAction({ id: editing || undefined, label: label.trim(), text: text.trim() })

@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { Loader2, MessageSquarePlus } from 'lucide-react'
 import { btn, field } from '@/components/admin/ui'
+import { textError } from '@/lib/text-rules'
 import { PhoneInput } from '@/components/shared/PhoneInput'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { createChatAction } from './actions'
@@ -18,6 +19,8 @@ export function NewChatDialog({ onCreated }: { onCreated: (id: string) => void }
   function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!phone) { setError('Ingresá un número'); return }
+    const bad = textError('name', name)
+    if (bad) { setError(bad); return }
     setError(null)
     startTransition(async () => {
       const res = await createChatAction(phone, name)

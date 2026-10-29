@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { CrmStatus, Prisma } from '@prisma/client';
-import { randomUUID } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import {
@@ -17,7 +17,9 @@ import {
   parseWhatsapp,
 } from '../notifications/whatsapp.service';
 import { TEMPLATES } from '../notifications/whatsapp-templates';
+import { SuperAdminService } from '../super-admin/super-admin.service';
 import {
+  CreateAccountDto,
   CreateTemplateDto,
   QuickReplyDto,
   SendAnyTemplateDto,
@@ -155,6 +157,7 @@ export class CrmService {
     private readonly prisma: PrismaService,
     private readonly whatsapp: WhatsappService,
     private readonly storage: StorageService,
+    private readonly superAdmin: SuperAdminService,
   ) {}
 
   async config() {
@@ -736,6 +739,105 @@ export class CrmService {
     }
     await this.whatsapp.deleteTemplate(name, language);
     return { ok: true };
+  }
+
+  /**
+   * Gym + owner login for the contact of this chat, linked to it. The owner also gets
+   * the welcome email; with the window open the login goes by WhatsApp too.
+   * The password is returned once so the team can pass it on; the CRM log hides it.
+   */
+  async createAccount(id: string, dto: CreateAccountDto, adminId: string) {
+    const conv = await this.assertExists(id);
+    if (conv.gymId) {
+      throw new ConflictException(
+        'Este contacto ya tiene un gimnasio vinculado',
+      );
+    }
+    const email = dto.email.trim().toLowerCase();
+    // createGym takes over an existing user (new password and role): never from a chat
+    const existing = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+    if (existing)
+      throw new ConflictException('Ya existe un usuario con ese email');
+    if (dto.plan) {
+      const plan = await this.prisma.subscriptionPlan.findFirst({
+        where: { key: dto.plan },
+        select: { key: true },
+      });
+      if (!plan) throw new BadRequestException('Plan inexistente');
+    }
+
+    const gymName = dto.gymName.trim();
+    const ownerName = dto.ownerName.trim();
+    const password = randomBytes(12).toString('base64url');
+    const gym = (await this.superAdmin.createGym({
+      name: gymName,
+      slug: await this.freeSlug(gymName),
+      ...(dto.plan && { subscriptionPlan: dto.plan }),
+      whatsappPhone: `+${conv.phone}`,
+      owner: { name: ownerName, email, password },
+    })) as { id: string; slug: string };
+    await this.prisma.waConversation.update({
+      where: { id },
+      data: { gymId: gym.id },
+    });
+
+    let whatsapp: { sent: boolean; error?: string } | null = null;
+    if (dto.sendWhatsapp && this.windowOpen(conv.lastInboundAt)) {
+      const platform = await this.prisma.platformSettings.findFirst({
+        select: { saasName: true },
+      });
+      const url = (process.env.FRONTEND_URL ?? 'http://localhost:3000')
+        .split(',')[0]
+        .trim()
+        .replace(/\/$/, '');
+      const text = (pass: string) =>
+        `¡Listo, ${ownerName.split(' ')[0]}! Ya creamos la cuenta de *${gymName}* en ${platform?.saasName ?? 'GymOS'}.\n\n` +
+        `Entrá en ${url}/login\nUsuario: ${email}\nContraseña: ${pass}\n\n` +
+        'Te recomendamos cambiar la contraseña después de entrar.';
+      // Saved without the password; WhatsApp gets the real one
+      const msg = await this.prisma.waMessage.create({
+        data: {
+          conversationId: id,
+          direction: 'OUT',
+          type: 'text',
+          body: text('••••••••'),
+          sentById: adminId,
+          status: 'sending',
+        },
+        select: { id: true },
+      });
+      const res = await this.whatsapp.sendText(
+        conv.phone,
+        text(password),
+        adminId,
+        msg.id,
+      );
+      whatsapp = { sent: res.ok, error: res.error };
+    }
+    return { gymId: gym.id, slug: gym.slug, email, password, whatsapp };
+  }
+
+  /** Slug from the gym name, with -2, -3… when taken */
+  private async freeSlug(name: string) {
+    const base =
+      name
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 50) || 'gym';
+    for (let i = 1; ; i++) {
+      const slug = i === 1 ? base : `${base}-${i}`;
+      const taken = await this.prisma.gym.findUnique({
+        where: { slug },
+        select: { id: true },
+      });
+      if (!taken) return slug;
+    }
   }
 
   // ── Quick replies ──────────────────────────────────────────

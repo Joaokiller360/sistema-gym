@@ -211,6 +211,36 @@ export async function createChatAction(phone: string, name: string): Promise<{ i
   return 'error' in res ? res : { id: res.data.id }
 }
 
+export interface CrmPlan { key: string; label: string; maxMembers: number | null; isActive: boolean }
+
+export async function listPlansAction(): Promise<CrmPlan[]> {
+  const res = await apiFetchWithError<CrmPlan[]>('/admin/subscription-plans', await token(), { cache: 'no-store' })
+  return 'error' in res ? [] : res.data.filter(p => p.isActive)
+}
+
+export interface CreatedAccount {
+  gymId: string
+  slug: string
+  email: string
+  /** Shown once: the team passes it on if WhatsApp didn't */
+  password: string
+  whatsapp: { sent: boolean; error?: string } | null
+}
+
+/** Gym + owner login for this chat's contact; links the chat to the new gym */
+export async function createAccountAction(
+  id: string,
+  data: { gymName: string; ownerName: string; email: string; plan?: string; sendWhatsapp: boolean },
+): Promise<CreatedAccount | { error: string }> {
+  const res = await apiFetchWithError<CreatedAccount>(`/admin/crm/conversations/${id}/account`, await token(), {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+  if ('error' in res) return res
+  refresh()
+  return res.data
+}
+
 /** From a gym's page: open (or create) its thread and jump to it. */
 export async function startConversationAction(gymId: string): Promise<{ error: string }> {
   const res = await apiFetchWithError<{ id: string }>('/admin/crm/conversations', await token(), {

@@ -6,6 +6,7 @@ import {
   AlertTriangle, ArrowLeft, Check, CheckCheck, Clock, ExternalLink, FileText, Inbox, Loader2, MessageCircle, Paperclip, Pencil, Plus, Search, Send, Trash2, Download, UserPen, X, Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { textError } from '@/lib/text-rules'
 import { EmptyState, GymMark, Meter, Switch, btn, chip, field, initials } from '@/components/admin/ui'
 import {
   AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
@@ -14,6 +15,7 @@ import {
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import { Dialog, DialogClose, DialogOverlay, DialogPortal, DialogTitle } from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
+import { CreateAccountDialog } from './CreateAccountDialog'
 import { NewChatDialog } from './NewChatDialog'
 import { QuickRepliesDialog } from './QuickRepliesDialog'
 import { TemplatePicker } from './TemplatePicker'
@@ -130,11 +132,15 @@ function ContactEditor({ thread, allTags, onChanged }: { thread: CrmThread; allT
 
   function saveAlias() {
     if (alias.trim() === (thread.alias ?? '')) return
+    const bad = textError('name', alias)
+    if (bad) { setStatus(bad); return }
     save({ alias: alias.trim() })
   }
 
   function addTag(raw: string) {
     const tag = raw.trim().replace(/\s+/g, ' ').slice(0, 30)
+    const bad = textError('label', tag)
+    if (bad) { setStatus(bad); return }
     setDraft('')
     if (!tag || tags.length >= MAX_TAGS || tags.some(t => t.toLowerCase() === tag.toLowerCase())) return
     const next = [...tags, tag]
@@ -728,9 +734,13 @@ function Details({ thread, allTags, onChanged }: { thread: CrmThread; allTags: s
           </Link>
         </div>
       ) : (
-        <p className="rounded-xl border border-adm-warn-line bg-adm-warn-bg px-3.5 py-3 text-[13px] text-adm-warn-fg">
-          Este número no coincide con ningún gimnasio. Ponele un nombre abajo para identificarlo, o cargalo como WhatsApp del dueño en el gimnasio para vincularlo.
-        </p>
+        <div className="flex flex-col gap-3 rounded-xl border border-adm-warn-line bg-adm-warn-bg px-3.5 py-3 text-[13px] text-adm-warn-fg">
+          <p>
+            Este número no coincide con ningún gimnasio. Si ya te pasó sus datos, creale la cuenta; si ya es cliente, cargá
+            este número como WhatsApp del dueño en su gimnasio.
+          </p>
+          <CreateAccountDialog thread={thread} onCreated={onChanged} />
+        </div>
       )}
       <ContactEditor thread={thread} allTags={allTags} onChanged={onChanged} />
 

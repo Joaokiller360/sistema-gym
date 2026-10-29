@@ -21,6 +21,12 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CrmService } from './crm.service';
 import {
+  LANGUAGE,
+  TEMPLATE_NAME,
+  cleanText,
+} from '../common/validators/text.validator';
+import {
+  CreateAccountDto,
   CreateTemplateDto,
   QuickReplyDto,
   SendAnyTemplateDto,
@@ -88,6 +94,9 @@ export class CrmController {
     @Param('name') name: string,
     @Query('language') language = 'es',
   ) {
+    if (!TEMPLATE_NAME.test(name) || !LANGUAGE.test(language)) {
+      throw new BadRequestException('Plantilla inválida');
+    }
     return this.crm.deleteTemplate(name, language);
   }
 
@@ -122,7 +131,12 @@ export class CrmController {
     @Query('q') q?: string,
     @Query('tag') tag?: string,
   ) {
-    return this.crm.list(status, q, tag);
+    // Prisma binds it as a parameter; capped and cleaned so a huge or invisible query can't slow the search
+    const search =
+      typeof q === 'string'
+        ? (cleanText(q) as string).slice(0, 100)
+        : undefined;
+    return this.crm.list(status, search, tag?.slice(0, 30));
   }
 
   @Post('conversations')
@@ -197,6 +211,16 @@ export class CrmController {
   ) {
     if (!file) throw new BadRequestException('Falta el archivo');
     return this.crm.sendMedia(id, file, dto.caption, adminId);
+  }
+
+  /** Gym + owner login for this contact; returns the password once */
+  @Post('conversations/:id/account')
+  createAccount(
+    @Param('id') id: string,
+    @Body() dto: CreateAccountDto,
+    @CurrentUser('userId') adminId: string,
+  ) {
+    return this.crm.createAccount(id, dto, adminId);
   }
 
   @Post('conversations/:id/templates')
