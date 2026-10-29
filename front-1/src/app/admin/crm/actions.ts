@@ -41,6 +41,8 @@ export interface CrmMessage {
 
 export interface CrmThread extends Omit<CrmConversation, 'lastMessage' | 'gym'> {
   notes: string | null
+  /** Replies skip the 1-minute undo queue */
+  instantSend: boolean
   windowOpen: boolean
   messages: CrmMessage[]
   gym: (CrmGymRef & {
@@ -97,6 +99,67 @@ export async function deleteMessageAction(id: string, messageId: string) {
   return post(`/admin/crm/conversations/${id}/messages/${messageId}`, undefined, 'DELETE')
 }
 
+/** Skips what's left of the undo minute */
+export async function sendNowAction(id: string, messageId: string) {
+  return post(`/admin/crm/conversations/${id}/messages/${messageId}/send-now`)
+}
+
+export interface WaTemplate {
+  name: string
+  language: string
+  category: string
+  /** APPROVED, PENDING, REJECTED, PAUSED…: only APPROVED can be sent */
+  status: string
+  /** Header + body with {{n}} holes */
+  preview: string
+  params: number
+  /** Why it can't be sent from the CRM, if it can't */
+  unsupported: string | null
+  /** What the CRM already knows for this contact, one per value ('' = to fill) */
+  defaults: string[]
+}
+
+export async function listTemplatesAction(conversationId: string): Promise<WaTemplate[] | { error: string }> {
+  const res = await apiFetchWithError<WaTemplate[]>(`/admin/crm/templates?conversation=${encodeURIComponent(conversationId)}`, await token(), { cache: 'no-store' })
+  return 'error' in res ? res : res.data
+}
+
+/** Goes to Meta's review; it can be sent once APPROVED */
+export async function createTemplateAction(t: {
+  name: string
+  category: 'UTILITY' | 'MARKETING'
+  language: string
+  body: string
+  examples: string[]
+  footer?: string
+}) {
+  return post('/admin/crm/templates', t)
+}
+
+export async function deleteTemplateAction(name: string, language: string) {
+  return post(`/admin/crm/templates/${encodeURIComponent(name)}?language=${encodeURIComponent(language)}`, undefined, 'DELETE')
+}
+
+export async function sendTemplateAction(id: string, t: { name: string; language: string; params: string[] }) {
+  return post(`/admin/crm/conversations/${id}/templates`, t)
+}
+
+export interface QuickReply { id: string; label: string; text: string }
+
+export async function listQuickRepliesAction(): Promise<QuickReply[] | { error: string }> {
+  const res = await apiFetchWithError<QuickReply[]>('/admin/crm/quick-replies', await token(), { cache: 'no-store' })
+  return 'error' in res ? res : res.data
+}
+
+export async function saveQuickReplyAction(data: { id?: string; label: string; text: string }) {
+  const body = { label: data.label, text: data.text }
+  return data.id ? post(`/admin/crm/quick-replies/${data.id}`, body, 'PATCH') : post('/admin/crm/quick-replies', body)
+}
+
+export async function deleteQuickReplyAction(id: string) {
+  return post(`/admin/crm/quick-replies/${id}`, undefined, 'DELETE')
+}
+
 /** Holds the automatic plan-limit alerts back (e.g. while a template is pending approval) */
 export async function setAlertsPausedAction(paused: boolean) {
   return post('/admin/crm/alerts', { paused }, 'PATCH')
@@ -126,7 +189,7 @@ export async function sendContactTemplateAction(id: string, kind?: 'contact' | '
   return post(`/admin/crm/conversations/${id}/template`, kind ? { kind } : {})
 }
 
-export async function updateConversationAction(id: string, data: { status?: CrmStatus; notes?: string; alias?: string; tags?: string[]; gymId?: string | null }) {
+export async function updateConversationAction(id: string, data: { status?: CrmStatus; notes?: string; alias?: string; tags?: string[]; gymId?: string | null; instantSend?: boolean }) {
   const res = await post(`/admin/crm/conversations/${id}`, data, 'PATCH')
   if (!res.error && data.status) refresh()
   return res

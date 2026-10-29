@@ -4,7 +4,7 @@ import { AdminPage, PageHeader } from '@/components/admin/ui'
 import { AlertsToggle } from './AlertsToggle'
 import { WaProfilePhoto } from './WaProfilePhoto'
 import { CrmInbox } from './CrmInbox'
-import { getConversationAction, listConversationsAction, type CrmThread, type WaProfile } from './actions'
+import { getConversationAction, listConversationsAction, listQuickRepliesAction, type CrmThread, type WaProfile } from './actions'
 
 interface CrmConfig { enabled: boolean; webhookSigned: boolean; alertsPaused: boolean }
 
@@ -16,12 +16,13 @@ export default async function CrmPage({ searchParams }: Props) {
   const { c } = await searchParams
   const token = (await cookies()).get('session')?.value ?? ''
 
-  const [config, profile, list, thread] = await Promise.all([
+  const [config, profile, list, thread, quickReplies] = await Promise.all([
     apiFetch<CrmConfig>('/admin/crm/config', token, { silent: true }),
     // Fails without Zernio: the photo control is then hidden
     apiFetch<WaProfile>('/admin/crm/profile', token, { silent: true, cache: 'no-store' }),
     listConversationsAction('ALL'),
     c ? getConversationAction(c) : Promise.resolve(null),
+    listQuickRepliesAction(),
   ])
 
   return (
@@ -40,6 +41,7 @@ export default async function CrmPage({ searchParams }: Props) {
         config={config ?? { enabled: false, webhookSigned: false }}
         initialList={'error' in list ? { data: [], counts: {} } : list}
         initialThread={thread && !('error' in thread) ? (thread as CrmThread) : null}
+        initialQuickReplies={'error' in quickReplies ? [] : quickReplies}
         loadError={'error' in list ? list.error : null}
       />
     </AdminPage>

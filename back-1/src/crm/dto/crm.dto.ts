@@ -10,6 +10,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   MaxLength,
 } from 'class-validator';
 
@@ -135,4 +136,38 @@ export class SendMediaDto {
   @IsString()
   @MaxLength(1024)
   caption?: string;
+}
+
+/** New WhatsApp template; Meta reviews it before it can be sent */
+export class CreateTemplateDto {
+  /** Meta's rule: lowercase letters, digits and underscores, starting with a letter */
+  @Matches(/^[a-z][a-z0-9_]{0,99}$/, {
+    message:
+      'El nombre va en minúsculas, sin espacios ni tildes (ej. aviso_pago)',
+  })
+  name: string;
+
+  @IsIn(['UTILITY', 'MARKETING'])
+  category: 'UTILITY' | 'MARKETING';
+
+  @IsString()
+  @Matches(/^[a-z]{2}(_[A-Z]{2})?$/)
+  language: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(1024)
+  body: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @MaxLength(200, { each: true })
+  examples?: string[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  footer?: string;
 }

@@ -41,6 +41,8 @@ export interface WaTemplate {
   name: string;
   language: string;
   category: string;
+  /** APPROVED, PENDING, REJECTED, PAUSED…: only APPROVED can be sent */
+  status: string;
   /** Header text (if any) + body, with {{n}} holes */
   preview: string;
   /** Values to fill, in Zernio's flat order: header vars, then body vars */
@@ -178,12 +180,11 @@ export class WhatsappService {
     return data.publicUrl;
   }
 
-  /** Approved templates of the connected number. Only through Zernio. */
+  /** Every template of the connected number, whatever its review status. Only through Zernio. */
   async listTemplates(): Promise<WaTemplate[]> {
     this.assertZernio();
     const params = new URLSearchParams({
       accountId: process.env.ZERNIO_WHATSAPP_ACCOUNT_ID!,
-      status: 'APPROVED',
     });
     const res = await fetch(`${ZERNIO_API}/whatsapp/templates?${params}`, {
       headers: { Authorization: `Bearer ${process.env.ZERNIO_API_KEY}` },
@@ -195,6 +196,7 @@ export class WhatsappService {
             name?: string;
             language?: string;
             category?: string;
+            status?: string;
             components?: ZernioTemplateComponent[];
           }>;
         })
@@ -216,6 +218,7 @@ export class WhatsappService {
           name: t.name!,
           language: t.language ?? 'es',
           category: t.category ?? '',
+          status: (t.status ?? 'PENDING').toUpperCase(),
           preview: [textHeader ? header.text : null, body?.text]
             .filter(Boolean)
             .join('\n\n'),
@@ -228,6 +231,66 @@ export class WhatsappService {
                 : null,
         };
       });
+  }
+
+  /** Submits a new template to Meta; it comes back PENDING until reviewed (up to 24 h). */
+  async createTemplate(t: {
+    name: string;
+    category: 'UTILITY' | 'MARKETING';
+    language: string;
+    body: string;
+    /** One sample value per {{n}}, required by Meta's review */
+    examples: string[];
+    footer?: string;
+  }) {
+    this.assertZernio();
+    const res = await fetch(`${ZERNIO_API}/whatsapp/templates`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.ZERNIO_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        accountId: process.env.ZERNIO_WHATSAPP_ACCOUNT_ID,
+        name: t.name,
+        category: t.category,
+        language: t.language,
+        components: [
+          {
+            type: 'body',
+            text: t.body,
+            ...(t.examples.length && {
+              example: { body_text: [t.examples] },
+            }),
+          },
+          ...(t.footer ? [{ type: 'footer', text: t.footer }] : []),
+        ],
+      }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    const data = (await res.json().catch(() => null)) as
+      | (ZernioError & { template?: { status?: string } })
+      | null;
+    if (!res.ok) throw this.zernioFailure('create template', res.status, data);
+    return { status: data?.template?.status ?? 'PENDING' };
+  }
+
+  async deleteTemplate(name: string, language: string) {
+    this.assertZernio();
+    const params = new URLSearchParams({
+      accountId: process.env.ZERNIO_WHATSAPP_ACCOUNT_ID!,
+      language,
+    });
+    const res = await fetch(
+      `${ZERNIO_API}/whatsapp/templates/${encodeURIComponent(name)}?${params}`,
+      {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${process.env.ZERNIO_API_KEY}` },
+        signal: AbortSignal.timeout(15_000),
+      },
+    );
+    const data = (await res.json().catch(() => null)) as ZernioError | null;
+    if (!res.ok) throw this.zernioFailure('delete template', res.status, data);
   }
 
   /**

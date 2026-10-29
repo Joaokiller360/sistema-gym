@@ -21,6 +21,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CrmService } from './crm.service';
 import {
+  CreateTemplateDto,
   QuickReplyDto,
   SendAnyTemplateDto,
   SendMediaDto,
@@ -71,9 +72,23 @@ export class CrmController {
     return this.crm.setProfilePhoto(file);
   }
 
+  /** ?conversation=<id> prefills each template's values for that contact */
   @Get('templates')
-  templates() {
-    return this.crm.templates();
+  templates(@Query('conversation') conversation?: string) {
+    return this.crm.templates(conversation);
+  }
+
+  @Post('templates')
+  createTemplate(@Body() dto: CreateTemplateDto) {
+    return this.crm.createTemplate(dto);
+  }
+
+  @Delete('templates/:name')
+  deleteTemplate(
+    @Param('name') name: string,
+    @Query('language') language = 'es',
+  ) {
+    return this.crm.deleteTemplate(name, language);
   }
 
   @Get('quick-replies')

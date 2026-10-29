@@ -3,10 +3,10 @@
 import { Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore, useTransition } from 'react'
 import Link from 'next/link'
 import {
-  AlertTriangle, ArrowLeft, Check, CheckCheck, Clock, ExternalLink, Inbox, Loader2, MessageCircle, Pencil, Search, Send, Trash2, Download, UserPen, X,
+  AlertTriangle, ArrowLeft, Check, CheckCheck, Clock, ExternalLink, FileText, Inbox, Loader2, MessageCircle, Paperclip, Pencil, Plus, Search, Send, Trash2, Download, UserPen, X, Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { EmptyState, GymMark, Meter, btn, chip, field, initials } from '@/components/admin/ui'
+import { EmptyState, GymMark, Meter, Switch, btn, chip, field, initials } from '@/components/admin/ui'
 import {
   AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
   AlertDialogTitle,
@@ -15,9 +15,11 @@ import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import { Dialog, DialogClose, DialogOverlay, DialogPortal, DialogTitle } from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { NewChatDialog } from './NewChatDialog'
+import { QuickRepliesDialog } from './QuickRepliesDialog'
+import { TemplatePicker } from './TemplatePicker'
 import {
   deleteConversationAction, deleteMessageAction, editMessageAction, getConversationAction, listConversationsAction, markReadAction, replyAction, sendContactTemplateAction,
-  updateConversationAction, type CrmList, type CrmMessage, type CrmStatus, type CrmThread,
+  sendNowAction, updateConversationAction, type CrmList, type CrmMessage, type CrmStatus, type CrmThread, type QuickReply,
 } from './actions'
 
 const POLL_MS = 10_000
@@ -51,12 +53,6 @@ const GROUPS: { key: Group; title: string }[] = [
   { key: 'CLOSED', title: 'Cerradas' },
 ]
 
-const QUICK_REPLIES = [
-  { label: 'Saludo', text: '¡Hola! Gracias por escribirnos. ¿En qué te podemos ayudar?' },
-  { label: 'Lo reviso', text: 'Dale, lo reviso y te escribo en un rato.' },
-  { label: 'Mejorar plan', text: 'Podemos pasarte a un plan con más socios hoy mismo. ¿Querés que te cuente las opciones?' },
-  { label: 'Resuelto', text: 'Listo, ya quedó resuelto. Cualquier otra cosa escribinos 🙌.' },
-]
 
 function fmtPhone(digits: string) {
   return `+${digits}`
@@ -290,6 +286,15 @@ function QueuedReply({ m, conversationId, onChanged }: { m: CrmMessage; conversa
     })
   }
 
+  function sendNow() {
+    setError(null)
+    startTransition(async () => {
+      const res = await sendNowAction(conversationId, m.id)
+      if (res.error) setError(res.error)
+      onChanged()
+    })
+  }
+
   function remove() {
     setError(null)
     startTransition(async () => {
@@ -331,6 +336,9 @@ function QueuedReply({ m, conversationId, onChanged }: { m: CrmMessage; conversa
         <div className="flex items-center gap-3 text-xs">
           <span className="font-admin-mono opacity-70" aria-live="off">Se envía en 0:{String(left).padStart(2, '0')}</span>
           <span className="flex-1" />
+          <button type="button" onClick={sendNow} disabled={isPending} className="inline-flex items-center gap-1 font-semibold opacity-80 hover:opacity-100">
+            <Zap className="size-3" aria-hidden="true" /> Enviar ya
+          </button>
           <button type="button" onClick={() => setEditing(true)} disabled={isPending} className="inline-flex items-center gap-1 font-semibold opacity-80 hover:opacity-100">
             <Pencil className="size-3" aria-hidden="true" /> Editar
           </button>
@@ -475,18 +483,82 @@ function Messages({ messages, conversationId, onChanged }: { messages: CrmMessag
   )
 }
 
-function Composer({ thread, onSent }: { thread: CrmThread; onSent: () => void }) {
+/** WhatsApp's caps; the back re-checks the real type from the bytes */
+const MEDIA_LIMITS: Record<string, { kind: 'image' | 'video'; max: number }> = {
+  'image/jpeg': { kind: 'image', max: 5 * 1024 * 1024 },
+  'image/png': { kind: 'image', max: 5 * 1024 * 1024 },
+  'video/mp4': { kind: 'video', max: 16 * 1024 * 1024 },
+}
+
+function fmtSize(bytes: number) {
+  return bytes < 1024 * 1024 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function Composer({
+  thread,
+  quickReplies,
+  onManageQuickReplies,
+  onSent,
+}: {
+  thread: CrmThread
+  quickReplies: QuickReply[]
+  onManageQuickReplies: () => void
+  onSent: () => void
+}) {
   const [text, setText] = useState('')
+  const [attachment, setAttachment] = useState<{ file: File; preview: string } | null>(null)
+  const file = attachment?.file ?? null
+  const [instant, setInstant] = useState(thread.instantSend)
+  const [templatesOpen, setTemplatesOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  // Frees the preview when it's removed, replaced or the thread closes
+  useEffect(() => {
+    if (!attachment) return
+    const url = attachment.preview
+    return () => URL.revokeObjectURL(url)
+  }, [attachment])
+
+  function pickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f) return
+    const limit = MEDIA_LIMITS[f.type]
+    if (!limit) { setError('Solo fotos JPG/PNG o videos MP4'); return }
+    if (f.size > limit.max) { setError(`WhatsApp acepta hasta ${limit.max / 1024 / 1024} MB para ${limit.kind === 'image' ? 'fotos' : 'videos'}`); return }
+    setError(null)
+    setAttachment({ file: f, preview: URL.createObjectURL(f) })
+  }
+
   function send() {
     const body = text.trim()
-    if (!body || isPending) return
+    if ((!body && !file) || isPending) return
     setError(null)
     startTransition(async () => {
-      const res = await replyAction(thread.id, body)
-      if (res.error) setError(res.error)
-      else { setText(''); onSent() }
+      if (file) {
+        const fd = new FormData()
+        fd.append('file', file)
+        if (body) fd.append('caption', body)
+        const res = await fetch(`/api/v1/admin/crm/conversations/${thread.id}/media`, { method: 'POST', body: fd })
+        const data = (await res.json().catch(() => ({}))) as { error?: string }
+        if (!res.ok) { setError(data.error ?? 'No se pudo enviar el archivo'); return }
+        setAttachment(null)
+      } else {
+        const res = await replyAction(thread.id, body)
+        if (res.error) { setError(res.error); return }
+      }
+      setText('')
+      onSent()
+    })
+  }
+
+  function toggleInstant(next: boolean) {
+    setInstant(next)
+    startTransition(async () => {
+      const res = await updateConversationAction(thread.id, { instantSend: next })
+      if (res.error) { setInstant(!next); setError(res.error) }
     })
   }
 
@@ -498,6 +570,10 @@ function Composer({ thread, onSent }: { thread: CrmThread; onSent: () => void })
       else onSent()
     })
   }
+
+  const picker = (
+    <TemplatePicker conversationId={thread.id} gymName={thread.gym?.name ?? null} open={templatesOpen} onOpenChange={setTemplatesOpen} onSent={onSent} />
+  )
 
   if (!thread.windowOpen) {
     return (
@@ -523,7 +599,11 @@ function Composer({ thread, onSent }: { thread: CrmThread; onSent: () => void })
               {kind === 'offer' ? 'Ofrecer servicios' : 'Plantilla de contacto'}
             </button>
           ))}
+          <button type="button" onClick={() => setTemplatesOpen(true)} disabled={isPending} className={cn(btn.line, 'min-h-10')}>
+            <FileText className="size-4" aria-hidden="true" /> Otra plantilla
+          </button>
         </div>
+        {picker}
       </div>
     )
   }
@@ -531,20 +611,53 @@ function Composer({ thread, onSent }: { thread: CrmThread; onSent: () => void })
   return (
     <div className="flex flex-col gap-2.5 border-t border-adm-line bg-adm-surface p-3 sm:p-4">
       <div className="flex flex-wrap items-center gap-1.5">
-        {QUICK_REPLIES.map(q => (
+        {quickReplies.map(q => (
           <button
-            key={q.label}
+            key={q.id}
             type="button"
             onClick={() => setText(q.text)}
             disabled={isPending}
+            title={q.text}
             className="min-h-8 rounded-full border border-adm-line bg-adm-subtle px-3 text-xs font-semibold transition-colors hover:border-adm-ink disabled:opacity-40"
           >
             {q.label}
           </button>
         ))}
+        <button type="button" onClick={onManageQuickReplies} aria-label="Editar respuestas rápidas" title="Editar respuestas rápidas" className={cn(btn.icon, 'size-8')}>
+          {quickReplies.length ? <Pencil className="size-3.5" aria-hidden="true" /> : <Plus className="size-4" aria-hidden="true" />}
+        </button>
+        <label className="ml-auto flex items-center gap-2 text-xs font-semibold text-adm-muted" title="Sin el minuto para editar o borrar la respuesta">
+          <Zap className={cn('size-3.5', instant && 'text-adm-ink')} aria-hidden="true" />
+          <span className={cn(instant && 'text-adm-ink')}>Enviar al instante</span>
+          <Switch checked={instant} onChange={toggleInstant} disabled={isPending} label="Enviar al instante a este contacto" />
+        </label>
       </div>
+      {attachment && (
+        <div className="flex items-center gap-3 rounded-xl border border-adm-line bg-adm-subtle p-2">
+          {attachment.file.type.startsWith('image/')
+            // eslint-disable-next-line @next/next/no-img-element
+            ? <img src={attachment.preview} alt="" className="size-14 rounded-lg object-cover" />
+            : <video src={attachment.preview} muted className="size-14 rounded-lg bg-adm-night object-cover" />}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] font-semibold">{attachment.file.name}</p>
+            <p className="font-admin-mono text-xs text-adm-muted">{fmtSize(attachment.file.size)} · se envía al instante</p>
+          </div>
+          <button type="button" onClick={() => setAttachment(null)} disabled={isPending} aria-label="Quitar archivo" className={btn.icon}>
+            <X className="size-4" aria-hidden="true" />
+          </button>
+        </div>
+      )}
       <div className="flex items-end gap-2">
-        <label htmlFor="crm-reply" className="sr-only">Respuesta</label>
+        <div className="flex shrink-0 flex-col gap-1">
+          <button type="button" onClick={() => fileRef.current?.click()} disabled={isPending} aria-label="Adjuntar foto o video" title="Foto (JPG/PNG, 5 MB) o video (MP4, 16 MB)" className={cn(btn.icon, 'size-10')}>
+            <Paperclip className="size-4.5" aria-hidden="true" />
+          </button>
+          <button type="button" onClick={() => setTemplatesOpen(true)} disabled={isPending} aria-label="Enviar plantilla" title="Enviar plantilla" className={cn(btn.icon, 'size-10')}>
+            <FileText className="size-4.5" aria-hidden="true" />
+          </button>
+        </div>
+        <input ref={fileRef} type="file" accept="image/jpeg,image/png,video/mp4" onChange={pickFile} className="sr-only" tabIndex={-1} aria-hidden="true" />
+        <label htmlFor="crm-reply" className="sr-only">{file ? 'Texto del archivo' : 'Respuesta'}</label>
         <textarea
           id="crm-reply"
           value={text}
@@ -553,16 +666,17 @@ function Composer({ thread, onSent }: { thread: CrmThread; onSent: () => void })
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send() }
           }}
           rows={2}
-          maxLength={4096}
+          maxLength={file ? 1024 : 4096}
           disabled={isPending}
-          placeholder="Escribí una respuesta… (Enter envía, Shift+Enter nueva línea)"
-          className={cn(field.textarea, 'min-h-12 flex-1 resize-none')}
+          placeholder={file ? 'Agregá un texto (opcional)…' : 'Escribí una respuesta… (Enter envía, Shift+Enter nueva línea)'}
+          className={cn(field.textarea, 'min-h-[84px] flex-1 resize-none')}
         />
-        <button type="button" onClick={send} disabled={isPending || !text.trim()} aria-label="Enviar" className={cn(btn.primary, 'size-12 shrink-0 px-0')}>
+        <button type="button" onClick={send} disabled={isPending || (!text.trim() && !file)} aria-label="Enviar" className={cn(btn.primary, 'size-12 shrink-0 px-0')}>
           {isPending ? <Loader2 className="size-5 animate-spin" aria-hidden="true" /> : <Send className="size-5" aria-hidden="true" />}
         </button>
       </div>
       {error && <p role="alert" className={field.error}>{error}</p>}
+      {picker}
     </div>
   )
 }
@@ -642,14 +756,18 @@ export function CrmInbox({
   config,
   initialList,
   initialThread,
+  initialQuickReplies,
   loadError,
 }: {
   config: { enabled: boolean; webhookSigned: boolean }
   initialList: CrmList
   initialThread: CrmThread | null
+  initialQuickReplies: QuickReply[]
   loadError: string | null
 }) {
   const [list, setList] = useState(initialList)
+  const [quickReplies, setQuickReplies] = useState(initialQuickReplies)
+  const [manageReplies, setManageReplies] = useState(false)
   const [filter, setFilter] = useState<Filter>(initialThread?.status === 'CLOSED' ? 'ALL' : 'ACTIVE')
   const [q, setQ] = useState('')
   const [thread, setThread] = useState<CrmThread | null>(initialThread)
@@ -968,7 +1086,13 @@ export function CrmInbox({
                 <div className={cn('min-h-0 flex-1 overflow-y-auto bg-adm-subtle', loadingThread && 'opacity-70')}>
                   <Messages messages={active.messages} conversationId={active.id} onChanged={reloadActive} />
                 </div>
-                <Composer key={active.id} thread={active} onSent={() => { void reloadThread(active.id); void reloadList() }} />
+                <Composer
+                  key={active.id}
+                  thread={active}
+                  quickReplies={quickReplies}
+                  onManageQuickReplies={() => setManageReplies(true)}
+                  onSent={() => { void reloadThread(active.id); void reloadList() }}
+                />
               </div>
               <div className="hidden w-[300px] shrink-0 overflow-y-auto border-l border-adm-line xl:block">
                 <Details key={active.id} thread={active} allTags={allTags} onChanged={reloadActive} />
@@ -984,6 +1108,8 @@ export function CrmInbox({
           {active && <Details key={active.id} thread={active} allTags={allTags} onChanged={reloadActive} />}
         </SheetContent>
       </Sheet>
+
+      <QuickRepliesDialog open={manageReplies} onOpenChange={setManageReplies} replies={quickReplies} onChange={setQuickReplies} />
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent size="sm" className="admin-surface">

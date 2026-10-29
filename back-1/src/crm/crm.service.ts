@@ -12,11 +12,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import {
   WhatsappService,
+  type WaTemplate,
   normalizePhone,
   parseWhatsapp,
 } from '../notifications/whatsapp.service';
 import { TEMPLATES } from '../notifications/whatsapp-templates';
 import {
+  CreateTemplateDto,
   QuickReplyDto,
   SendAnyTemplateDto,
   StartConversationDto,
@@ -573,8 +575,84 @@ export class CrmService {
       });
   }
 
-  templates() {
-    return this.whatsapp.listTemplates();
+  /** With a conversation, each template carries the values the CRM already knows for that contact. */
+  async templates(conversationId?: string) {
+    const [templates, known]: [
+      WaTemplate[],
+      Record<string, Array<string | number>>,
+    ] = await Promise.all([
+      this.whatsapp.listTemplates(),
+      conversationId ? this.templateDefaults(conversationId) : {},
+    ]);
+    return templates.map((t) => ({
+      ...t,
+      defaults: Array.from({ length: t.params }, (_, i) =>
+        String(known[t.name]?.[i] ?? ''),
+      ),
+    }));
+  }
+
+  /**
+   * Values for our own templates, same order the automatic sends use.
+   * Unknown ones (no gym linked, no plan limit) stay empty for the team to fill.
+   */
+  private async templateDefaults(
+    id: string,
+  ): Promise<Record<string, Array<string | number>>> {
+    const conv = await this.prisma.waConversation.findUnique({
+      where: { id },
+      include: {
+        gym: {
+          select: {
+            id: true,
+            name: true,
+            subscriptionPlan: true,
+            owner: { select: { name: true } },
+          },
+        },
+      },
+    });
+    if (!conv) throw new NotFoundException('Conversación no encontrada');
+    const platform = await this.prisma.platformSettings.findFirst({
+      select: { saasName: true },
+    });
+    const saas = platform?.saasName ?? 'GymOS';
+    const gym = conv.gym;
+    const name =
+      gym?.owner?.name.split(' ')[0] ||
+      conv.alias?.split(' ')[0] ||
+      conv.contactName?.split(' ')[0] ||
+      '';
+    if (!gym) {
+      return {
+        [TEMPLATES.contact]: [name, saas],
+        [TEMPLATES.offer]: [name, saas],
+      };
+    }
+    const [members, plan] = await Promise.all([
+      this.prisma.member.count({ where: { gymId: gym.id } }),
+      this.prisma.subscriptionPlan.findUnique({
+        where: { key: gym.subscriptionPlan },
+        select: { label: true, maxMembers: true },
+      }),
+    ]);
+    const max = plan?.maxMembers ?? '';
+    const pct = plan?.maxMembers
+      ? Math.floor((members / plan.maxMembers) * 100)
+      : '';
+    return {
+      [TEMPLATES.limitWarning]: [
+        name,
+        gym.name,
+        pct,
+        members,
+        max,
+        plan?.label ?? '',
+      ],
+      [TEMPLATES.limitReached]: [name, gym.name, max, plan?.label ?? ''],
+      [TEMPLATES.contact]: [name, saas, gym.name],
+      [TEMPLATES.offer]: [name, saas],
+    };
   }
 
   /** Any approved template, values filled in the CRM. Works with the window closed too. */
@@ -583,8 +661,11 @@ export class CrmService {
     const template = (await this.whatsapp.listTemplates()).find(
       (t) => t.name === dto.name && t.language === dto.language,
     );
-    if (!template)
-      throw new NotFoundException('Plantilla no encontrada o no aprobada');
+    if (!template) throw new NotFoundException('Plantilla no encontrada');
+    if (template.status !== 'APPROVED')
+      throw new ConflictException(
+        'La plantilla todavía no está aprobada por WhatsApp',
+      );
     if (template.unsupported)
       throw new BadRequestException(template.unsupported);
     const params = dto.params.map((p) => p.trim());
@@ -607,6 +688,53 @@ export class CrmService {
       throw new BadRequestException(
         res.error ?? 'WhatsApp rechazó la plantilla',
       );
+    return { ok: true };
+  }
+
+  /** Our own template: checks Meta's basic rules here so the error is readable */
+  async createTemplate(dto: CreateTemplateDto) {
+    const body = dto.body.trim();
+    const vars = [...body.matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1]));
+    const count = vars.length ? Math.max(...vars) : 0;
+    if (vars.some((n, i) => n !== i + 1)) {
+      throw new BadRequestException(
+        'Las variables tienen que ir en orden y sin repetir: {{1}}, {{2}}, {{3}}…',
+      );
+    }
+    if (/^\s*\{\{\d+\}\}/.test(body) || /\{\{\d+\}\}\s*[.!?]?\s*$/.test(body)) {
+      throw new BadRequestException(
+        'WhatsApp no acepta que el mensaje empiece o termine con una variable',
+      );
+    }
+    const examples = (dto.examples ?? []).map((e) => e.trim());
+    if (examples.length !== count || examples.some((e) => !e)) {
+      throw new BadRequestException(
+        `Poné un ejemplo para cada variable (${count}): WhatsApp los usa para revisarla`,
+      );
+    }
+    const taken = (await this.whatsapp.listTemplates()).some(
+      (t) => t.name === dto.name && t.language === dto.language,
+    );
+    if (taken)
+      throw new ConflictException('Ya existe una plantilla con ese nombre');
+    return this.whatsapp.createTemplate({
+      name: dto.name,
+      category: dto.category,
+      language: dto.language,
+      body,
+      examples,
+      footer: dto.footer?.trim() || undefined,
+    });
+  }
+
+  async deleteTemplate(name: string, language: string) {
+    // The automatic alerts and the contact buttons depend on these
+    if (Object.values(TEMPLATES).includes(name)) {
+      throw new ConflictException(
+        'Esta plantilla la usan los avisos automáticos: no se puede eliminar',
+      );
+    }
+    await this.whatsapp.deleteTemplate(name, language);
     return { ok: true };
   }
 
