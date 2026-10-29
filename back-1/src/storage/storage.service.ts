@@ -53,6 +53,37 @@ const EXT_TYPE: Record<string, string> = {
   '.pdf': 'application/pdf',
 };
 
+// Shown in the page (img/video/audio); any other file is only ever handed over as a download
+const INLINE_EXT = new Set([
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.webp',
+  '.gif',
+  '.ogg',
+  '.mp3',
+  '.m4a',
+  '.aac',
+  '.mp4',
+  '.3gp',
+]);
+
+/** Headers for every /uploads response: nothing served from here can run in the browser */
+export function setUploadHeaders(res: Response, key: string) {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'public, max-age=31536000');
+  // Even if opened directly, a sandboxed response gets no scripts, forms or plugins
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+  );
+  if (!INLINE_EXT.has(extname(key).toLowerCase())) {
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', 'attachment');
+  }
+}
+
 /**
  * Uploaded files (logos, WhatsApp media). With S3_* set they go to MinIO;
  * otherwise to the local uploads folder. Either way the public URL stays /uploads/<key>.
@@ -178,9 +209,7 @@ export class StorageService implements OnApplicationBootstrap {
       );
       if (obj.ContentLength) res.setHeader('Content-Length', obj.ContentLength);
       if (obj.ETag) res.setHeader('ETag', obj.ETag);
-      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.setHeader('Cache-Control', 'public, max-age=31536000');
+      setUploadHeaders(res, key);
       const body = obj.Body as Readable;
       if (req.method === 'HEAD') {
         body.destroy();

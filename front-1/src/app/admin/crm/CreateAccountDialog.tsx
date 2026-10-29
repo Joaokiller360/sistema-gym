@@ -30,7 +30,7 @@ function CopyRow({ label, value, mono }: { label: string; value: string; mono?: 
 }
 
 /** Gym + owner login for a contact that isn't a customer yet, with the details they sent in the chat. */
-export function CreateAccountDialog({ thread, onCreated }: { thread: CrmThread; onCreated: () => void }) {
+export function CreateAccountDialog({ thread, onCreated, className }: { thread: CrmThread; onCreated: () => void; className?: string }) {
   const [open, setOpen] = useState(false)
   const [plans, setPlans] = useState<CrmPlan[]>([])
   const [gymName, setGymName] = useState('')
@@ -74,7 +74,7 @@ export function CreateAccountDialog({ thread, onCreated }: { thread: CrmThread; 
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className={cn(btn.dark, 'self-start')}>
+      <button type="button" onClick={() => setOpen(true)} className={cn(btn.dark, 'self-start', className)}>
         <UserPlus className="size-4" aria-hidden="true" /> Crear cuenta
       </button>
       <Dialog open={open} onOpenChange={close}>

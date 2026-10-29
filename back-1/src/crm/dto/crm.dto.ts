@@ -1,5 +1,4 @@
 import { CrmStatus } from '@prisma/client';
-import { PartialType } from '@nestjs/mapped-types';
 import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -9,14 +8,11 @@ import {
   IsEnum,
   IsIn,
   IsNotEmpty,
-  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
   Matches,
-  Max,
   MaxLength,
-  Min,
   ValidateIf,
 } from 'class-validator';
 import {
@@ -270,40 +266,54 @@ export class SetAwayDto {
   mode?: 'presence' | 'always';
 }
 
-/** Catalog item; price in units (49.9), stored in cents */
-export class ProductDto {
+/** WhatsApp catalog setup; fields left out keep their value */
+export class SetCommerceDto {
+  /** Commerce Manager catalog id; empty clears it */
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  @MaxLength(100)
-  @IsSafeName()
-  name: string;
-
-  @IsOptional()
-  @CleanText()
-  @IsString()
-  @MaxLength(900)
-  description?: string;
-
-  /** null = "consultar" */
-  @IsOptional()
-  @ValidateIf((_, v) => v !== null)
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  @Max(10_000_000)
-  price?: number | null;
-
-  @IsOptional()
-  @Matches(/^[A-Z]{3}$/, { message: 'Moneda inválida (ej. USD, ARS)' })
-  currency?: string;
+  @ValidateIf((_, v) => v !== '')
+  @Matches(/^\d{5,30}$/, { message: 'El ID del catálogo son solo números' })
+  catalogId?: string;
 
   @IsOptional()
   @IsBoolean()
-  active?: boolean;
+  isCatalogVisible?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isCartEnabled?: boolean;
 }
 
-export class UpdateProductDto extends PartialType(ProductDto) {}
+/** The whole catalog (button "Ver catálogo") or some products by their Meta SKU */
+export class SendCatalogDto {
+  @IsIn(['catalog', 'products'])
+  kind: 'catalog' | 'products';
 
-export class SendProductDto {
+  @CleanText()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(1024)
+  body: string;
+
+  /** Required by Meta for a list of several products */
+  @IsOptional()
+  @CleanText()
+  @IsString()
+  @MaxLength(60)
+  header?: string;
+
+  /** Retailer ids (SKU) in the Meta catalog; up to 30 */
+  @IsOptional()
+  @CleanText()
+  @IsArray()
+  @ArrayMaxSize(30)
+  @IsString({ each: true })
+  @Matches(/^[\w.-]{1,100}$/, {
+    each: true,
+    message: 'Código de producto inválido (letras, números, . _ -)',
+  })
+  skus?: string[];
+
   @IsOptional()
   @IsUUID()
   replyToId?: string;

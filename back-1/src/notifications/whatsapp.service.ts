@@ -30,8 +30,16 @@ type MediaOutbound = {
   /** WhatsApp id (wamid) of the message being quoted */
   replyTo?: string;
 };
+/** Meta's `interactive` object (catalog, product, product list); `body` is what the CRM logs */
+type InteractiveOutbound = {
+  type: 'interactive';
+  interactive: Record<string, unknown>;
+  body: string;
+  replyTo?: string;
+};
 type Outbound =
   | { type: 'text'; body: string; replyTo?: string }
+  | InteractiveOutbound
   | TemplateOutbound
   | MediaOutbound;
 
@@ -126,6 +134,64 @@ export class WhatsappService {
     sentById?: string,
   ): Promise<SendResult> {
     return this.send(to, { type: 'template', ...template }, sentById);
+  }
+
+  /** Catalog / product / product-list message. Same 24 h rule as text. Zernio only. */
+  sendInteractive(
+    to: string,
+    msg: Omit<InteractiveOutbound, 'type'>,
+    sentById?: string,
+    messageId?: string,
+  ): Promise<SendResult> {
+    return this.send(to, { type: 'interactive', ...msg }, sentById, messageId);
+  }
+
+  /** Whether the linked catalog shows on the business profile and customers can build a cart */
+  async getCommerceSettings() {
+    this.assertZernio();
+    const params = new URLSearchParams({
+      accountId: process.env.ZERNIO_WHATSAPP_ACCOUNT_ID!,
+    });
+    const res = await fetch(
+      `${ZERNIO_API}/whatsapp/commerce-settings?${params}`,
+      {
+        headers: { Authorization: `Bearer ${process.env.ZERNIO_API_KEY}` },
+        signal: AbortSignal.timeout(15_000),
+      },
+    );
+    const data = (await res.json().catch(() => null)) as
+      | (ZernioError & {
+          settings?: { isCatalogVisible?: boolean; isCartEnabled?: boolean };
+        })
+      | null;
+    if (!res.ok)
+      throw this.zernioFailure('commerce settings', res.status, data);
+    return {
+      isCatalogVisible: !!data?.settings?.isCatalogVisible,
+      isCartEnabled: !!data?.settings?.isCartEnabled,
+    };
+  }
+
+  async setCommerceSettings(s: {
+    isCatalogVisible?: boolean;
+    isCartEnabled?: boolean;
+  }) {
+    this.assertZernio();
+    const res = await fetch(`${ZERNIO_API}/whatsapp/commerce-settings`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${process.env.ZERNIO_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        accountId: process.env.ZERNIO_WHATSAPP_ACCOUNT_ID,
+        ...s,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const data = (await res.json().catch(() => null)) as ZernioError | null;
+    if (!res.ok)
+      throw this.zernioFailure('commerce settings', res.status, data);
   }
 
   /** Photo or video by public URL (see uploadMedia). Same 24 h rule as text. */
@@ -319,7 +385,7 @@ export class WhatsappService {
     const body =
       msg.type === 'template'
         ? renderTemplate(msg.name, msg.params, msg.body)
-        : msg.type === 'text'
+        : msg.type === 'text' || msg.type === 'interactive'
           ? msg.body
           : msg.caption || MEDIA_LABEL[msg.type];
     const label = msg.type === 'template' ? body.slice(0, 40) : msg.type;
@@ -342,7 +408,9 @@ export class WhatsappService {
         ? await this.sendZernio(phone, msg, label)
         : 'url' in msg
           ? { ok: false, error: 'Enviar fotos y videos requiere Zernio' }
-          : await this.sendMeta(phone, msg, label);
+          : 'interactive' in msg
+            ? { ok: false, error: 'Enviar el catálogo requiere Zernio' }
+            : await this.sendMeta(phone, msg, label);
     } catch (e) {
       this.logger.error(`[WhatsApp] ${label} failed:`, e);
       result = { ok: false, error: 'No se pudo conectar con WhatsApp' };
@@ -360,7 +428,7 @@ export class WhatsappService {
 
   private async sendMeta(
     phone: string,
-    msg: Exclude<Outbound, MediaOutbound>,
+    msg: Exclude<Outbound, MediaOutbound | InteractiveOutbound>,
     label: string,
   ): Promise<SendResult> {
     const message =
@@ -533,12 +601,14 @@ export class WhatsappService {
       payload =
         msg.type === 'text'
           ? { accountId, message: msg.body }
-          : {
-              accountId,
-              attachmentUrl: msg.url,
-              attachmentType: msg.type,
-              ...(msg.caption && { message: msg.caption }),
-            };
+          : msg.type === 'interactive'
+            ? { accountId, interactive: msg.interactive }
+            : {
+                accountId,
+                attachmentUrl: msg.url,
+                attachmentType: msg.type,
+                ...(msg.caption && { message: msg.caption }),
+              };
       if (msg.replyTo) payload.replyTo = msg.replyTo;
     }
 

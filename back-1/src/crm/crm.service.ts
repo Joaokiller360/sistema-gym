@@ -41,7 +41,7 @@ export const UNDO_MS = 60 * 1000;
 const SENDING_STALE_MS = 5 * 60 * 1000;
 
 const MAX_MEDIA_BYTES = 16 * 1024 * 1024;
-// Allow-list: anything else (html, svg…) is never written, so /uploads can't serve active content
+// Shown in the chat. Anything else (pdf, docx, exe, html, svg…) is kept only as a download
 const MEDIA_EXT: Record<string, string> = {
   'image/webp': 'webp',
   'image/jpeg': 'jpg',
@@ -53,7 +53,22 @@ const MEDIA_EXT: Record<string, string> = {
   'audio/aac': 'aac',
   'video/mp4': 'mp4',
   'video/3gpp': '3gp',
+};
+// Common documents keep their extension so they open after downloading; the rest become .bin
+// (never .exe/.html…), and /uploads serves all of them as attachments (see setUploadHeaders)
+const DOC_EXT: Record<string, string> = {
   'application/pdf': 'pdf',
+  'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+    'docx',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/vnd.ms-powerpoint': 'ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation':
+    'pptx',
+  'text/plain': 'txt',
+  'text/csv': 'csv',
+  'application/zip': 'zip',
 };
 
 /** No CRM poll for this long = nobody online */
@@ -113,6 +128,7 @@ interface WaInbound {
     list_reply?: { title: string };
   };
   reaction?: { emoji?: string };
+  order?: WaOrder;
   location?: { latitude: number; longitude: number; name?: string };
   image?: { caption?: string };
   video?: { caption?: string };
@@ -151,6 +167,8 @@ export interface ZernioWebhookPayload {
   metadata?: {
     quotedMessageId?: string;
     quotedMessage?: { platformMessageId?: string };
+    /** Cart sent from a catalog / product message */
+    order?: WaOrder;
   };
   /** The contact's side of the thread */
   conversation?: {
@@ -1201,9 +1219,11 @@ export class CrmService {
         waMessageId: m.platformMessageId,
         from,
         contactName: m.sender?.name,
-        type: media ?? 'text',
+        type: payload.metadata?.order ? 'order' : (media ?? 'text'),
         // Caption only; the CRM renders the media itself
-        body: m.text ?? label ?? '[mensaje]',
+        body: payload.metadata?.order
+          ? orderText(payload.metadata.order)
+          : (m.text ?? label ?? '[mensaje]'),
         at: new Date(m.sentAt ?? Date.now()),
         externalId: m.conversationId,
         quoted: [
@@ -1438,11 +1458,8 @@ export class CrmService {
     });
     if (!res.ok) throw new Error(`Zernio media → ${res.status}`);
     const type = (res.headers.get('content-type') ?? '').split(';')[0].trim();
-    const ext = MEDIA_EXT[type];
-    if (!ext) {
-      this.logger.warn(`[CRM] Unsupported media type "${type}", not stored`);
-      return;
-    }
+    const inline = MEDIA_EXT[type];
+    const ext = inline ?? DOC_EXT[type] ?? 'bin';
     if (Number(res.headers.get('content-length') ?? 0) > MAX_MEDIA_BYTES) {
       this.logger.warn(`[CRM] Media too large, not stored`);
       return;
@@ -1453,11 +1470,12 @@ export class CrmService {
     const mediaUrl = await this.storage.put(
       `wa-media/${randomUUID()}.${ext}`,
       bytes,
-      type,
+      inline ? type : 'application/octet-stream',
     );
     await this.prisma.waMessage.update({
       where: { id: messageId },
-      data: { mediaUrl },
+      // Not playable here (e.g. an svg "image"): the CRM shows it as a file to download
+      data: { mediaUrl, ...(!inline && { type: 'document' }) },
     });
   }
 
@@ -1496,6 +1514,43 @@ export class CrmService {
   }
 }
 
+/** Meta's cart object (same shape from Zernio and from Meta's webhook) */
+interface WaOrder {
+  catalog_id?: string;
+  text?: string;
+  product_items?: {
+    product_retailer_id?: string;
+    quantity?: number;
+    item_price?: number;
+    currency?: string;
+  }[];
+}
+
+/** "🛒 Pedido · 3 productos · USD 59,80" + one line per item and the customer's note */
+function orderText(o: WaOrder): string {
+  const items = o.product_items ?? [];
+  const units = items.reduce((n, i) => n + (i.quantity ?? 1), 0);
+  const currency = items.find((i) => i.currency)?.currency;
+  const total = items.reduce(
+    (t, i) => t + (i.item_price ?? 0) * (i.quantity ?? 1),
+    0,
+  );
+  const money = (v: number) =>
+    currency
+      ? new Intl.NumberFormat('es-AR', { style: 'currency', currency }).format(
+          v,
+        )
+      : String(v);
+  return [
+    `🛒 Pedido · ${units} ${units === 1 ? 'producto' : 'productos'}${total ? ` · ${money(total)}` : ''}`,
+    ...items.map(
+      (i) =>
+        `• ${i.quantity ?? 1} × ${i.product_retailer_id ?? '?'}${i.item_price ? ` (${money(i.item_price)})` : ''}`,
+    ),
+    ...(o.text ? ['', `Nota: ${o.text}`] : []),
+  ].join('\n');
+}
+
 function inboundText(m: WaInbound): string {
   switch (m.type) {
     case 'text':
@@ -1510,6 +1565,8 @@ function inboundText(m: WaInbound): string {
       );
     case 'reaction':
       return `Reaccionó ${m.reaction?.emoji ?? ''}`.trim();
+    case 'order':
+      return m.order ? orderText(m.order) : '🛒 Pedido';
     case 'location':
       return `📍 ${m.location?.name ?? 'Ubicación'} (${m.location?.latitude}, ${m.location?.longitude})`;
     default: {

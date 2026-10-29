@@ -1,9 +1,6 @@
 import { cookies } from 'next/headers'
-import Link from 'next/link'
-import { Package } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { apiFetch } from '@/lib/api'
-import { AdminPage, PageHeader, btn } from '@/components/admin/ui'
+import { AdminPage, PageHeader } from '@/components/admin/ui'
 import { AlertsToggle } from './AlertsToggle'
 import { AwayReply } from './AwayReply'
 import { WaProfilePhoto } from './WaProfilePhoto'
@@ -39,9 +36,6 @@ export default async function CrmPage({ searchParams }: Props) {
         title="CRM"
         actions={(
           <div className="flex flex-wrap items-start gap-2">
-            <Link href="/admin/crm/catalogo" className={cn(btn.line, 'min-h-[52px] rounded-xl px-3.5')}>
-              <Package className="size-4" aria-hidden="true" /> Catálogo
-            </Link>
             {profile && <WaProfilePhoto initialUrl={profile.profilePictureUrl} />}
             {config && <AwayReply initial={config.away} />}
             {config && <AlertsToggle initialPaused={config.alertsPaused} />}

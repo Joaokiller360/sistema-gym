@@ -730,6 +730,8 @@ model PlatformSettings {
   awayMode             String    @default("presence")
   /// Last poll from an admin with the CRM open and visible (presence for awayMode)
   crmSeenAt            DateTime?
+  /// Meta catalog linked to the WhatsApp number (Commerce Manager id), for product messages
+  waCatalogId          String?
   updatedAt            DateTime  @updatedAt
 
   @@map("platform_settings")
@@ -869,25 +871,6 @@ model WaConversation {
   @@index([gymId])
   @@index([status, lastMessageAt])
   @@map("wa_conversations")
-}
-
-/// What the team sells to gym owners, sendable from a CRM chat (photo + description)
-model CrmProduct {
-  id          String   @id @default(uuid())
-  name        String
-  description String?
-  /// Cents; null = "consultar"
-  price       Int?
-  currency    String   @default("USD")
-  /// /uploads/catalog/… ; sent as the photo with the description as caption
-  imageUrl    String?
-  /// Hidden from the chat picker when false
-  active      Boolean  @default(true)
-  position    Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@map("crm_products")
 }
 
 /// Canned replies shown above the CRM composer; the team adds and edits them

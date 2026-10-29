@@ -3,11 +3,11 @@
 import { Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore, useTransition } from 'react'
 import Link from 'next/link'
 import {
-  AlertTriangle, ArrowLeft, Check, CheckCheck, Clock, ExternalLink, FileText, Inbox, Loader2, MessageCircle, Paperclip, Pencil, Plus, Reply, ShoppingBag, Search, Send, Trash2, Download, UserPen, X, Zap,
+  AlertTriangle, ArrowLeft, Check, CheckCheck, Clock, ExternalLink, FileText, Inbox, Loader2, MessageCircle, Copy, Paperclip, Pencil, Plus, Reply, ShoppingBag, Search, Send, Trash2, Download, UserPen, X, Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { textError } from '@/lib/text-rules'
-import { EmptyState, GymMark, Meter, Switch, btn, chip, field, initials } from '@/components/admin/ui'
+import { EmptyState, GymMark, Meter, btn, chip, field, initials } from '@/components/admin/ui'
 import {
   AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
   AlertDialogTitle,
@@ -17,8 +17,8 @@ import { Dialog, DialogClose, DialogOverlay, DialogPortal, DialogTitle } from '@
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { CreateAccountDialog } from './CreateAccountDialog'
 import { NewChatDialog } from './NewChatDialog'
-import { ProductPicker } from './ProductPicker'
 import { QuickRepliesDialog } from './QuickRepliesDialog'
+import { WhatsAppCatalogDialog } from './WhatsAppCatalogDialog'
 import { TemplatePicker } from './TemplatePicker'
 import {
   deleteConversationAction, deleteMessageAction, editMessageAction, getConversationAction, listConversationsAction, markReadAction, replyAction, sendContactTemplateAction,
@@ -114,19 +114,43 @@ function TagChip({ children, onRemove }: { children: string; onRemove?: () => vo
 const MAX_TAGS = 10
 
 /** Name + tags for any number, gym or not. Saves on blur / on each tag change. */
+/** Small uppercase heading with the section's save state on the right */
+function SectionHead({ id, children, state }: { id?: string; children: React.ReactNode; state?: SaveState }) {
+  return (
+    <div className="mb-2 flex items-center justify-between gap-2">
+      <h3 id={id} className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-adm-muted">{children}</h3>
+      {state && state.kind !== 'idle' && (
+        <span aria-live="polite" className={cn('flex items-center gap-1 text-[11px] font-semibold', state.kind === 'error' ? 'text-adm-bad-fg' : 'text-adm-muted')}>
+          {state.kind === 'saving' && <Loader2 className="size-3 animate-spin" aria-hidden="true" />}
+          {state.kind === 'saved' && <Check className="size-3 text-adm-ok-fg" aria-hidden="true" />}
+          {state.kind === 'error' ? state.message : state.kind === 'saving' ? 'Guardando' : 'Guardado'}
+        </span>
+      )}
+    </div>
+  )
+}
+
+type SaveState = { kind: 'idle' | 'saving' | 'saved' } | { kind: 'error'; message: string }
+
+/** Looks like text until hovered or focused; the global focus outline is replaced by the border */
+const INLINE_INPUT =
+  '-mx-2 w-[calc(100%+1rem)] rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-sm font-semibold text-adm-ink outline-none! transition-colors placeholder:font-normal placeholder:text-adm-muted/70 hover:border-adm-line focus:border-adm-muted focus:bg-adm-surface'
+
+/** Name + tags for any number, gym or not. Saves on blur / on each tag change. */
 function ContactEditor({ thread, allTags, onChanged }: { thread: CrmThread; allTags: string[]; onChanged: () => void }) {
   const [alias, setAlias] = useState(thread.alias ?? '')
   const [tags, setTags] = useState(thread.tags)
   const [draft, setDraft] = useState('')
-  const [status, setStatus] = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
+  const [nameState, setNameState] = useState<SaveState>({ kind: 'idle' })
+  const [tagState, setTagState] = useState<SaveState>({ kind: 'idle' })
+  const [, startTransition] = useTransition()
   const listId = `crm-tags-${thread.id}`
 
-  function save(data: { alias?: string; tags?: string[] }) {
-    setStatus(null)
+  function save(data: { alias?: string; tags?: string[] }, set: (s: SaveState) => void) {
+    set({ kind: 'saving' })
     startTransition(async () => {
       const res = await updateConversationAction(thread.id, data)
-      setStatus(res.error ?? 'Guardado')
+      set(res.error ? { kind: 'error', message: res.error } : { kind: 'saved' })
       if (!res.error) onChanged()
     })
   }
@@ -134,74 +158,72 @@ function ContactEditor({ thread, allTags, onChanged }: { thread: CrmThread; allT
   function saveAlias() {
     if (alias.trim() === (thread.alias ?? '')) return
     const bad = textError('name', alias)
-    if (bad) { setStatus(bad); return }
-    save({ alias: alias.trim() })
+    if (bad) { setNameState({ kind: 'error', message: bad }); return }
+    save({ alias: alias.trim() }, setNameState)
   }
 
   function addTag(raw: string) {
     const tag = raw.trim().replace(/\s+/g, ' ').slice(0, 30)
     const bad = textError('label', tag)
-    if (bad) { setStatus(bad); return }
+    if (bad) { setTagState({ kind: 'error', message: bad }); return }
     setDraft('')
     if (!tag || tags.length >= MAX_TAGS || tags.some(t => t.toLowerCase() === tag.toLowerCase())) return
     const next = [...tags, tag]
     setTags(next)
-    save({ tags: next })
+    save({ tags: next }, setTagState)
   }
 
   function removeTag(tag: string) {
     const next = tags.filter(t => t !== tag)
     setTags(next)
-    save({ tags: next })
+    save({ tags: next }, setTagState)
   }
 
   const suggestions = allTags.filter(t => !tags.some(x => x.toLowerCase() === t.toLowerCase()))
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-adm-line-soft p-3.5">
+    <>
       {!thread.gym && (
-      <div>
-        <label htmlFor={`crm-alias-${thread.id}`} className={field.label}>Nombre del contacto</label>
-        <input
-          id={`crm-alias-${thread.id}`}
-          value={alias}
-          onChange={e => setAlias(e.target.value)}
-          onBlur={saveAlias}
-          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
-          maxLength={80}
-          placeholder={thread.contactName ?? 'Ej. Juan · interesado en plan Pro'}
-          className={field.input}
-        />
-      </div>
+        <section className="px-4 py-4">
+          <SectionHead state={nameState}><label htmlFor={`crm-alias-${thread.id}`}>Nombre</label></SectionHead>
+          <input
+            id={`crm-alias-${thread.id}`}
+            value={alias}
+            onChange={e => setAlias(e.target.value)}
+            onBlur={saveAlias}
+            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
+            maxLength={80}
+            placeholder={thread.contactName ? `Como lo llamás vos (en WhatsApp: ${thread.contactName})` : 'Ej. Juan · interesado en plan Pro'}
+            className={INLINE_INPUT}
+          />
+        </section>
       )}
-      <div>
-        <label htmlFor={`crm-tag-${thread.id}`} className={field.label}>Etiquetas</label>
-        {tags.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-1.5">
-            {tags.map(t => <TagChip key={t} onRemove={() => removeTag(t)}>{t}</TagChip>)}
-          </div>
-        )}
-        <input
-          id={`crm-tag-${thread.id}`}
-          value={draft}
-          onChange={e => setDraft(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(draft) }
-            if (e.key === 'Backspace' && !draft && tags.length) removeTag(tags[tags.length - 1])
-          }}
-          onBlur={() => { if (draft.trim()) addTag(draft) }}
-          list={listId}
-          maxLength={30}
-          disabled={tags.length >= MAX_TAGS}
-          placeholder={tags.length >= MAX_TAGS ? 'Máximo 10 etiquetas' : 'Escribí y apretá Enter'}
-          className={field.input}
-        />
+      <section className="px-4 py-4">
+        <SectionHead state={tagState}><label htmlFor={`crm-tag-${thread.id}`}>Etiquetas</label></SectionHead>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {tags.map(t => <TagChip key={t} onRemove={() => removeTag(t)}>{t}</TagChip>)}
+          {tags.length < MAX_TAGS && (
+            <input
+              id={`crm-tag-${thread.id}`}
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(draft) }
+                if (e.key === 'Backspace' && !draft && tags.length) removeTag(tags[tags.length - 1])
+              }}
+              onBlur={() => { if (draft.trim()) addTag(draft) }}
+              list={listId}
+              maxLength={30}
+              placeholder="+ Agregar"
+              className="h-6 w-24 min-w-0 flex-1 rounded-full border border-dashed border-adm-line bg-transparent px-2.5 text-[11px] font-semibold text-adm-ink outline-none! transition-colors placeholder:text-adm-muted hover:border-adm-muted focus:border-solid focus:border-adm-muted"
+            />
+          )}
+        </div>
         <datalist id={listId}>
           {suggestions.map(t => <option key={t} value={t} />)}
         </datalist>
-      </div>
-      <p className={field.hint} aria-live="polite">{isPending ? 'Guardando…' : status ?? ' '}</p>
-    </div>
+      </section>
+    </>
   )
 }
 
@@ -436,9 +458,11 @@ function Media({ m }: { m: CrmMessage }) {
     case 'audio':
       return <audio src={src} controls preload="metadata" className="max-w-full" />
     default:
+      // Files from contacts are never opened in the panel, only downloaded (the back sends them as attachments)
       return (
-        <a href={src} target="_blank" rel="noopener noreferrer" className="font-semibold underline underline-offset-2">
-          📄 Abrir archivo
+        <a href={src} download target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 font-semibold underline underline-offset-2">
+          <Download className="size-4" aria-hidden="true" />
+          Descargar archivo
         </a>
       )
   }
@@ -505,6 +529,11 @@ function Bubble({
         {m.type === 'template' && (
           <p className={cn('mb-1 text-[11px] font-bold uppercase tracking-[0.06em]', out ? 'opacity-60' : 'text-adm-muted')}>
             {m.sentById ? 'Plantilla' : 'Aviso automático'}
+          </p>
+        )}
+        {(m.type === 'catalog' || m.type === 'order') && (
+          <p className={cn('mb-1 text-[11px] font-bold uppercase tracking-[0.06em]', out ? 'opacity-60' : 'text-adm-muted')}>
+            {m.type === 'catalog' ? 'Catálogo de WhatsApp' : 'Pedido del carrito'}
           </p>
         )}
         {m.type === 'auto' && (
@@ -628,6 +657,15 @@ function Composer({
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const fileRef = useRef<HTMLInputElement>(null)
+  const textRef = useRef<HTMLTextAreaElement>(null)
+
+  // Grows with the text up to ~8 lines, then scrolls
+  useEffect(() => {
+    const el = textRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 220)}px`
+  }, [text])
 
   useEffect(() => {
     if (thread.windowOpen) return
@@ -748,90 +786,121 @@ function Composer({
   }
 
   return (
-    <div className="flex flex-col gap-2.5 border-t border-adm-line bg-adm-surface p-3 sm:p-4">
-      <div className="flex flex-wrap items-center gap-1.5">
+    <div className="flex flex-col gap-2 border-t border-adm-line bg-adm-surface px-3 pt-2.5 pb-3 sm:px-4">
+      {/* One line that scrolls sideways: the list grows without pushing the composer up */}
+      <div role="group" aria-label="Respuestas rápidas" className="-mx-1 flex items-center gap-1.5 overflow-x-auto px-1 py-0.5 [scrollbar-width:none]">
         {quickReplies.map(q => (
           <button
             key={q.id}
             type="button"
-            onClick={() => setText(q.text)}
+            onClick={() => { setText(q.text); textRef.current?.focus() }}
             disabled={isPending}
             title={q.text}
-            className="min-h-8 rounded-full border border-adm-line bg-adm-subtle px-3 text-xs font-semibold transition-colors hover:border-adm-ink disabled:opacity-40"
+            className="min-h-7 shrink-0 whitespace-nowrap rounded-full border border-adm-line bg-adm-subtle px-3 text-xs font-semibold transition-colors hover:border-adm-ink hover:bg-adm-surface disabled:opacity-40"
           >
             {q.label}
           </button>
         ))}
-        <button type="button" onClick={onManageQuickReplies} aria-label="Editar respuestas rápidas" title="Editar respuestas rápidas" className={cn(btn.icon, 'size-8')}>
-          {quickReplies.length ? <Pencil className="size-3.5" aria-hidden="true" /> : <Plus className="size-4" aria-hidden="true" />}
+        <button
+          type="button"
+          onClick={onManageQuickReplies}
+          className="inline-flex min-h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 text-xs font-semibold text-adm-muted transition-colors hover:bg-adm-chip hover:text-adm-ink"
+        >
+          {quickReplies.length
+            ? <><Pencil className="size-3" aria-hidden="true" /> Editar</>
+            : <><Plus className="size-3.5" aria-hidden="true" /> Agregar respuestas rápidas</>}
         </button>
-        <label className="ml-auto flex items-center gap-2 text-xs font-semibold text-adm-muted" title="Sin el minuto para editar o borrar la respuesta">
-          <Zap className={cn('size-3.5', instant && 'text-adm-ink')} aria-hidden="true" />
-          <span className={cn(instant && 'text-adm-ink')}>Enviar al instante</span>
-          <Switch checked={instant} onChange={toggleInstant} disabled={isPending} label="Enviar al instante a este contacto" />
-        </label>
       </div>
-      {replyTo && (
-        <div className="flex items-center gap-2 rounded-xl border-l-[3px] border-adm-ink bg-adm-subtle py-1.5 pr-1.5 pl-3">
-          <div className="min-w-0 flex-1 text-xs">
-            <p className="font-bold">Respondiendo a {replyTo.direction === 'OUT' ? 'tu mensaje' : contact}</p>
-            <p className="truncate text-adm-muted">{quoteText(replyTo)}</p>
+
+      {/* The box is the focus indicator: one border, grey, in both themes */}
+      <div className="rounded-2xl border border-adm-line bg-adm-surface transition-colors focus-within:border-adm-muted">
+        {(replyTo || attachment) && (
+          <div className="flex flex-col gap-1.5 p-2 pb-0">
+            {replyTo && (
+              <div className="flex items-center gap-2 rounded-xl border-l-[3px] border-adm-ink bg-adm-subtle py-1.5 pr-1 pl-3">
+                <div className="min-w-0 flex-1 text-xs">
+                  <p className="font-bold">Respondiendo a {replyTo.direction === 'OUT' ? 'tu mensaje' : contact}</p>
+                  <p className="truncate text-adm-muted">{quoteText(replyTo)}</p>
+                </div>
+                <button type="button" onClick={onClearReply} aria-label="No responder a este mensaje" className={cn(btn.icon, 'size-8')}>
+                  <X className="size-4" aria-hidden="true" />
+                </button>
+              </div>
+            )}
+            {attachment && (
+              <div className="flex items-center gap-3 rounded-xl bg-adm-subtle p-1.5">
+                {attachment.file.type.startsWith('image/')
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={attachment.preview} alt="" className="size-12 rounded-lg object-cover" />
+                  : <video src={attachment.preview} muted className="size-12 rounded-lg bg-adm-night object-cover" />}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-semibold">{attachment.file.name}</p>
+                  <p className="font-admin-mono text-xs text-adm-muted">{fmtSize(attachment.file.size)} · se envía al instante</p>
+                </div>
+                <button type="button" onClick={() => setAttachment(null)} disabled={isPending} aria-label="Quitar archivo" className={cn(btn.icon, 'size-8')}>
+                  <X className="size-4" aria-hidden="true" />
+                </button>
+              </div>
+            )}
           </div>
-          <button type="button" onClick={onClearReply} aria-label="No responder a este mensaje" className={cn(btn.icon, 'size-8')}>
-            <X className="size-4" aria-hidden="true" />
-          </button>
-        </div>
-      )}
-      {attachment && (
-        <div className="flex items-center gap-3 rounded-xl border border-adm-line bg-adm-subtle p-2">
-          {attachment.file.type.startsWith('image/')
-            // eslint-disable-next-line @next/next/no-img-element
-            ? <img src={attachment.preview} alt="" className="size-14 rounded-lg object-cover" />
-            : <video src={attachment.preview} muted className="size-14 rounded-lg bg-adm-night object-cover" />}
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-semibold">{attachment.file.name}</p>
-            <p className="font-admin-mono text-xs text-adm-muted">{fmtSize(attachment.file.size)} · se envía al instante</p>
-          </div>
-          <button type="button" onClick={() => setAttachment(null)} disabled={isPending} aria-label="Quitar archivo" className={btn.icon}>
-            <X className="size-4" aria-hidden="true" />
-          </button>
-        </div>
-      )}
-      <div className="flex items-end gap-2">
-        <div className="flex shrink-0 flex-col gap-1">
-          <button type="button" onClick={() => fileRef.current?.click()} disabled={isPending} aria-label="Adjuntar foto o video" title="Foto (JPG/PNG, 5 MB) o video (MP4, 16 MB)" className={cn(btn.icon, 'size-10')}>
-            <Paperclip className="size-4.5" aria-hidden="true" />
-          </button>
-          <button type="button" onClick={() => setTemplatesOpen(true)} disabled={isPending} aria-label="Enviar plantilla" title="Enviar plantilla" className={cn(btn.icon, 'size-10')}>
-            <FileText className="size-4.5" aria-hidden="true" />
-          </button>
-          <button type="button" onClick={() => setProductsOpen(true)} disabled={isPending} aria-label="Enviar producto del catálogo" title="Enviar producto" className={cn(btn.icon, 'size-10')}>
-            <ShoppingBag className="size-4.5" aria-hidden="true" />
-          </button>
-        </div>
-        <input ref={fileRef} type="file" accept="image/jpeg,image/png,video/mp4" onChange={pickFile} className="sr-only" tabIndex={-1} aria-hidden="true" />
+        )}
+
         <label htmlFor="crm-reply" className="sr-only">{file ? 'Texto del archivo' : 'Respuesta'}</label>
         <textarea
           id="crm-reply"
+          ref={textRef}
           value={text}
           onChange={e => setText(e.target.value)}
           onKeyDown={e => {
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send() }
             if (e.key === 'Escape' && replyTo) onClearReply()
           }}
-          rows={2}
+          rows={1}
           maxLength={file ? 1024 : 4096}
           disabled={isPending}
-          placeholder={file ? 'Agregá un texto (opcional)…' : 'Escribí una respuesta… (Enter envía, Shift+Enter nueva línea)'}
-          className={cn(field.textarea, 'min-h-[84px] flex-1 resize-none')}
+          placeholder={file ? 'Agregá un texto (opcional)…' : 'Escribí una respuesta…'}
+          // ! beats the admin-wide :focus-visible outline (globals.css), which doubled the box border
+          className="block max-h-[220px] min-h-11 w-full resize-none bg-transparent px-3.5 pt-3 pb-1 text-sm leading-relaxed text-adm-ink outline-none! placeholder:text-adm-muted/70 disabled:opacity-60"
         />
-        <button type="button" onClick={send} disabled={isPending || (!text.trim() && !file)} aria-label="Enviar" className={cn(btn.primary, 'size-12 shrink-0 px-0')}>
-          {isPending ? <Loader2 className="size-5 animate-spin" aria-hidden="true" /> : <Send className="size-5" aria-hidden="true" />}
-        </button>
+
+        <div className="flex items-center gap-0.5 px-1.5 pb-1.5">
+          <button type="button" onClick={() => fileRef.current?.click()} disabled={isPending} aria-label="Adjuntar foto o video" title="Foto (JPG/PNG, 5 MB) o video (MP4, 16 MB)" className={cn(btn.icon, 'size-9')}>
+            <Paperclip className="size-4.5" aria-hidden="true" />
+          </button>
+          <button type="button" onClick={() => setTemplatesOpen(true)} disabled={isPending} aria-label="Enviar plantilla" title="Plantilla" className={cn(btn.icon, 'size-9')}>
+            <FileText className="size-4.5" aria-hidden="true" />
+          </button>
+          <button type="button" onClick={() => setProductsOpen(true)} disabled={isPending} aria-label="Enviar del catálogo de WhatsApp" title="Catálogo de WhatsApp" className={cn(btn.icon, 'size-9')}>
+            <ShoppingBag className="size-4.5" aria-hidden="true" />
+          </button>
+          <span className="mx-1.5 h-5 w-px bg-adm-line" aria-hidden="true" />
+          <button
+            type="button"
+            aria-pressed={instant}
+            onClick={() => toggleInstant(!instant)}
+            disabled={isPending}
+            title={instant ? 'Las respuestas a este contacto salen al instante' : 'Las respuestas esperan 1 minuto para poder editarlas o borrarlas'}
+            className={cn(
+              'inline-flex min-h-8 items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold transition-colors disabled:opacity-50',
+              instant ? 'bg-adm-ink text-adm-surface' : 'text-adm-muted hover:bg-adm-chip hover:text-adm-ink',
+            )}
+          >
+            <Zap className={cn('size-3.5', instant && 'fill-adm-brand text-adm-brand')} aria-hidden="true" />
+            Al instante
+          </button>
+          <span className="flex-1" />
+          <span className="mr-2 hidden text-[11px] text-adm-muted lg:inline">
+            <kbd className="font-admin-mono">Enter</kbd> envía · <kbd className="font-admin-mono">Shift+Enter</kbd> nueva línea
+          </span>
+          <button type="button" onClick={send} disabled={isPending || (!text.trim() && !file)} aria-label="Enviar" className={cn(btn.primary, 'size-10 min-h-0 shrink-0 rounded-xl px-0')}>
+            {isPending ? <Loader2 className="size-4.5 animate-spin" aria-hidden="true" /> : <Send className="size-4.5" aria-hidden="true" />}
+          </button>
+        </div>
+        <input ref={fileRef} type="file" accept="image/jpeg,image/png,video/mp4" onChange={pickFile} className="sr-only" tabIndex={-1} aria-hidden="true" />
       </div>
       {error && <p role="alert" className={field.error}>{error}</p>}
       {picker}
-      <ProductPicker
+      <WhatsAppCatalogDialog
         conversationId={thread.id}
         replyToId={replyTo?.id}
         open={productsOpen}
@@ -844,75 +913,110 @@ function Composer({
 
 function Details({ thread, allTags, onChanged }: { thread: CrmThread; allTags: string[]; onChanged: () => void }) {
   const [notes, setNotes] = useState(thread.notes ?? '')
-  const [saved, setSaved] = useState(false)
-  const [isPending, startTransition] = useTransition()
+  const [notesState, setNotesState] = useState<SaveState>({ kind: 'idle' })
+  const [copied, setCopied] = useState(false)
+  const [, startTransition] = useTransition()
   const gym = thread.gym
   const max = gym?.plan?.maxMembers ?? null
   const usage = gym && max ? Math.round((gym.members / max) * 100) : null
+  const name = displayName(thread)
 
   function saveNotes() {
     if (notes === (thread.notes ?? '')) return
+    setNotesState({ kind: 'saving' })
     startTransition(async () => {
       const res = await updateConversationAction(thread.id, { notes })
-      if (!res.error) { setSaved(true); onChanged() }
+      setNotesState(res.error ? { kind: 'error', message: res.error } : { kind: 'saved' })
+      if (!res.error) onChanged()
+    })
+  }
+
+  function copyPhone() {
+    void navigator.clipboard.writeText(`+${thread.phone}`).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
     })
   }
 
   return (
-    <aside aria-label="Detalles" className="flex flex-col gap-4 p-4">
-      {gym ? (
-        <div className="flex flex-col gap-3 rounded-xl border border-adm-line-soft p-3.5">
-          <div className="flex items-center gap-3">
-            <GymMark name={gym.name} logoUrl={gym.logoUrl} size="md" />
-            <div className="min-w-0">
-              <p className="truncate font-bold">{gym.name}</p>
-              <p className="truncate font-admin-mono text-xs text-adm-muted">/{gym.slug}</p>
-            </div>
-          </div>
-          {gym.owner && (
-            <p className="text-[13px]">
-              <span className="text-adm-muted">Dueño · </span>
-              <span className="font-semibold">{gym.owner.name}</span>
-              <br />
-              <a href={`mailto:${gym.owner.email}`} className="text-adm-muted hover:underline">{gym.owner.email}</a>
-            </p>
+    <aside aria-label="Detalles" className="flex flex-col divide-y divide-adm-line-soft">
+      {/* Who this is */}
+      <section className="flex flex-col items-center gap-1 px-4 pt-6 pb-5 text-center">
+        {gym
+          ? <GymMark name={gym.name} logoUrl={gym.logoUrl} size="lg" />
+          : <span className="flex size-[72px] items-center justify-center rounded-full bg-adm-chip text-2xl font-black">{initials(thread.alias || thread.contactName || '#')}</span>}
+        <p className="mt-2 max-w-full truncate text-base font-extrabold">{name}</p>
+        <button
+          type="button"
+          onClick={copyPhone}
+          title="Copiar número"
+          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-admin-mono text-xs text-adm-muted transition-colors hover:bg-adm-chip hover:text-adm-ink"
+        >
+          {fmtPhone(thread.phone)}
+          {copied ? <Check className="size-3 text-adm-ok-fg" aria-hidden="true" /> : <Copy className="size-3" aria-hidden="true" />}
+          <span className="sr-only">{copied ? 'Copiado' : 'Copiar'}</span>
+        </button>
+        {thread.contactName && thread.contactName !== name && (
+          <p className="text-xs text-adm-muted">En WhatsApp: {thread.contactName}</p>
+        )}
+        <span
+          className={cn(
+            'mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold',
+            gym ? 'bg-adm-ok-bg text-adm-ok-fg' : 'bg-adm-chip text-adm-muted',
           )}
-          <div>
-            <p className="flex justify-between text-[13px]">
-              <span className="text-adm-muted">Plan {gym.plan?.label ?? gym.subscriptionPlan}</span>
-              <span className="font-admin-mono font-semibold">{gym.members}{max ? ` / ${max}` : ''} socios</span>
-            </p>
-            {usage !== null && <Meter value={usage} className={cn('mt-2', usage >= 90 && '[&>div]:bg-adm-high-fg')} />}
+        >
+          <span className={cn('size-1.5 rounded-full', gym ? 'bg-adm-ok-fg' : 'bg-adm-muted')} aria-hidden="true" />
+          {gym ? `Cliente · ${gym.plan?.label ?? gym.subscriptionPlan}` : 'Sin cuenta'}
+        </span>
+      </section>
+
+      {/* The account behind the number, or how to get one */}
+      <section className="px-4 py-4">
+        <SectionHead>{gym ? 'Gimnasio' : 'Cuenta'}</SectionHead>
+        {gym ? (
+          <div className="flex flex-col gap-3">
+            {gym.owner && (
+              <div className="text-[13px]">
+                <p className="font-semibold">{gym.owner.name}</p>
+                <a href={`mailto:${gym.owner.email}`} className="text-adm-muted hover:text-adm-ink hover:underline">{gym.owner.email}</a>
+              </div>
+            )}
+            <div>
+              <p className="flex items-baseline justify-between text-[13px]">
+                <span className="text-adm-muted">Socios</span>
+                <span className="font-admin-mono font-semibold">{gym.members}{max ? ` / ${max}` : ''}</span>
+              </p>
+              {usage !== null && <Meter value={usage} className={cn('mt-1.5', usage >= 90 && '[&>div]:bg-adm-high-fg')} />}
+              {usage !== null && usage >= 90 && <p className="mt-1 text-xs font-semibold text-adm-high-fg">Al {usage}% del plan</p>}
+            </div>
+            <Link href={`/admin/gyms/${gym.slug}`} className="inline-flex items-center gap-1 self-start text-[13px] font-semibold hover:underline">
+              Ver gimnasio <ExternalLink className="size-3.5" aria-hidden="true" />
+            </Link>
           </div>
-          <Link href={`/admin/gyms/${gym.slug}`} className={cn(btn.line, 'self-start')}>
-            <ExternalLink className="size-3.5" aria-hidden="true" /> Ver gimnasio
-          </Link>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3 rounded-xl border border-adm-warn-line bg-adm-warn-bg px-3.5 py-3 text-[13px] text-adm-warn-fg">
-          <p>
-            Este número no coincide con ningún gimnasio. Si ya te pasó sus datos, creale la cuenta; si ya es cliente, cargá
-            este número como WhatsApp del dueño en su gimnasio.
-          </p>
-          <CreateAccountDialog thread={thread} onCreated={onChanged} />
-        </div>
-      )}
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            <p className="text-[13px] text-adm-muted">Este número no es de ningún gimnasio. Si ya te pasó sus datos, creale la cuenta desde acá.</p>
+            <CreateAccountDialog thread={thread} onCreated={onChanged} className="w-full" />
+            <p className="text-xs text-adm-muted">¿Ya es cliente? Cargá este número como WhatsApp del dueño en su gimnasio y se vincula solo.</p>
+          </div>
+        )}
+      </section>
+
       <ContactEditor thread={thread} allTags={allTags} onChanged={onChanged} />
 
-      <div>
-        <label htmlFor="crm-notes" className={field.label}>Notas internas</label>
+      <section className="px-4 py-4">
+        <SectionHead state={notesState}><label htmlFor={`crm-notes-${thread.id}`}>Notas internas</label></SectionHead>
         <textarea
-          id="crm-notes"
+          id={`crm-notes-${thread.id}`}
           value={notes}
-          onChange={e => { setNotes(e.target.value); setSaved(false) }}
+          onChange={e => { setNotes(e.target.value); setNotesState({ kind: 'idle' }) }}
           onBlur={saveNotes}
           maxLength={5000}
-          rows={6}
-          placeholder="Solo las ve el equipo. Se guardan al salir del campo."
-          className={field.textarea}
+          rows={5}
+          placeholder="Solo las ve el equipo. Se guardan solas."
+          className="w-full resize-y rounded-xl border border-transparent bg-adm-subtle px-3 py-2.5 text-[13px] leading-relaxed text-adm-ink outline-none! transition-colors placeholder:text-adm-muted/70 hover:border-adm-line focus:border-adm-muted focus:bg-adm-surface"
         />
-        <p className={field.hint} aria-live="polite">{isPending ? 'Guardando…' : saved ? 'Guardado' : ' '}</p>
-      </div>
+      </section>
     </aside>
   )
 }
@@ -1285,7 +1389,8 @@ export function CrmInbox({
       {/* Below xl the details column is hidden: same panel in a drawer */}
       <Sheet open={detailsOpen && !!active} onOpenChange={setDetailsOpen}>
         <SheetContent side="right" className="admin-surface w-full gap-0 overflow-y-auto border-adm-line bg-adm-surface p-0 text-adm-ink data-[side=right]:w-full data-[side=right]:sm:max-w-[380px]">
-          <SheetTitle className="px-4 pt-4 text-base font-extrabold">{active ? displayName(active) : 'Contacto'}</SheetTitle>
+          {/* The panel's own header already shows the name */}
+          <SheetTitle className="sr-only">{active ? displayName(active) : 'Contacto'}</SheetTitle>
           {active && <Details key={active.id} thread={active} allTags={allTags} onChanged={reloadActive} />}
         </SheetContent>
       </Sheet>

@@ -7,7 +7,7 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { MoneyTransformInterceptor } from './common/interceptors/money-transform.interceptor';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
-import { StorageService } from './storage/storage.service';
+import { setUploadHeaders, StorageService } from './storage/storage.service';
 
 async function bootstrap() {
   // rawBody: the WhatsApp webhook verifies Meta's HMAC signature over the exact bytes
@@ -25,11 +25,7 @@ async function bootstrap() {
 
   app.useStaticAssets(join(process.cwd(), 'uploads'), {
     prefix: '/uploads',
-    setHeaders: (res) => {
-      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.setHeader('Cache-Control', 'public, max-age=31536000');
-    },
+    setHeaders: (res, path) => setUploadHeaders(res, path),
   });
   // Files that aren't on disk come from MinIO
   const storage = app.get(StorageService);
