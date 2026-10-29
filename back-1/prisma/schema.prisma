@@ -95,50 +95,50 @@ enum AccessRequestStatus {
 }
 
 model Gym {
-  id               String   @id @default(uuid())
-  name             String
-  slug             String   @unique
-  logoUrl          String?
-  isActive         Boolean  @default(true)
-  address          String?
-  country          String?
-  timezone         String   @default("UTC")
-  currency         String   @default("USD")
-  schedule         Json?
-  subscriptionPlan        String   @default("BASIC")
+  id                      String                @id @default(uuid())
+  name                    String
+  slug                    String                @unique
+  logoUrl                 String?
+  isActive                Boolean               @default(true)
+  address                 String?
+  country                 String?
+  timezone                String                @default("UTC")
+  currency                String                @default("USD")
+  schedule                Json?
+  subscriptionPlan        String                @default("BASIC")
   subscriptionStatus      GymSubscriptionStatus @default(ACTIVE)
   subscriptionExpiresAt   DateTime?
   subscriptionGraceEndsAt DateTime?
   trialEndsAt             DateTime?
-  advancedReportsEnabled  Boolean  @default(false)
+  advancedReportsEnabled  Boolean               @default(false)
   /// Owner's WhatsApp number (E.164, digits only) for plan-limit alerts
   whatsappPhone           String?
   /// Highest member-limit threshold (%) already alerted; reset when usage drops
-  memberLimitAlertLevel   Int      @default(0)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  memberLimitAlertLevel   Int                   @default(0)
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
 
   ownerId String? @unique
   owner   User?   @relation("GymOwner", fields: [ownerId], references: [id])
 
-  users               User[]              @relation("GymUsers")
-  branches            Branch[]
-  plans               Plan[]
-  members             Member[]
-  trainers            Trainer[]
-  classes             Class[]
-  inventoryItems      InventoryItem[]
-  communications      Communication[]
-  campaigns           EmailCampaign[]
-  templates           EmailTemplate[]
-  gymBillingPayments  GymBillingPayment[]
-  planStore           PlanStore[]
-  products            Product[]
-  productCategories   ProductCategory[]
-  productSales        ProductSale[]
-  memberCredits       MemberProductCredit[]
-  supportTickets      SupportTicket[]
-  waConversations     WaConversation[]
+  users              User[]                @relation("GymUsers")
+  branches           Branch[]
+  plans              Plan[]
+  members            Member[]
+  trainers           Trainer[]
+  classes            Class[]
+  inventoryItems     InventoryItem[]
+  communications     Communication[]
+  campaigns          EmailCampaign[]
+  templates          EmailTemplate[]
+  gymBillingPayments GymBillingPayment[]
+  planStore          PlanStore[]
+  products           Product[]
+  productCategories  ProductCategory[]
+  productSales       ProductSale[]
+  memberCredits      MemberProductCredit[]
+  supportTickets     SupportTicket[]
+  waConversations    WaConversation[]
 
   @@map("gyms")
 }
@@ -160,8 +160,8 @@ model User {
   gymId String?
   gym   Gym?    @relation("GymUsers", fields: [gymId], references: [id], onDelete: SetNull)
 
-  ownedGym              Gym?                 @relation("GymOwner")
-  adminCommunications   AdminCommunication[]
+  ownedGym            Gym?                 @relation("GymOwner")
+  adminCommunications AdminCommunication[]
 
   @@index([gymId])
   @@map("users")
@@ -191,23 +191,23 @@ model Branch {
 }
 
 model Plan {
-  id          String   @id @default(uuid())
-  name        String
-  price       Int
-  currency    String   @default("USD")
-  durationDays Int
-  daysPerWeek Int?
+  id             String   @id @default(uuid())
+  name           String
+  price          Int
+  currency       String   @default("USD")
+  durationDays   Int
+  daysPerWeek    Int?
   // Visit-limited plan: number of gym days included (null = unlimited within durationDays)
-  visitLimit  Int?
+  visitLimit     Int?
   // People covered by one purchase (1 = individual, 2+ = shared "entre amigos" plan)
-  maxMembers  Int      @default(1)
+  maxMembers     Int      @default(1)
   benefits       Json     @default("[]")
   accessSchedule Json?
-  isActive      Boolean  @default(true)
-  isFeatured    Boolean  @default(false)
-  storeEnabled  Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  isActive       Boolean  @default(true)
+  isFeatured     Boolean  @default(false)
+  storeEnabled   Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   gymId String
   gym   Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
@@ -220,16 +220,16 @@ model Plan {
 }
 
 model Member {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   firstName String
   lastName  String
   email     String
   phone     String?
   birthDate DateTime?
   photoUrl  String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   // Wallet pass (WalletWallet). walletToken is the secret encoded in the pass QR.
   walletToken     String?   @unique
@@ -239,7 +239,7 @@ model Member {
   walletIssuedAt  DateTime?
 
   gymId    String
-  gym      Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  gym      Gym     @relation(fields: [gymId], references: [id], onDelete: Cascade)
   branchId String?
   branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
@@ -250,33 +250,33 @@ model Member {
   productCredits   MemberProductCredit[]
   productSales     ProductSale[]
 
+  @@unique([gymId, firstName, lastName])
   @@index([gymId])
   @@index([branchId])
-  @@unique([gymId, firstName, lastName])
   @@map("members")
 }
 
 model Membership {
-  id        String           @id @default(uuid())
-  startDate DateTime
-  endDate   DateTime
-  status    MembershipStatus @default(ACTIVE)
-  frozenAt  DateTime?
-  frozenDays Int             @default(0)
+  id          String           @id @default(uuid())
+  startDate   DateTime
+  endDate     DateTime
+  status      MembershipStatus @default(ACTIVE)
+  frozenAt    DateTime?
+  frozenDays  Int              @default(0)
   // Snapshot of plan.visitLimit at creation; one visit is consumed per gym day attended
   visitsTotal Int?
-  visitsUsed  Int            @default(0)
+  visitsUsed  Int              @default(0)
   // Memberships bought together under a shared plan share this id (one row per person)
-  groupId   String?
-  notes     String?
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  groupId     String?
+  notes       String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 
   gymId    String
   memberId String
-  member   Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  member   Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
   planId   String
-  plan     Plan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+  plan     Plan    @relation(fields: [planId], references: [id], onDelete: Cascade)
   branchId String?
   branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
@@ -292,14 +292,14 @@ model Membership {
 }
 
 model Payment {
-  id        String        @id @default(uuid())
-  amount    Int
-  currency  String        @default("USD")
-  method    PaymentMethod @default(CASH)
-  notes     String?
+  id         String        @id @default(uuid())
+  amount     Int
+  currency   String        @default("USD")
+  method     PaymentMethod @default(CASH)
+  notes      String?
   receiptUrl String?
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
 
   gymId        String
   memberId     String
@@ -322,16 +322,16 @@ model Attendance {
   checkOut  DateTime?
   createdAt DateTime  @default(now())
 
-  gymId    String
-  memberId String
-  member   Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  branchId String?
-  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  groupId  String?
-  group    AttendanceGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  gymId        String
+  memberId     String
+  member       Member           @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  branchId     String?
+  branch       Branch?          @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  groupId      String?
+  group        AttendanceGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   // Set when this check-in consumed a visit from a visit-limited membership
   membershipId String?
-  membership   Membership? @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+  membership   Membership?      @relation(fields: [membershipId], references: [id], onDelete: SetNull)
 
   @@index([gymId])
   @@index([memberId])
@@ -366,7 +366,7 @@ model Trainer {
   updatedAt    DateTime @updatedAt
 
   gymId    String
-  gym      Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  gym      Gym     @relation(fields: [gymId], references: [id], onDelete: Cascade)
   branchId String?
   branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
@@ -388,9 +388,9 @@ model Class {
   updatedAt   DateTime @updatedAt
 
   gymId     String
-  gym       Gym     @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  gym       Gym      @relation(fields: [gymId], references: [id], onDelete: Cascade)
   branchId  String?
-  branch    Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branch    Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
   trainerId String?
   trainer   Trainer? @relation(fields: [trainerId], references: [id], onDelete: SetNull)
 
@@ -403,9 +403,9 @@ model Class {
 }
 
 model ClassEnrollment {
-  id        String    @id @default(uuid())
-  enrolledAt DateTime @default(now())
-  attended  Boolean   @default(false)
+  id         String    @id @default(uuid())
+  enrolledAt DateTime  @default(now())
+  attended   Boolean   @default(false)
   attendedAt DateTime?
 
   gymId    String
@@ -433,7 +433,7 @@ model InventoryItem {
   updatedAt    DateTime        @updatedAt
 
   gymId    String
-  gym      Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  gym      Gym     @relation(fields: [gymId], references: [id], onDelete: Cascade)
   branchId String?
   branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
@@ -463,12 +463,12 @@ model Maintenance {
 }
 
 model Communication {
-  id          String   @id @default(uuid())
-  subject     String
-  body        String
+  id           String   @id @default(uuid())
+  subject      String
+  body         String
   recipientIds String[]
-  sentAt      DateTime @default(now())
-  createdAt   DateTime @default(now())
+  sentAt       DateTime @default(now())
+  createdAt    DateTime @default(now())
 
   gymId String
   gym   Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
@@ -495,27 +495,27 @@ model EmailTemplate {
 }
 
 model SubscriptionPlan {
-  id           String   @id @default(uuid())
-  key          String   @unique
-  label        String
-  price        Int
-  currency     String   @default("USD")
-  durationDays Int      @default(30)
-  graceDays    Int      @default(5)
-  maxMembers      Int?
-  storeEnabled    Boolean  @default(false)
-  features        Json     @default("[]")
-  isActive        Boolean  @default(true)
-  sortOrder       Int      @default(0)
-  discountPercent Int?
-  discountActive  Boolean  @default(false)
-  yearlyPrice     Int?
-  demoEnabled             Boolean  @default(false)
-  trialEnabled            Boolean  @default(false)
-  visibleOnLanding        Boolean  @default(true)
-  advancedReportsEnabled  Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                     String   @id @default(uuid())
+  key                    String   @unique
+  label                  String
+  price                  Int
+  currency               String   @default("USD")
+  durationDays           Int      @default(30)
+  graceDays              Int      @default(5)
+  maxMembers             Int?
+  storeEnabled           Boolean  @default(false)
+  features               Json     @default("[]")
+  isActive               Boolean  @default(true)
+  sortOrder              Int      @default(0)
+  discountPercent        Int?
+  discountActive         Boolean  @default(false)
+  yearlyPrice            Int?
+  demoEnabled            Boolean  @default(false)
+  trialEnabled           Boolean  @default(false)
+  visibleOnLanding       Boolean  @default(true)
+  advancedReportsEnabled Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   @@map("subscription_plans")
 }
@@ -704,26 +704,26 @@ model SupportTicket {
 // ── Platform Settings (singleton) ───────────────────────────
 
 model PlatformSettings {
-  id                  String   @id @default("1")
-  saasName            String   @default("GymSystem")
-  logoUrl             String?
-  creatorName         String?
-  creatorUrl          String?
-  footerText          String?
-  footerLinks         Json     @default("[]")
-  footerShowPoweredBy Boolean  @default(true)
-  heroTitle           String?
-  heroSubtitle        String?
-  heroCtaText         String?
-  heroCtaUrl          String?
-  primaryColor        String?
-  landingFeatures     Json     @default("[]")
-  landingShowPlans    Boolean  @default(true)
-  availableSlots      Json     @default("[]")
-  termsContent        String?
+  id                   String   @id @default("1")
+  saasName             String   @default("GymSystem")
+  logoUrl              String?
+  creatorName          String?
+  creatorUrl           String?
+  footerText           String?
+  footerLinks          Json     @default("[]")
+  footerShowPoweredBy  Boolean  @default(true)
+  heroTitle            String?
+  heroSubtitle         String?
+  heroCtaText          String?
+  heroCtaUrl           String?
+  primaryColor         String?
+  landingFeatures      Json     @default("[]")
+  landingShowPlans     Boolean  @default(true)
+  availableSlots       Json     @default("[]")
+  termsContent         String?
   /// Manual kill switch for automatic WhatsApp alerts (e.g. while a template awaits Meta's approval)
-  whatsappAlertsPaused Boolean @default(false)
-  updatedAt           DateTime @updatedAt
+  whatsappAlertsPaused Boolean  @default(false)
+  updatedAt            DateTime @updatedAt
 
   @@map("platform_settings")
 }
@@ -763,38 +763,38 @@ model Tutorial {
 }
 
 model DemoRequest {
-  id        String            @id @default(uuid())
-  name      String
-  email     String
-  phone     String?
-  gymName   String
-  planId    String
-  planLabel String
-  status    DemoRequestStatus @default(PENDING)
-  ip        String?
+  id                String            @id @default(uuid())
+  name              String
+  email             String
+  phone             String?
+  gymName           String
+  planId            String
+  planLabel         String
+  status            DemoRequestStatus @default(PENDING)
+  ip                String?
   statusChangedById String?
   statusChangedAt   DateTime?
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   @@index([status])
   @@map("demo_requests")
 }
 
 model AccessRequest {
-  id              String              @id @default(uuid())
-  name            String
-  email           String
-  phone           String?
-  country         String?             @db.VarChar(10)
-  callingCode     String?             @db.VarChar(8)
-  postalCode      String?             @db.VarChar(20)
-  preferredDate   DateTime
-  status          AccessRequestStatus @default(PENDING)
-  convertedAt     DateTime?
-  convertedById   String?
-  convertedGymId  String?
-  createdAt       DateTime            @default(now())
+  id             String              @id @default(uuid())
+  name           String
+  email          String
+  phone          String?
+  country        String?             @db.VarChar(10)
+  callingCode    String?             @db.VarChar(8)
+  postalCode     String?             @db.VarChar(20)
+  preferredDate  DateTime
+  status         AccessRequestStatus @default(PENDING)
+  convertedAt    DateTime?
+  convertedById  String?
+  convertedGymId String?
+  createdAt      DateTime            @default(now())
 
   @@index([status])
   @@map("access_requests")
@@ -848,6 +848,8 @@ model WaConversation {
   lastMessageAt DateTime  @default(now())
   /// Free-form replies are only allowed within 24 h of this (Meta customer service window)
   lastInboundAt DateTime?
+  /// Replies skip the 1-minute undo queue and go out right away
+  instantSend   Boolean   @default(false)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -858,6 +860,18 @@ model WaConversation {
   @@index([gymId])
   @@index([status, lastMessageAt])
   @@map("wa_conversations")
+}
+
+/// Canned replies shown above the CRM composer; the team adds and edits them
+model CrmQuickReply {
+  id        String   @id @default(uuid())
+  label     String
+  text      String
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("crm_quick_replies")
 }
 
 model WaMessage {

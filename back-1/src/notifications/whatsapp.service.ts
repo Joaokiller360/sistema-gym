@@ -13,9 +13,56 @@ export interface SendResult {
   error?: string;
 }
 
+type TemplateOutbound = {
+  type: 'template';
+  name: string;
+  params: TemplateParams;
+  /** Defaults to WHATSAPP_TEMPLATE_LANG */
+  language?: string;
+  /** Approved body with {{n}} holes, for templates without a local copy */
+  body?: string;
+};
+type MediaOutbound = {
+  type: 'image' | 'video';
+  /** Public URL WhatsApp downloads the file from */
+  url: string;
+  caption?: string;
+};
 type Outbound =
   | { type: 'text'; body: string }
-  | { type: 'template'; name: string; params: TemplateParams };
+  | TemplateOutbound
+  | MediaOutbound;
+
+/** Same labels the CRM shows for media without a caption */
+const MEDIA_LABEL = { image: '📷 Imagen', video: '🎥 Video' };
+
+/** Approved template as the CRM picker needs it */
+export interface WaTemplate {
+  name: string;
+  language: string;
+  category: string;
+  /** Header text (if any) + body, with {{n}} holes */
+  preview: string;
+  /** Values to fill, in Zernio's flat order: header vars, then body vars */
+  params: number;
+  /** Media headers and dynamic buttons need values the CRM can't provide yet */
+  unsupported: string | null;
+}
+
+type ZernioTemplateComponent = {
+  type?: string;
+  format?: string;
+  text?: string;
+  buttons?: Array<{ type?: string; url?: string }>;
+};
+
+/** Highest {{n}} in a template text */
+function holes(text = '') {
+  return Math.max(
+    0,
+    ...[...text.matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1])),
+  );
+}
 
 const ZERNIO_API = 'https://zernio.com/api/v1';
 
@@ -68,6 +115,121 @@ export class WhatsappService {
     return res.ok;
   }
 
+  /** Any approved template, picked in the CRM. Never throws. */
+  sendAnyTemplate(
+    to: string,
+    template: Omit<TemplateOutbound, 'type'>,
+    sentById?: string,
+  ): Promise<SendResult> {
+    return this.send(to, { type: 'template', ...template }, sentById);
+  }
+
+  /** Photo or video by public URL (see uploadMedia). Same 24 h rule as text. */
+  sendMedia(
+    to: string,
+    media: Omit<MediaOutbound, 'type'> & { type: MediaOutbound['type'] },
+    sentById?: string,
+    messageId?: string,
+  ): Promise<SendResult> {
+    return this.send(to, media, sentById, messageId);
+  }
+
+  /** Puts the file on Zernio's storage and returns the public URL WhatsApp fetches it from. */
+  async uploadMedia(file: {
+    buffer: Buffer;
+    mimetype: string;
+    originalname: string;
+  }) {
+    this.assertZernio();
+    const res = await fetch(`${ZERNIO_API}/media/presign`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.ZERNIO_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        filename: file.originalname,
+        contentType: file.mimetype,
+        size: file.buffer.length,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    const data = (await res.json().catch(() => null)) as
+      | (ZernioError & {
+          uploadUrl?: string;
+          publicUrl?: string;
+        })
+      | null;
+    if (!res.ok || !data?.uploadUrl || !data.publicUrl) {
+      throw this.zernioFailure('media presign', res.status, data);
+    }
+    const put = await fetch(data.uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.mimetype },
+      body: new Uint8Array(file.buffer),
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!put.ok) {
+      this.logger.error(`[WhatsApp/Zernio] media upload → ${put.status}`);
+      throw new BadRequestException(
+        `No se pudo subir el archivo (${put.status})`,
+      );
+    }
+    return data.publicUrl;
+  }
+
+  /** Approved templates of the connected number. Only through Zernio. */
+  async listTemplates(): Promise<WaTemplate[]> {
+    this.assertZernio();
+    const params = new URLSearchParams({
+      accountId: process.env.ZERNIO_WHATSAPP_ACCOUNT_ID!,
+      status: 'APPROVED',
+    });
+    const res = await fetch(`${ZERNIO_API}/whatsapp/templates?${params}`, {
+      headers: { Authorization: `Bearer ${process.env.ZERNIO_API_KEY}` },
+      signal: AbortSignal.timeout(15_000),
+    });
+    const data = (await res.json().catch(() => null)) as
+      | (ZernioError & {
+          templates?: Array<{
+            name?: string;
+            language?: string;
+            category?: string;
+            components?: ZernioTemplateComponent[];
+          }>;
+        })
+      | null;
+    if (!res.ok) throw this.zernioFailure('templates', res.status, data);
+    return (data?.templates ?? [])
+      .filter((t) => t.name)
+      .map((t) => {
+        const find = (type: string) =>
+          t.components?.find((c) => c.type?.toUpperCase() === type);
+        const header = find('HEADER');
+        const body = find('BODY');
+        const textHeader =
+          header && (header.format ?? 'TEXT').toUpperCase() === 'TEXT';
+        const dynamicButton = find('BUTTONS')?.buttons?.some((b) =>
+          b.url?.includes('{{'),
+        );
+        return {
+          name: t.name!,
+          language: t.language ?? 'es',
+          category: t.category ?? '',
+          preview: [textHeader ? header.text : null, body?.text]
+            .filter(Boolean)
+            .join('\n\n'),
+          params: (textHeader ? holes(header.text) : 0) + holes(body?.text),
+          unsupported:
+            header && !textHeader
+              ? 'Tiene encabezado con imagen, video o documento'
+              : dynamicButton
+                ? 'Tiene un botón con link variable'
+                : null,
+        };
+      });
+  }
+
   /**
    * Free-form text; WhatsApp only delivers it within 24 h of the contact's last message.
    * `messageId` points at a CRM message already saved (queued reply) to update instead of logging a new one.
@@ -88,8 +250,12 @@ export class WhatsappService {
     messageId?: string,
   ): Promise<SendResult> {
     const body =
-      msg.type === 'template' ? renderTemplate(msg.name, msg.params) : msg.body;
-    const label = msg.type === 'template' ? body.slice(0, 40) : 'text';
+      msg.type === 'template'
+        ? renderTemplate(msg.name, msg.params, msg.body)
+        : msg.type === 'text'
+          ? msg.body
+          : msg.caption || MEDIA_LABEL[msg.type];
+    const label = msg.type === 'template' ? body.slice(0, 40) : msg.type;
     if (!this.enabled) {
       this.logger.warn(`[WhatsApp] Not configured, skipping ${label}`);
       return {
@@ -107,7 +273,9 @@ export class WhatsappService {
     try {
       result = this.viaZernio
         ? await this.sendZernio(phone, msg, label)
-        : await this.sendMeta(phone, msg, label);
+        : 'url' in msg
+          ? { ok: false, error: 'Enviar fotos y videos requiere Zernio' }
+          : await this.sendMeta(phone, msg, label);
     } catch (e) {
       this.logger.error(`[WhatsApp] ${label} failed:`, e);
       result = { ok: false, error: 'No se pudo conectar con WhatsApp' };
@@ -125,7 +293,7 @@ export class WhatsappService {
 
   private async sendMeta(
     phone: string,
-    msg: Outbound,
+    msg: Exclude<Outbound, MediaOutbound>,
     label: string,
   ): Promise<SendResult> {
     const message =
@@ -134,7 +302,10 @@ export class WhatsappService {
             type: 'template',
             template: {
               name: msg.name,
-              language: { code: process.env.WHATSAPP_TEMPLATE_LANG ?? 'es' },
+              language: {
+                code:
+                  msg.language ?? process.env.WHATSAPP_TEMPLATE_LANG ?? 'es',
+              },
               components: [
                 {
                   type: 'body',
@@ -271,7 +442,8 @@ export class WhatsappService {
         accountId,
         participantId: phone,
         templateName: msg.name,
-        templateLanguage: process.env.WHATSAPP_TEMPLATE_LANG ?? 'es',
+        templateLanguage:
+          msg.language ?? process.env.WHATSAPP_TEMPLATE_LANG ?? 'es',
         templateParams: msg.params.map(String),
       };
     } else {
@@ -287,7 +459,15 @@ export class WhatsappService {
         };
       }
       path = `/inbox/conversations/${encodeURIComponent(conv.externalId)}/messages`;
-      payload = { accountId, message: msg.body };
+      payload =
+        msg.type === 'text'
+          ? { accountId, message: msg.body }
+          : {
+              accountId,
+              attachmentUrl: msg.url,
+              attachmentType: msg.type,
+              ...(msg.caption && { message: msg.caption }),
+            };
     }
 
     const res = await fetch(`${ZERNIO_API}${path}`, {

@@ -24,8 +24,13 @@ const BODIES: Record<string, string> = {
     'Hola {{1}}, te escribimos desde {{2}} por tu gimnasio *{{3}}*. Respondé este mensaje y seguimos la conversación por acá.',
 };
 
-export function renderTemplate(name: string, params: TemplateParams): string {
-  const body = BODIES[name];
+/** `fallback`: the approved body as Meta returns it, for templates without a local copy */
+export function renderTemplate(
+  name: string,
+  params: TemplateParams,
+  fallback?: string,
+): string {
+  const body = BODIES[name] ?? fallback;
   if (!body) return `[Plantilla ${name}] ${params.join(' · ')}`;
   return body.replace(/\{\{(\d+)\}\}/g, (_, i: string) =>
     String(params[Number(i) - 1] ?? ''),

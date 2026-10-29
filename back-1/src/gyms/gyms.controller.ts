@@ -4,11 +4,8 @@ import {
   UploadedFile, BadRequestException, Req,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
+import { memoryStorage } from 'multer';
 import { extname } from 'path';
-import { readFileSync, unlinkSync } from 'fs';
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const fileType = require('file-type') as { fromBuffer: (buf: Buffer) => Promise<{ mime: string } | undefined> };
 import { GymsService } from './gyms.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -67,12 +64,8 @@ export class GymsController {
   @Roles(Role.GYM_OWNER, Role.SUPER_ADMIN)
   @UseInterceptors(
     FileInterceptor('logo', {
-      storage: diskStorage({
-        destination: './uploads/logos',
-        filename: (_req, _file, cb) => {
-          cb(null, `${Date.now()}.jpg`);
-        },
-      }),
+      // Kept in memory: StorageService checks the bytes and writes them to MinIO or disk
+      storage: memoryStorage(),
       fileFilter: (_req, file, cb) => {
         const ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
         const ALLOWED_EXTS = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
@@ -91,16 +84,7 @@ export class GymsController {
     @UploadedFile() file: Express.Multer.File,
   ) {
     if (!file) throw new BadRequestException('Logo es requerido');
-
-    const ALLOWED_MAGIC_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    const buf = readFileSync(file.path).slice(0, 20);
-    const detected = await fileType.fromBuffer(buf);
-    if (!detected || !ALLOWED_MAGIC_MIMES.includes(detected.mime)) {
-      unlinkSync(file.path);
-      throw new BadRequestException('Archivo de imagen inválido');
-    }
-
-    return this.gymsService.updateLogo(id, `/uploads/logos/${file.filename}`, req.user?.userId, req.user?.role);
+    return this.gymsService.updateLogo(id, file.buffer, req.user?.userId, req.user?.role);
   }
 
   // Staff routes resolve the gym through TenantGuard (req.gymId): a super admin has no gym

@@ -1,12 +1,11 @@
 import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
-import { unlink } from 'fs/promises';
-import { join } from 'path';
 import { randomBytes } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { Resend } from 'resend';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const sanitizeHtml = require('sanitize-html') as (input: string, opts: object) => string;
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 import { isGymOpen, GymSchedule } from '../common/utils/timezone.util';
 import { parseWhatsapp } from '../notifications/whatsapp.service';
 
@@ -32,7 +31,10 @@ function escapeHtml(str: string): string {
 export class GymsService {
   private readonly resend = new Resend(process.env.RESEND_API_KEY);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
 
   async findBySlug(slug: string) {
     const gym = await this.prisma.gym.findUnique({
@@ -117,7 +119,7 @@ export class GymsService {
     return { message: 'Gym deleted successfully' };
   }
 
-  async updateLogo(id: string, logoUrl: string, callerId: string, role?: string) {
+  async updateLogo(id: string, image: Buffer, callerId: string, role?: string) {
     const gym = await this.prisma.gym.findUnique({ where: { id } });
     if (!gym) throw new NotFoundException('Gym not found');
 
@@ -125,12 +127,10 @@ export class GymsService {
       throw new ForbiddenException('No autorizado');
     }
 
-    if (gym.logoUrl?.startsWith('/uploads/logos/')) {
-      const oldPath = join(process.cwd(), gym.logoUrl);
-      unlink(oldPath).catch(() => null);
-    }
-
-    return this.prisma.gym.update({ where: { id }, data: { logoUrl } });
+    const logoUrl = await this.storage.putImage('logos', image);
+    const updated = await this.prisma.gym.update({ where: { id }, data: { logoUrl } });
+    void this.storage.remove(gym.logoUrl);
+    return updated;
   }
 
   async getStaff(gymId: string) {

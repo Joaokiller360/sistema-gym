@@ -62,6 +62,11 @@ export class UpdateConversationDto {
   @MaxLength(30, { each: true })
   tags?: string[];
 
+  /** Replies skip the 1-minute undo queue */
+  @IsOptional()
+  @IsBoolean()
+  instantSend?: boolean;
+
   /** null unlinks the gym */
   @IsOptional()
   @IsUUID()
@@ -91,4 +96,43 @@ export class SendTemplateDto {
   @IsOptional()
   @IsIn(['contact', 'offer'])
   kind?: 'contact' | 'offer';
+}
+
+export class SendAnyTemplateDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(512)
+  name: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(15)
+  language: string;
+
+  /** {{1}}, {{2}}, … in order (header vars first) */
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @MaxLength(1024, { each: true })
+  params: string[];
+}
+
+export class QuickReplyDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(30)
+  label: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(4096)
+  text: string;
+}
+
+/** Multipart text field next to the file */
+export class SendMediaDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(1024)
+  caption?: string;
 }

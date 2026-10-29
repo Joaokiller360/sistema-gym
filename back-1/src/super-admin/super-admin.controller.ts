@@ -5,9 +5,10 @@ import {
 } from '@nestjs/common';
 import { IsEnum, IsString, IsNotEmpty, IsOptional, IsArray, IsUUID, MaxLength } from 'class-validator';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
+import { memoryStorage } from 'multer';
 import { extname } from 'path';
 import { SuperAdminService } from './super-admin.service';
+import { StorageService } from '../storage/storage.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -42,7 +43,10 @@ class SendComunicacionesDto {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.SUPER_ADMIN)
 export class SuperAdminController {
-  constructor(private readonly superAdminService: SuperAdminService) {}
+  constructor(
+    private readonly superAdminService: SuperAdminService,
+    private readonly storage: StorageService,
+  ) {}
 
   @Get('gyms')
   findAllGyms() {
@@ -191,12 +195,8 @@ export class SuperAdminController {
   @Post('platform-settings/logo')
   @UseInterceptors(
     FileInterceptor('logo', {
-      storage: diskStorage({
-        destination: './uploads/logos',
-        filename: (_req, _file, cb) => {
-          cb(null, `platform-${Date.now()}.jpg`);
-        },
-      }),
+      // Kept in memory: StorageService checks the bytes and writes them to MinIO or disk
+      storage: memoryStorage(),
       fileFilter: (_req, file, cb) => {
         const ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
         const ALLOWED_EXTS = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
@@ -209,9 +209,9 @@ export class SuperAdminController {
       limits: { fileSize: 2 * 1024 * 1024, files: 1 },
     }),
   )
-  uploadPlatformLogo(@UploadedFile() file: Express.Multer.File) {
+  async uploadPlatformLogo(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Logo es requerido');
-    const logoUrl = `/uploads/logos/${file.filename}`;
+    const logoUrl = await this.storage.putImage('logos', file.buffer, 'platform-');
     return this.superAdminService.updatePlatformLogo(logoUrl);
   }
 

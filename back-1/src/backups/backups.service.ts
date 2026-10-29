@@ -12,7 +12,7 @@ import {
   GetObjectCommand,
   HeadBucketCommand,
   ListObjectsV2Command,
-  S3Client,
+  type S3Client,
   type _Object,
 } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
@@ -20,6 +20,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { createS3Client, s3Configured } from '../storage/s3';
 
 export type BackupKind = 'db' | 'uploads';
 
@@ -64,12 +65,7 @@ export class BackupsService {
   private lastRun: BackupRun | null = null;
 
   get enabled() {
-    return Boolean(
-      process.env.S3_ENDPOINT &&
-      process.env.S3_BUCKET &&
-      process.env.S3_ACCESS_KEY &&
-      process.env.S3_SECRET_KEY,
-    );
+    return s3Configured() && Boolean(process.env.S3_BUCKET);
   }
 
   private get bucket() {
@@ -79,19 +75,6 @@ export class BackupsService {
   private get retentionDays() {
     const days = Number(process.env.BACKUP_RETENTION_DAYS ?? 14);
     return Number.isFinite(days) && days > 0 ? days : 14;
-  }
-
-  private s3(endpoint = process.env.S3_ENDPOINT) {
-    return new S3Client({
-      endpoint,
-      region: process.env.S3_REGION ?? 'us-east-1',
-      // MinIO serves buckets as paths, not subdomains
-      forcePathStyle: true,
-      credentials: {
-        accessKeyId: process.env.S3_ACCESS_KEY!,
-        secretAccessKey: process.env.S3_SECRET_KEY!,
-      },
-    });
   }
 
   private assertEnabled() {
@@ -104,7 +87,7 @@ export class BackupsService {
 
   private get storage() {
     this.assertEnabled();
-    this.client ??= this.s3();
+    this.client ??= createS3Client();
     return this.client;
   }
 
@@ -288,7 +271,7 @@ export class BackupsService {
     this.assertKey(key);
     const s3 = this.storage;
     const signer = process.env.S3_PUBLIC_ENDPOINT
-      ? this.s3(process.env.S3_PUBLIC_ENDPOINT)
+      ? createS3Client(process.env.S3_PUBLIC_ENDPOINT)
       : s3;
     const url = await getSignedUrl(
       signer,

@@ -8,16 +8,24 @@ import {
 import { Interval } from '@nestjs/schedule';
 import { CrmStatus, Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
-import { mkdir, unlink, writeFile } from 'fs/promises';
-import { join } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 import {
   WhatsappService,
   normalizePhone,
   parseWhatsapp,
 } from '../notifications/whatsapp.service';
 import { TEMPLATES } from '../notifications/whatsapp-templates';
-import { StartConversationDto, UpdateConversationDto } from './dto/crm.dto';
+import {
+  QuickReplyDto,
+  SendAnyTemplateDto,
+  StartConversationDto,
+  UpdateConversationDto,
+} from './dto/crm.dto';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const fileType = require('file-type') as {
+  fromBuffer(buf: Buffer): Promise<{ ext: string; mime: string } | undefined>;
+};
 
 /** Meta's customer service window: free-form replies only within 24 h of the contact's last message */
 const WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -27,7 +35,6 @@ export const UNDO_MS = 60 * 1000;
 // A send that never reported back (server restarted mid-request) is given up after this
 const SENDING_STALE_MS = 5 * 60 * 1000;
 
-const MEDIA_DIR = join(process.cwd(), 'uploads', 'wa-media');
 const MAX_MEDIA_BYTES = 16 * 1024 * 1024;
 // Allow-list: anything else (html, svg…) is never written, so /uploads can't serve active content
 const MEDIA_EXT: Record<string, string> = {
@@ -43,6 +50,14 @@ const MEDIA_EXT: Record<string, string> = {
   'video/3gpp': '3gp',
   'application/pdf': 'pdf',
 };
+
+/** What the CRM can send, with WhatsApp's size caps */
+const SENDABLE_MEDIA: Record<string, { type: 'image' | 'video'; max: number }> =
+  {
+    'image/jpeg': { type: 'image', max: 5 * 1024 * 1024 },
+    'image/png': { type: 'image', max: 5 * 1024 * 1024 },
+    'video/mp4': { type: 'video', max: 16 * 1024 * 1024 },
+  };
 
 const GYM_SELECT = {
   id: true,
@@ -137,6 +152,7 @@ export class CrmService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly whatsapp: WhatsappService,
+    private readonly storage: StorageService,
   ) {}
 
   async config() {
@@ -281,9 +297,11 @@ export class CrmService {
         ...(dto.alias !== undefined && { alias: dto.alias.trim() || null }),
         ...(dto.tags !== undefined && { tags: dto.tags }),
         ...(dto.gymId !== undefined && { gymId: dto.gymId }),
+        ...(dto.instantSend !== undefined && { instantSend: dto.instantSend }),
       },
       select: {
         id: true,
+        instantSend: true,
         status: true,
         notes: true,
         alias: true,
@@ -302,9 +320,7 @@ export class CrmService {
     });
     await this.prisma.waConversation.delete({ where: { id } });
     await Promise.all(
-      media.map(({ mediaUrl }) =>
-        unlink(join(MEDIA_DIR, mediaUrl!.split('/').pop()!)).catch(() => {}),
-      ),
+      media.map(({ mediaUrl }) => this.storage.remove(mediaUrl)),
     );
     return { ok: true };
   }
@@ -368,7 +384,8 @@ export class CrmService {
         'Pasaron más de 24 h desde el último mensaje del gym: WhatsApp solo permite escribirle con una plantilla.',
       );
     }
-    // Queued, not sent: flushQueued() delivers it once the undo window is over
+    // Queued, not sent: flushQueued() delivers it once the undo window is over.
+    // Contacts with instantSend skip the queue.
     const msg = await this.prisma.waMessage.create({
       data: {
         conversationId: id,
@@ -376,19 +393,102 @@ export class CrmService {
         type: 'text',
         body: body.trim(),
         sentById: adminId,
-        status: 'queued',
+        status: conv.instantSend ? 'sending' : 'queued',
       },
-      select: { id: true, createdAt: true },
+      select: { id: true, body: true, sentById: true, createdAt: true },
     });
     await this.prisma.waConversation.update({
       where: { id },
       data: { unreadCount: 0, lastMessageAt: msg.createdAt },
     });
+    if (conv.instantSend) {
+      await this.deliver({ ...msg, conversation: conv });
+      return { ok: true, id: msg.id, sendAt: msg.createdAt };
+    }
     return {
       ok: true,
       id: msg.id,
       sendAt: new Date(msg.createdAt.getTime() + UNDO_MS),
     };
+  }
+
+  /** Skips what's left of the undo window for one queued reply. */
+  async sendNow(id: string, messageId: string) {
+    const { count } = await this.prisma.waMessage.updateMany({
+      where: { id: messageId, conversationId: id, status: 'queued' },
+      data: { status: 'sending' },
+    });
+    if (!count) throw new ConflictException('El mensaje ya se envió.');
+    const m = await this.prisma.waMessage.findUniqueOrThrow({
+      where: { id: messageId },
+      include: {
+        conversation: { select: { phone: true, lastInboundAt: true } },
+      },
+    });
+    await this.deliver(m);
+    return { ok: true };
+  }
+
+  /** Photo or video with an optional caption. Goes out right away: no undo queue. */
+  async sendMedia(
+    id: string,
+    file: Express.Multer.File,
+    caption: string | undefined,
+    adminId: string,
+  ) {
+    const conv = await this.assertExists(id);
+    if (!this.windowOpen(conv.lastInboundAt)) {
+      throw new ConflictException(
+        'Pasaron más de 24 h desde su último mensaje: WhatsApp solo permite escribirle con una plantilla.',
+      );
+    }
+    // Trust the bytes, not the browser's mimetype
+    const detected = await fileType.fromBuffer(file.buffer.subarray(0, 4100));
+    const kind = detected && SENDABLE_MEDIA[detected.mime];
+    if (!kind) throw new BadRequestException('Solo fotos JPG/PNG o videos MP4');
+    if (file.size > kind.max) {
+      throw new BadRequestException(
+        `WhatsApp acepta hasta ${kind.max / 1024 / 1024} MB para ${kind.type === 'image' ? 'fotos' : 'videos'}`,
+      );
+    }
+
+    const publicUrl = await this.whatsapp.uploadMedia({
+      buffer: file.buffer,
+      mimetype: detected.mime,
+      originalname: `${randomUUID()}.${detected.ext}`,
+    });
+    // Local copy so the thread keeps showing it after Zernio's link expires
+    const mediaUrl = await this.storage.put(
+      `wa-media/${randomUUID()}.${detected.ext}`,
+      file.buffer,
+      detected.mime,
+    );
+    const text = caption?.trim() || undefined;
+    const msg = await this.prisma.waMessage.create({
+      data: {
+        conversationId: id,
+        direction: 'OUT',
+        type: kind.type,
+        body: text ?? (kind.type === 'image' ? '📷 Imagen' : '🎥 Video'),
+        mediaUrl,
+        sentById: adminId,
+        status: 'sending',
+      },
+      select: { id: true },
+    });
+    await this.prisma.waConversation.update({
+      where: { id },
+      data: { unreadCount: 0, lastMessageAt: new Date() },
+    });
+    const res = await this.whatsapp.sendMedia(
+      conv.phone,
+      { type: kind.type, url: publicUrl, caption: text },
+      adminId,
+      msg.id,
+    );
+    if (!res.ok)
+      throw new BadRequestException(res.error ?? 'No se pudo enviar');
+    return { ok: true, id: msg.id };
   }
 
   async editQueued(id: string, messageId: string, body: string) {
@@ -438,30 +538,113 @@ export class CrmService {
         where: { id: m.id, status: 'queued' },
         data: { status: 'sending' },
       });
-      if (!count) continue;
-      if (!this.windowOpen(m.conversation.lastInboundAt)) {
-        await this.prisma.waMessage.update({
-          where: { id: m.id },
-          data: {
-            status: 'failed',
-            error: 'Se cerró la ventana de 24 h antes del envío',
-          },
-        });
-        continue;
-      }
-      const res = await this.whatsapp
-        .sendText(m.conversation.phone, m.body, m.sentById ?? undefined, m.id)
-        .catch((e) => {
-          this.logger.error(`[CRM] Queued message ${m.id} failed:`, e);
-          return { ok: false, error: 'No se pudo enviar' };
-        });
-      // Rejected before reaching WhatsApp (not configured, bad number): nothing logged it
-      if (!res.ok)
-        await this.prisma.waMessage.updateMany({
-          where: { id: m.id, status: 'sending' },
-          data: { status: 'failed', error: res.error ?? 'No se pudo enviar' },
-        });
+      if (count) await this.deliver(m);
     }
+  }
+
+  /** Sends a reply already claimed as 'sending'. Never throws. */
+  private async deliver(m: {
+    id: string;
+    body: string;
+    sentById: string | null;
+    conversation: { phone: string; lastInboundAt: Date | null };
+  }) {
+    if (!this.windowOpen(m.conversation.lastInboundAt)) {
+      await this.prisma.waMessage.update({
+        where: { id: m.id },
+        data: {
+          status: 'failed',
+          error: 'Se cerró la ventana de 24 h antes del envío',
+        },
+      });
+      return;
+    }
+    const res = await this.whatsapp
+      .sendText(m.conversation.phone, m.body, m.sentById ?? undefined, m.id)
+      .catch((e) => {
+        this.logger.error(`[CRM] Reply ${m.id} failed:`, e);
+        return { ok: false, error: 'No se pudo enviar' };
+      });
+    // Rejected before reaching WhatsApp (not configured, bad number): nothing logged it
+    if (!res.ok)
+      await this.prisma.waMessage.updateMany({
+        where: { id: m.id, status: 'sending' },
+        data: { status: 'failed', error: res.error ?? 'No se pudo enviar' },
+      });
+  }
+
+  templates() {
+    return this.whatsapp.listTemplates();
+  }
+
+  /** Any approved template, values filled in the CRM. Works with the window closed too. */
+  async sendTemplate(id: string, dto: SendAnyTemplateDto, adminId: string) {
+    const conv = await this.assertExists(id);
+    const template = (await this.whatsapp.listTemplates()).find(
+      (t) => t.name === dto.name && t.language === dto.language,
+    );
+    if (!template)
+      throw new NotFoundException('Plantilla no encontrada o no aprobada');
+    if (template.unsupported)
+      throw new BadRequestException(template.unsupported);
+    const params = dto.params.map((p) => p.trim());
+    if (params.length !== template.params || params.some((p) => !p)) {
+      throw new BadRequestException(
+        `Completá los ${template.params} valores de la plantilla`,
+      );
+    }
+    const res = await this.whatsapp.sendAnyTemplate(
+      conv.phone,
+      {
+        name: template.name,
+        language: template.language,
+        params,
+        body: template.preview,
+      },
+      adminId,
+    );
+    if (!res.ok)
+      throw new BadRequestException(
+        res.error ?? 'WhatsApp rechazó la plantilla',
+      );
+    return { ok: true };
+  }
+
+  // ── Quick replies ──────────────────────────────────────────
+
+  quickReplies() {
+    return this.prisma.crmQuickReply.findMany({
+      orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
+      select: { id: true, label: true, text: true },
+    });
+  }
+
+  async createQuickReply(dto: QuickReplyDto) {
+    const last = await this.prisma.crmQuickReply.aggregate({
+      _max: { position: true },
+    });
+    return this.prisma.crmQuickReply.create({
+      data: {
+        label: dto.label.trim(),
+        text: dto.text.trim(),
+        position: (last._max.position ?? -1) + 1,
+      },
+      select: { id: true, label: true, text: true },
+    });
+  }
+
+  async updateQuickReply(id: string, dto: QuickReplyDto) {
+    const { count } = await this.prisma.crmQuickReply.updateMany({
+      where: { id },
+      data: { label: dto.label.trim(), text: dto.text.trim() },
+    });
+    if (!count) throw new NotFoundException('Respuesta no encontrada');
+    return { ok: true };
+  }
+
+  async deleteQuickReply(id: string) {
+    await this.prisma.crmQuickReply.deleteMany({ where: { id } });
+    return { ok: true };
   }
 
   /** Re-opens the 24 h window with the approved contact template. */
@@ -679,12 +862,14 @@ export class CrmService {
     const bytes = Buffer.from(await res.arrayBuffer());
     if (bytes.length > MAX_MEDIA_BYTES) return;
 
-    const name = `${randomUUID()}.${ext}`;
-    await mkdir(MEDIA_DIR, { recursive: true });
-    await writeFile(join(MEDIA_DIR, name), bytes);
+    const mediaUrl = await this.storage.put(
+      `wa-media/${randomUUID()}.${ext}`,
+      bytes,
+      type,
+    );
     await this.prisma.waMessage.update({
       where: { id: messageId },
-      data: { mediaUrl: `/uploads/wa-media/${name}` },
+      data: { mediaUrl },
     });
   }
 

@@ -30,6 +30,7 @@ import { AccessRequestsModule } from './access-requests/access-requests.module';
 import { WalletModule } from './wallet/wallet.module';
 import { CrmModule } from './crm/crm.module';
 import { BackupsModule } from './backups/backups.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { BackupsModule } from './backups/backups.module';
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 300 }]),
     ScheduleModule.forRoot(),
     PrismaModule,
+    StorageModule,
     AuthModule,
     SuperAdminModule,
     GymsModule,

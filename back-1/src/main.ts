@@ -2,10 +2,12 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
+import type { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { MoneyTransformInterceptor } from './common/interceptors/money-transform.interceptor';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
+import { StorageService } from './storage/storage.service';
 
 async function bootstrap() {
   // rawBody: the WhatsApp webhook verifies Meta's HMAC signature over the exact bytes
@@ -28,6 +30,11 @@ async function bootstrap() {
       res.setHeader('X-Content-Type-Options', 'nosniff');
       res.setHeader('Cache-Control', 'public, max-age=31536000');
     },
+  });
+  // Files that aren't on disk come from MinIO
+  const storage = app.get(StorageService);
+  app.use('/uploads', (req: Request, res: Response, next: NextFunction) => {
+    void storage.serve(req, res, next);
   });
 
   const allowedOrigins = (process.env.FRONTEND_URL ?? 'http://localhost:3000')

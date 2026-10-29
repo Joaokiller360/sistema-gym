@@ -21,6 +21,9 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CrmService } from './crm.service';
 import {
+  QuickReplyDto,
+  SendAnyTemplateDto,
+  SendMediaDto,
   SendMessageDto,
   SendTemplateDto,
   SetAlertsDto,
@@ -66,6 +69,31 @@ export class CrmController {
   setProfilePhoto(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Falta la foto');
     return this.crm.setProfilePhoto(file);
+  }
+
+  @Get('templates')
+  templates() {
+    return this.crm.templates();
+  }
+
+  @Get('quick-replies')
+  quickReplies() {
+    return this.crm.quickReplies();
+  }
+
+  @Post('quick-replies')
+  createQuickReply(@Body() dto: QuickReplyDto) {
+    return this.crm.createQuickReply(dto);
+  }
+
+  @Patch('quick-replies/:qid')
+  updateQuickReply(@Param('qid') qid: string, @Body() dto: QuickReplyDto) {
+    return this.crm.updateQuickReply(qid, dto);
+  }
+
+  @Delete('quick-replies/:qid')
+  deleteQuickReply(@Param('qid') qid: string) {
+    return this.crm.deleteQuickReply(qid);
   }
 
   @Get('summary')
@@ -131,6 +159,38 @@ export class CrmController {
     @Param('messageId') messageId: string,
   ) {
     return this.crm.deleteQueued(id, messageId);
+  }
+
+  @Post('conversations/:id/messages/:messageId/send-now')
+  sendNow(@Param('id') id: string, @Param('messageId') messageId: string) {
+    return this.crm.sendNow(id, messageId);
+  }
+
+  /** Photo/video; the service checks the real type from the bytes */
+  @Post('conversations/:id/media')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 16 * 1024 * 1024, files: 1 },
+    }),
+  )
+  sendMedia(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() dto: SendMediaDto,
+    @CurrentUser('userId') adminId: string,
+  ) {
+    if (!file) throw new BadRequestException('Falta el archivo');
+    return this.crm.sendMedia(id, file, dto.caption, adminId);
+  }
+
+  @Post('conversations/:id/templates')
+  sendAnyTemplate(
+    @Param('id') id: string,
+    @Body() dto: SendAnyTemplateDto,
+    @CurrentUser('userId') adminId: string,
+  ) {
+    return this.crm.sendTemplate(id, dto, adminId);
   }
 
   @Post('conversations/:id/template')
