@@ -37,6 +37,8 @@ export interface CrmMessage {
   mediaUrl: string | null
   sentById: string | null
   createdAt: string
+  /** The message this one quote-replies to */
+  replyTo: { id: string; body: string; direction: 'IN' | 'OUT'; type: string } | null
 }
 
 export interface CrmThread extends Omit<CrmConversation, 'lastMessage' | 'gym'> {
@@ -84,9 +86,9 @@ export async function markReadAction(id: string) {
   return res
 }
 
-export async function replyAction(id: string, body: string) {
+export async function replyAction(id: string, body: string, replyToId?: string) {
   if (!body.trim()) return { error: 'Escribí un mensaje' }
-  return post(`/admin/crm/conversations/${id}/messages`, { body })
+  return post(`/admin/crm/conversations/${id}/messages`, { body, ...(replyToId && { replyToId }) })
 }
 
 /** Only while the reply is still queued (first minute) */

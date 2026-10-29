@@ -12,7 +12,7 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import type { Request } from 'express';
 import { CrmService, type ZernioWebhookPayload } from './crm.service';
 
-/** Public endpoint Zernio calls (Zernio → Webhooks, events message.received/delivered/read/failed). */
+/** Public endpoint Zernio calls (Zernio → Webhooks, events message.received/sent/delivered/read/failed). */
 @SkipThrottle()
 @Controller('zernio/webhook')
 export class ZernioWebhookController {

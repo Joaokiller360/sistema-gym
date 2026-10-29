@@ -3,7 +3,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore, useTransition } from 'react'
 import Link from 'next/link'
 import {
-  AlertTriangle, ArrowLeft, Check, CheckCheck, Clock, ExternalLink, FileText, Inbox, Loader2, MessageCircle, Paperclip, Pencil, Plus, Search, Send, Trash2, Download, UserPen, X, Zap,
+  AlertTriangle, ArrowLeft, Check, CheckCheck, Clock, ExternalLink, FileText, Inbox, Loader2, MessageCircle, Paperclip, Pencil, Plus, Reply, Search, Send, Trash2, Download, UserPen, X, Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { textError } from '@/lib/text-rules'
@@ -443,10 +443,54 @@ function Media({ m }: { m: CrmMessage }) {
   }
 }
 
-function Bubble({ m, conversationId, onChanged }: { m: CrmMessage; conversationId: string; onChanged: () => void }) {
-  const out = m.direction === 'OUT'
+/** What a quote shows: the text, or the media label when there's none */
+function quoteText(q: { body: string }) {
+  return q.body.replace(/ \(abrilo en WhatsApp\)$/, '')
+}
+
+/** Jumps to the quoted message and flashes it */
+function goToMessage(id: string) {
+  const el = document.getElementById(`msg-${id}`)
+  if (!el) return
+  el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  el.animate([{ opacity: 0.35 }, { opacity: 1 }], { duration: 700, iterations: 2 })
+}
+
+function Quote({ q, contact, out }: { q: NonNullable<CrmMessage['replyTo']>; contact: string; out: boolean }) {
   return (
-    <li className={cn('flex', out ? 'justify-end' : 'justify-start')}>
+    <button
+      type="button"
+      onClick={() => goToMessage(q.id)}
+      className={cn(
+        'mb-1.5 block w-full rounded-lg border-l-[3px] px-2.5 py-1.5 text-left text-xs',
+        out ? 'border-adm-brand bg-adm-surface/10' : 'border-adm-ink bg-adm-chip',
+      )}
+    >
+      <span className="block font-bold">{q.direction === 'OUT' ? 'Vos' : contact}</span>
+      <span className="line-clamp-2 opacity-80">{quoteText(q)}</span>
+    </button>
+  )
+}
+
+function Bubble({
+  m,
+  conversationId,
+  contact,
+  onChanged,
+  onReply,
+}: {
+  m: CrmMessage
+  conversationId: string
+  contact: string
+  onChanged: () => void
+  /** null: can't quote now (window closed) */
+  onReply: ((m: CrmMessage) => void) | null
+}) {
+  const out = m.direction === 'OUT'
+  // Not on WhatsApp yet: nothing to quote
+  const quotable = onReply && !['queued', 'sending', 'failed'].includes(m.status ?? '')
+  return (
+    <li id={`msg-${m.id}`} className={cn('group flex items-center gap-1.5', out ? 'flex-row-reverse' : 'flex-row')}>
       <div
         className={cn(
           'max-w-[min(520px,85%)] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed',
@@ -465,6 +509,7 @@ function Bubble({ m, conversationId, onChanged }: { m: CrmMessage; conversationI
         {m.type === 'auto' && (
           <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.06em] opacity-60">Respuesta automática</p>
         )}
+        {m.replyTo && <Quote q={m.replyTo} contact={contact} out={out} />}
         {m.mediaUrl && <Media m={m} />}
         {!(m.mediaUrl && MEDIA_ONLY.has(m.body.replace(/ \(abrilo en WhatsApp\)$/, ''))) && (
           <p className={cn('whitespace-pre-wrap break-words', m.mediaUrl && 'mt-1.5')}>{m.body}</p>
@@ -476,11 +521,34 @@ function Bubble({ m, conversationId, onChanged }: { m: CrmMessage; conversationI
         {m.error && <p className="mt-1 text-xs font-semibold">{m.error}</p>}
         {m.status === 'queued' && <QueuedReply key={m.body} m={m} conversationId={conversationId} onChanged={onChanged} />}
       </div>
+      {quotable && (
+        <button
+          type="button"
+          onClick={() => onReply(m)}
+          aria-label="Responder este mensaje"
+          title="Responder"
+          className={cn(btn.icon, 'size-8 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100')}
+        >
+          <Reply className="size-4" aria-hidden="true" />
+        </button>
+      )}
     </li>
   )
 }
 
-function Messages({ messages, conversationId, onChanged }: { messages: CrmMessage[]; conversationId: string; onChanged: () => void }) {
+function Messages({
+  messages,
+  conversationId,
+  contact,
+  onChanged,
+  onReply,
+}: {
+  messages: CrmMessage[]
+  conversationId: string
+  contact: string
+  onChanged: () => void
+  onReply: ((m: CrmMessage) => void) | null
+}) {
   const endRef = useRef<HTMLLIElement>(null)
   const last = messages.at(-1)?.id
   const hydrated = useHydrated()
@@ -501,7 +569,7 @@ function Messages({ messages, conversationId, onChanged }: { messages: CrmMessag
                 {fmtDay(m.createdAt)}
               </li>
             )}
-            <Bubble m={m} conversationId={conversationId} onChanged={onChanged} />
+            <Bubble m={m} conversationId={conversationId} contact={contact} onChanged={onChanged} onReply={onReply} />
           </Fragment>
         )
       })}
@@ -534,11 +602,18 @@ function Composer({
   thread,
   quickReplies,
   onManageQuickReplies,
+  replyTo,
+  contact,
+  onClearReply,
   onSent,
 }: {
   thread: CrmThread
   quickReplies: QuickReply[]
   onManageQuickReplies: () => void
+  /** Message being quote-replied to, picked from the thread */
+  replyTo: CrmMessage | null
+  contact: string
+  onClearReply: () => void
   onSent: () => void
 }) {
   const [text, setText] = useState('')
@@ -593,15 +668,17 @@ function Composer({
         const fd = new FormData()
         fd.append('file', file)
         if (body) fd.append('caption', body)
+        if (replyTo) fd.append('replyToId', replyTo.id)
         const res = await fetch(`/api/v1/admin/crm/conversations/${thread.id}/media`, { method: 'POST', body: fd })
         const data = (await res.json().catch(() => ({}))) as { error?: string }
         if (!res.ok) { setError(data.error ?? 'No se pudo enviar el archivo'); return }
         setAttachment(null)
       } else {
-        const res = await replyAction(thread.id, body)
+        const res = await replyAction(thread.id, body, replyTo?.id)
         if (res.error) { setError(res.error); return }
       }
       setText('')
+      onClearReply()
       onSent()
     })
   }
@@ -692,6 +769,17 @@ function Composer({
           <Switch checked={instant} onChange={toggleInstant} disabled={isPending} label="Enviar al instante a este contacto" />
         </label>
       </div>
+      {replyTo && (
+        <div className="flex items-center gap-2 rounded-xl border-l-[3px] border-adm-ink bg-adm-subtle py-1.5 pr-1.5 pl-3">
+          <div className="min-w-0 flex-1 text-xs">
+            <p className="font-bold">Respondiendo a {replyTo.direction === 'OUT' ? 'tu mensaje' : contact}</p>
+            <p className="truncate text-adm-muted">{quoteText(replyTo)}</p>
+          </div>
+          <button type="button" onClick={onClearReply} aria-label="No responder a este mensaje" className={cn(btn.icon, 'size-8')}>
+            <X className="size-4" aria-hidden="true" />
+          </button>
+        </div>
+      )}
       {attachment && (
         <div className="flex items-center gap-3 rounded-xl border border-adm-line bg-adm-subtle p-2">
           {attachment.file.type.startsWith('image/')
@@ -724,6 +812,7 @@ function Composer({
           onChange={e => setText(e.target.value)}
           onKeyDown={e => {
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send() }
+            if (e.key === 'Escape' && replyTo) onClearReply()
           }}
           rows={2}
           maxLength={file ? 1024 : 4096}
@@ -836,6 +925,7 @@ export function CrmInbox({
   const [list, setList] = useState(initialList)
   const [quickReplies, setQuickReplies] = useState(initialQuickReplies)
   const [manageReplies, setManageReplies] = useState(false)
+  const [replyTo, setReplyTo] = useState<CrmMessage | null>(null)
   const [filter, setFilter] = useState<Filter>(initialThread?.status === 'CLOSED' ? 'ALL' : 'ACTIVE')
   const [q, setQ] = useState('')
   const [thread, setThread] = useState<CrmThread | null>(initialThread)
@@ -878,12 +968,14 @@ export function CrmInbox({
 
   function open(id: string) {
     setSelectedId(id)
+    setReplyTo(null)
     window.history.replaceState(null, '', `?c=${id}`)
     startThread(async () => { await reloadThread(id); await reloadList() })
   }
 
   function close() {
     setSelectedId(null)
+    setReplyTo(null)
     setThread(null)
     window.history.replaceState(null, '', '?')
   }
@@ -1152,13 +1244,22 @@ export function CrmInbox({
                   </div>
                 )}
                 <div className={cn('min-h-0 flex-1 overflow-y-auto bg-adm-subtle', loadingThread && 'opacity-70')}>
-                  <Messages messages={active.messages} conversationId={active.id} onChanged={reloadActive} />
+                  <Messages
+                    messages={active.messages}
+                    conversationId={active.id}
+                    contact={displayName(active)}
+                    onChanged={reloadActive}
+                    onReply={active.windowOpen ? m => { setReplyTo(m); document.getElementById('crm-reply')?.focus() } : null}
+                  />
                 </div>
                 <Composer
                   key={active.id}
                   thread={active}
                   quickReplies={quickReplies}
                   onManageQuickReplies={() => setManageReplies(true)}
+                  replyTo={replyTo}
+                  contact={displayName(active)}
+                  onClearReply={() => setReplyTo(null)}
                   onSent={() => { void reloadThread(active.id); void reloadList() }}
                 />
               </div>

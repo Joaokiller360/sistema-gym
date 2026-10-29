@@ -40,6 +40,11 @@ export class SendMessageDto {
   @IsNotEmpty()
   @MaxLength(4096)
   body: string;
+
+  /** Message in this chat to quote-reply to */
+  @IsOptional()
+  @IsUUID()
+  replyToId?: string;
 }
 
 export class UpdateConversationDto {
@@ -164,6 +169,10 @@ export class SendMediaDto {
   @IsString()
   @MaxLength(1024)
   caption?: string;
+
+  @IsOptional()
+  @IsUUID()
+  replyToId?: string;
 }
 
 /** New WhatsApp template; Meta reviews it before it can be sent */

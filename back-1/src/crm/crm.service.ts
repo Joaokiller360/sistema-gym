@@ -78,6 +78,15 @@ const SENDABLE_MEDIA: Record<string, { type: 'image' | 'video'; max: number }> =
     'video/mp4': { type: 'video', max: 16 * 1024 * 1024 },
   };
 
+// Inbound text is stored and shown as plain text, never run or parsed as HTML/code.
+// Control characters (NUL, escape sequences…) are dropped and the size capped like WhatsApp's own limit.
+const MAX_BODY = 4096;
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+function cleanText(value: string | undefined, max = MAX_BODY) {
+  return value?.replace(CONTROL_CHARS, '').slice(0, max);
+}
+
 const GYM_SELECT = {
   id: true,
   name: true,
@@ -93,6 +102,8 @@ const GYM_SELECT = {
 interface WaInbound {
   from: string;
   id: string;
+  /** Set when the contact quote-replies */
+  context?: { id?: string };
   timestamp: string;
   type: string;
   text?: { body: string };
@@ -133,6 +144,19 @@ export interface ZernioWebhookPayload {
     attachments?: { type: string; url?: string }[];
     sender?: { id: string; name?: string; phoneNumber?: string | null };
     sentAt?: string;
+    /** message.sent only: which Zernio surface sent it (human, api, broadcast, workflow…) */
+    sentVia?: string;
+  };
+  /** Quote-reply info, on received and sent events */
+  metadata?: {
+    quotedMessageId?: string;
+    quotedMessage?: { platformMessageId?: string };
+  };
+  /** The contact's side of the thread */
+  conversation?: {
+    id?: string;
+    participantId?: string;
+    participantName?: string;
   };
   account?: { accountId?: string };
   error?: { code?: number; title?: string; message?: string } | null;
@@ -141,6 +165,8 @@ export interface ZernioWebhookPayload {
 /** Provider-neutral inbound message, what the CRM actually stores */
 interface Inbound {
   waMessageId: string;
+  /** wamids the contact may be quote-replying to (Meta and Zernio report it differently) */
+  quoted?: (string | undefined)[];
   from: string;
   contactName?: string;
   type: string;
@@ -382,7 +408,15 @@ export class CrmService {
       where: { id },
       include: {
         gym: { select: GYM_SELECT },
-        messages: { orderBy: { createdAt: 'desc' }, take: 300 },
+        messages: {
+          orderBy: { createdAt: 'desc' },
+          take: 300,
+          include: {
+            replyTo: {
+              select: { id: true, body: true, direction: true, type: true },
+            },
+          },
+        },
       },
     });
     if (!conv) throw new NotFoundException('Conversación no encontrada');
@@ -511,8 +545,9 @@ export class CrmService {
     return conv;
   }
 
-  async reply(id: string, body: string, adminId: string) {
+  async reply(id: string, body: string, adminId: string, replyToId?: string) {
     const conv = await this.assertExists(id);
+    await this.assertQuotable(id, replyToId);
     if (!this.windowOpen(conv.lastInboundAt)) {
       throw new ConflictException(
         'Pasaron más de 24 h desde el último mensaje del gym: WhatsApp solo permite escribirle con una plantilla.',
@@ -528,8 +563,15 @@ export class CrmService {
         body: body.trim(),
         sentById: adminId,
         status: conv.instantSend ? 'sending' : 'queued',
+        replyToId,
       },
-      select: { id: true, body: true, sentById: true, createdAt: true },
+      select: {
+        id: true,
+        body: true,
+        sentById: true,
+        createdAt: true,
+        replyTo: { select: { waMessageId: true } },
+      },
     });
     await this.prisma.waConversation.update({
       where: { id },
@@ -557,6 +599,7 @@ export class CrmService {
       where: { id: messageId },
       include: {
         conversation: { select: { phone: true, lastInboundAt: true } },
+        replyTo: { select: { waMessageId: true } },
       },
     });
     await this.deliver(m);
@@ -569,8 +612,10 @@ export class CrmService {
     file: Express.Multer.File,
     caption: string | undefined,
     adminId: string,
+    replyToId?: string,
   ) {
     const conv = await this.assertExists(id);
+    const quoted = await this.assertQuotable(id, replyToId);
     if (!this.windowOpen(conv.lastInboundAt)) {
       throw new ConflictException(
         'Pasaron más de 24 h desde su último mensaje: WhatsApp solo permite escribirle con una plantilla.',
@@ -607,6 +652,7 @@ export class CrmService {
         mediaUrl,
         sentById: adminId,
         status: 'sending',
+        replyToId,
       },
       select: { id: true },
     });
@@ -616,7 +662,12 @@ export class CrmService {
     });
     const res = await this.whatsapp.sendMedia(
       conv.phone,
-      { type: kind.type, url: publicUrl, caption: text },
+      {
+        type: kind.type,
+        url: publicUrl,
+        caption: text,
+        replyTo: quoted?.waMessageId ?? undefined,
+      },
       adminId,
       msg.id,
     );
@@ -664,6 +715,7 @@ export class CrmService {
       take: 20,
       include: {
         conversation: { select: { phone: true, lastInboundAt: true } },
+        replyTo: { select: { waMessageId: true } },
       },
     });
     for (const m of due) {
@@ -676,12 +728,25 @@ export class CrmService {
     }
   }
 
+  /** A quoted message must be in the same chat; returns it for its wamid. */
+  private async assertQuotable(conversationId: string, replyToId?: string) {
+    if (!replyToId) return null;
+    const quoted = await this.prisma.waMessage.findFirst({
+      where: { id: replyToId, conversationId },
+      select: { waMessageId: true },
+    });
+    if (!quoted)
+      throw new BadRequestException('El mensaje citado no está en este chat');
+    return quoted;
+  }
+
   /** Sends a reply already claimed as 'sending'. Never throws. */
   private async deliver(m: {
     id: string;
     body: string;
     sentById: string | null;
     conversation: { phone: string; lastInboundAt: Date | null };
+    replyTo?: { waMessageId: string | null } | null;
   }) {
     if (!this.windowOpen(m.conversation.lastInboundAt)) {
       await this.prisma.waMessage.update({
@@ -694,7 +759,13 @@ export class CrmService {
       return;
     }
     const res = await this.whatsapp
-      .sendText(m.conversation.phone, m.body, m.sentById ?? undefined, m.id)
+      .sendText(
+        m.conversation.phone,
+        m.body,
+        m.sentById ?? undefined,
+        m.id,
+        m.replyTo?.waMessageId ?? undefined,
+      )
       .catch((e) => {
         this.logger.error(`[CRM] Reply ${m.id} failed:`, e);
         return { ok: false, error: 'No se pudo enviar' };
@@ -1089,6 +1160,7 @@ export class CrmService {
             type: m.type,
             body: inboundText(m),
             at: new Date(Number(m.timestamp) * 1000 || Date.now()),
+            quoted: [m.context?.id],
           }).catch((e) =>
             this.logger.error(`[CRM] Inbound ${m.id} failed:`, e),
           );
@@ -1134,6 +1206,10 @@ export class CrmService {
         body: m.text ?? label ?? '[mensaje]',
         at: new Date(m.sentAt ?? Date.now()),
         externalId: m.conversationId,
+        quoted: [
+          payload.metadata?.quotedMessage?.platformMessageId,
+          payload.metadata?.quotedMessageId,
+        ],
       });
       // Meta drops inbound media after a while: keep a copy. Not awaited so the
       // webhook still answers within Zernio's 5 s; a redelivery retries it.
@@ -1145,6 +1221,13 @@ export class CrmService {
           ),
         );
       }
+      return;
+    }
+
+    if (payload.event === 'message.sent' && m.direction === 'outgoing') {
+      // Our own API sends are already in the CRM (logged when they went out)
+      if (m.sentVia === 'api') return;
+      await this.saveOutboundEcho(payload);
       return;
     }
 
@@ -1162,6 +1245,115 @@ export class CrmService {
     }
   }
 
+  /**
+   * A message the team sent outside the CRM: from Zernio's inbox, a Zernio broadcast or
+   * workflow, or the WhatsApp Business app. Shown in the thread like any other reply.
+   */
+  private async saveOutboundEcho(payload: ZernioWebhookPayload) {
+    const m = payload.message!;
+    // Redeliveries, or a send the CRM itself already logged
+    const dup = await this.prisma.waMessage.findUnique({
+      where: { waMessageId: m.platformMessageId },
+      select: { id: true },
+    });
+    if (dup) return;
+
+    const byThread = await this.prisma.waConversation.findUnique({
+      where: { externalId: m.conversationId },
+      select: { id: true, status: true },
+    });
+    const phone = normalizePhone(
+      payload.conversation?.participantId?.replace(/\D/g, ''),
+    );
+    const conv =
+      byThread ??
+      (phone
+        ? await this.prisma.waConversation.upsert({
+            where: { phone },
+            create: {
+              phone,
+              contactName: payload.conversation?.participantName,
+              externalId: m.conversationId,
+              // We wrote first: the ball is on their side
+              status: 'PENDING',
+              gymId: (
+                await this.prisma.gym.findFirst({
+                  where: { whatsappPhone: phone },
+                  select: { id: true },
+                })
+              )?.id,
+            },
+            update: {},
+            select: { id: true, status: true },
+          })
+        : null);
+    if (!conv) {
+      this.logger.warn(
+        `[CRM] Zernio sent message ${m.platformMessageId}: no matching chat, skipped`,
+      );
+      return;
+    }
+
+    const attachment = m.attachments?.[0];
+    const media = attachment?.type;
+    const at = new Date(m.sentAt ?? Date.now());
+    const saved = await this.prisma.waMessage.create({
+      data: {
+        conversationId: conv.id,
+        direction: 'OUT',
+        type: media ?? 'text',
+        body:
+          m.text ??
+          (media && (MEDIA_LABEL[media] ?? `[${media}]`)) ??
+          '[mensaje]',
+        waMessageId: m.platformMessageId,
+        status: 'sent',
+        createdAt: at,
+        replyToId: await this.findQuoted(conv.id, [
+          payload.metadata?.quotedMessage?.platformMessageId,
+          payload.metadata?.quotedMessageId,
+        ]),
+      },
+      select: { id: true },
+    });
+    await this.prisma.waConversation.update({
+      where: { id: conv.id },
+      data: {
+        lastMessageAt: at,
+        // Someone answered, just not from here
+        unreadCount: 0,
+        ...(conv.status === 'OPEN' && { status: 'PENDING' }),
+      },
+    });
+    if (attachment?.url?.startsWith('https://')) {
+      const url = attachment.url;
+      // Zernio-hosted files need our key: copy them; anything else is already public
+      void (
+        new URL(url).origin === 'https://zernio.com'
+          ? this.storeMedia(saved.id, url)
+          : this.prisma.waMessage
+              .update({ where: { id: saved.id }, data: { mediaUrl: url } })
+              .then(() => undefined)
+      ).catch((e) =>
+        this.logger.error(`[CRM] Media for ${m.platformMessageId} failed:`, e),
+      );
+    }
+  }
+
+  /** Our id for a quoted wamid in this chat, if we have that message */
+  private async findQuoted(
+    conversationId: string,
+    wamids: (string | undefined)[] = [],
+  ) {
+    const ids = wamids.filter((w): w is string => !!w);
+    if (!ids.length) return null;
+    const q = await this.prisma.waMessage.findFirst({
+      where: { conversationId, waMessageId: { in: ids } },
+      select: { id: true },
+    });
+    return q?.id ?? null;
+  }
+
   /** Returns the stored message (also when it was already there), or null if unusable. */
   private async saveInbound(m: Inbound) {
     const phone = normalizePhone(m.from);
@@ -1173,7 +1365,8 @@ export class CrmService {
     });
     if (dup) return dup;
 
-    const { at, contactName, externalId } = m;
+    const { at, externalId } = m;
+    const contactName = cleanText(m.contactName, 120);
     const existing = await this.prisma.waConversation.findUnique({
       where: { phone },
       select: { id: true, gymId: true, externalId: true },
@@ -1217,9 +1410,10 @@ export class CrmService {
         conversationId: conv.id,
         direction: 'IN',
         type: m.type,
-        body: m.body,
+        body: cleanText(m.body) ?? '',
         waMessageId: m.waMessageId,
         createdAt: at,
+        replyToId: await this.findQuoted(conv.id, m.quoted),
       },
       select: { id: true, mediaUrl: true },
     });

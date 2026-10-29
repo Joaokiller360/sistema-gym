@@ -27,9 +27,11 @@ type MediaOutbound = {
   /** Public URL WhatsApp downloads the file from */
   url: string;
   caption?: string;
+  /** WhatsApp id (wamid) of the message being quoted */
+  replyTo?: string;
 };
 type Outbound =
-  | { type: 'text'; body: string }
+  | { type: 'text'; body: string; replyTo?: string }
   | TemplateOutbound
   | MediaOutbound;
 
@@ -302,8 +304,10 @@ export class WhatsappService {
     body: string,
     sentById?: string,
     messageId?: string,
+    /** wamid of the message to quote-reply to */
+    replyTo?: string,
   ): Promise<SendResult> {
-    return this.send(to, { type: 'text', body }, sentById, messageId);
+    return this.send(to, { type: 'text', body, replyTo }, sentById, messageId);
   }
 
   private async send(
@@ -380,7 +384,11 @@ export class WhatsappService {
               ],
             },
           }
-        : { type: 'text', text: { body: msg.body, preview_url: true } };
+        : {
+            type: 'text',
+            text: { body: msg.body, preview_url: true },
+            ...(msg.replyTo && { context: { message_id: msg.replyTo } }),
+          };
 
     const version = process.env.WHATSAPP_API_VERSION ?? 'v21.0';
     const url = `https://graph.facebook.com/${version}/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`;
@@ -531,6 +539,7 @@ export class WhatsappService {
               attachmentType: msg.type,
               ...(msg.caption && { message: msg.caption }),
             };
+      if (msg.replyTo) payload.replyTo = msg.replyTo;
     }
 
     const res = await fetch(`${ZERNIO_API}${path}`, {

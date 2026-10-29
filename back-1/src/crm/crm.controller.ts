@@ -178,7 +178,7 @@ export class CrmController {
     @Body() dto: SendMessageDto,
     @CurrentUser('userId') adminId: string,
   ) {
-    return this.crm.reply(id, dto.body, adminId);
+    return this.crm.reply(id, dto.body, adminId, dto.replyToId);
   }
 
   @Patch('conversations/:id/messages/:messageId')
@@ -218,7 +218,7 @@ export class CrmController {
     @CurrentUser('userId') adminId: string,
   ) {
     if (!file) throw new BadRequestException('Falta el archivo');
-    return this.crm.sendMedia(id, file, dto.caption, adminId);
+    return this.crm.sendMedia(id, file, dto.caption, adminId, dto.replyToId);
   }
 
   /** Gym + owner login for this contact; returns the password once */
