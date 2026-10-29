@@ -21,7 +21,7 @@ import { QuickRepliesDialog } from './QuickRepliesDialog'
 import { TemplatePicker } from './TemplatePicker'
 import {
   deleteConversationAction, deleteMessageAction, editMessageAction, getConversationAction, listConversationsAction, markReadAction, replyAction, sendContactTemplateAction,
-  sendNowAction, updateConversationAction, type CrmList, type CrmMessage, type CrmStatus, type CrmThread, type QuickReply,
+  listTemplatesAction, sendNowAction, updateConversationAction, type CrmList, type CrmMessage, type CrmStatus, type CrmThread, type QuickReply,
 } from './actions'
 
 const POLL_MS = 10_000
@@ -204,10 +204,25 @@ function ContactEditor({ thread, allTags, onChanged }: { thread: CrmThread; allT
   )
 }
 
-/** Ms left in Meta's 24 h window; 0 once closed. */
-function windowMs(lastInboundAt: string | null) {
+/** Ms left in Meta's 24 h window at `now`; 0 once closed. */
+function windowMs(lastInboundAt: string | null, now: number) {
   if (!lastInboundAt) return 0
-  return Math.max(0, new Date(lastInboundAt).getTime() + WINDOW_MS - Date.now())
+  return Math.max(0, new Date(lastInboundAt).getTime() + WINDOW_MS - now)
+}
+
+/**
+ * Clock for the window countdowns. Starts at the server's render time so the first client
+ * render matches the HTML (no hydration mismatch), then follows the viewer's clock.
+ */
+function useNow(serverNow: number) {
+  const [now, setNow] = useState(serverNow)
+  useEffect(() => {
+    const tick = () => setNow(Date.now())
+    const first = setTimeout(tick, 0)
+    const id = setInterval(tick, 30_000)
+    return () => { clearTimeout(first); clearInterval(id) }
+  }, [])
+  return now
 }
 
 /** e.g. "18 h", "1 h 20 min", "12 min" */
@@ -231,8 +246,8 @@ function Fuse({ ms, className }: { ms: number; className?: string }) {
   )
 }
 
-function groupOf(c: { status: CrmStatus; lastInboundAt: string | null }): Group {
-  const ms = c.status === 'OPEN' ? windowMs(c.lastInboundAt) : 0
+function groupOf(c: { status: CrmStatus; lastInboundAt: string | null }, now: number): Group {
+  const ms = c.status === 'OPEN' ? windowMs(c.lastInboundAt, now) : 0
   return ms > 0 && ms < HOT_MS ? 'URGENT' : c.status
 }
 
@@ -267,6 +282,7 @@ function QueuedReply({ m, conversationId, onChanged }: { m: CrmMessage; conversa
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const left = Math.max(0, Math.ceil((sendAt - now) / 1000))
+  const hydrated = useHydrated()
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000)
@@ -310,6 +326,8 @@ function QueuedReply({ m, conversationId, onChanged }: { m: CrmMessage; conversa
     })
   }
 
+  // The server's clock differs from the viewer's: no countdown in the HTML
+  if (!hydrated) return null
   if (left === 0) return <p className="mt-1.5 text-xs opacity-70">Enviando…</p>
 
   return (
@@ -490,6 +508,15 @@ function Messages({ messages, conversationId, onChanged }: { messages: CrmMessag
 }
 
 /** WhatsApp's caps; the back re-checks the real type from the bytes */
+/** Meta review states, short, for the built-in template buttons */
+const TEMPLATE_STATUS: Record<string, string> = {
+  PENDING: 'en revisión',
+  IN_APPEAL: 'en apelación',
+  REJECTED: 'rechazada',
+  PAUSED: 'pausada',
+  DISABLED: 'desactivada',
+}
+
 const MEDIA_LIMITS: Record<string, { kind: 'image' | 'video'; max: number }> = {
   'image/jpeg': { kind: 'image', max: 5 * 1024 * 1024 },
   'image/png': { kind: 'image', max: 5 * 1024 * 1024 },
@@ -516,9 +543,25 @@ function Composer({
   const file = attachment?.file ?? null
   const [instant, setInstant] = useState(thread.instantSend)
   const [templatesOpen, setTemplatesOpen] = useState(false)
+  // Review status of the contact/offer templates, for the buttons shown when the window is closed
+  const [builtIn, setBuiltIn] = useState<Partial<Record<'contact' | 'offer', string>> | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const fileRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (thread.windowOpen) return
+    let live = true
+    void listTemplatesAction(thread.id).then(res => {
+      if (!live) return
+      // Can't list (e.g. Meta direct): leave the buttons on, the back still checks
+      if ('error' in res) { setBuiltIn({ contact: 'APPROVED', offer: 'APPROVED' }); return }
+      const st: Partial<Record<'contact' | 'offer', string>> = {}
+      for (const t of res) if (t.system === 'contact' || t.system === 'offer') st[t.system] = t.status
+      setBuiltIn(st)
+    })
+    return () => { live = false }
+  }, [thread.windowOpen, thread.id])
 
   // Frees the preview when it's removed, replaced or the thread closes
   useEffect(() => {
@@ -593,18 +636,26 @@ function Composer({
         {error && <p role="alert" className={field.error}>{error}</p>}
         <div className="flex flex-wrap gap-2">
           {/* Prospects get the sales pitch first; linked gyms the plain contact one */}
-          {(thread.gym ? (['contact', 'offer'] as const) : (['offer', 'contact'] as const)).map((kind, i) => (
-            <button
-              key={kind}
-              type="button"
-              onClick={() => sendTemplate(kind)}
-              disabled={isPending}
-              className={cn(i === 0 ? btn.dark : btn.line, 'min-h-10')}
-            >
-              {isPending && i === 0 ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Send className="size-4" aria-hidden="true" />}
-              {kind === 'offer' ? 'Ofrecer servicios' : 'Plantilla de contacto'}
-            </button>
-          ))}
+          {(thread.gym ? (['contact', 'offer'] as const) : (['offer', 'contact'] as const)).map((kind, i) => {
+            const status = builtIn?.[kind]
+            const blocked = builtIn !== null && status !== 'APPROVED'
+            return (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => sendTemplate(kind)}
+                disabled={isPending || builtIn === null || blocked}
+                title={blocked ? `La plantilla ${status ? TEMPLATE_STATUS[status] ?? status.toLowerCase() : 'no existe en WhatsApp'}: no se puede enviar` : undefined}
+                className={cn(i === 0 ? btn.dark : btn.line, 'min-h-10')}
+              >
+                {(isPending && i === 0) || builtIn === null
+                  ? <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  : <Send className="size-4" aria-hidden="true" />}
+                {kind === 'offer' ? 'Ofrecer servicios' : 'Plantilla de contacto'}
+                {blocked && <span className="text-xs font-normal opacity-80">· {status ? TEMPLATE_STATUS[status] ?? status.toLowerCase() : 'no creada'}</span>}
+              </button>
+            )
+          })}
           <button type="button" onClick={() => setTemplatesOpen(true)} disabled={isPending} className={cn(btn.line, 'min-h-10')}>
             <FileText className="size-4" aria-hidden="true" /> Otra plantilla
           </button>
@@ -767,14 +818,18 @@ export function CrmInbox({
   initialList,
   initialThread,
   initialQuickReplies,
+  serverNow,
   loadError,
 }: {
   config: { enabled: boolean; webhookSigned: boolean }
   initialList: CrmList
   initialThread: CrmThread | null
   initialQuickReplies: QuickReply[]
+  /** Render time on the server, see useNow */
+  serverNow: number
   loadError: string | null
 }) {
+  const now = useNow(serverNow)
   const [list, setList] = useState(initialList)
   const [quickReplies, setQuickReplies] = useState(initialQuickReplies)
   const [manageReplies, setManageReplies] = useState(false)
@@ -875,11 +930,11 @@ export function CrmInbox({
   }
   // Server order (latest first) within each group; the urgent one by time left
   const groups = GROUPS
-    .map(g => ({ ...g, rows: shown.filter(c => groupOf(c) === g.key) }))
+    .map(g => ({ ...g, rows: shown.filter(c => groupOf(c, now) === g.key) }))
     .filter(g => g.rows.length > 0)
-  groups.find(g => g.key === 'URGENT')?.rows.sort((a, b) => windowMs(a.lastInboundAt) - windowMs(b.lastInboundAt))
+  groups.find(g => g.key === 'URGENT')?.rows.sort((a, b) => windowMs(a.lastInboundAt, now) - windowMs(b.lastInboundAt, now))
   const active = thread && thread.id === selectedId ? thread : null
-  const activeLeft = active?.windowOpen ? windowMs(active.lastInboundAt) : 0
+  const activeLeft = active?.windowOpen ? windowMs(active.lastInboundAt, now) : 0
 
   return (
     <div className="flex flex-col gap-4">
@@ -953,7 +1008,7 @@ export function CrmInbox({
                   <ul>
                     {g.rows.map(c => {
                       const on = c.id === selectedId
-                      const left = c.status === 'OPEN' ? windowMs(c.lastInboundAt) : 0
+                      const left = c.status === 'OPEN' ? windowMs(c.lastInboundAt, now) : 0
                       return (
                         <li key={c.id}>
                           <button

@@ -55,6 +55,14 @@ const MEDIA_EXT: Record<string, string> = {
   'application/pdf': 'pdf',
 };
 
+const TEMPLATE_STATUS_ES: Record<string, string> = {
+  PENDING: 'en revisión',
+  IN_APPEAL: 'en apelación',
+  REJECTED: 'rechazada',
+  PAUSED: 'pausada',
+  DISABLED: 'desactivada',
+};
+
 /** What the CRM can send, with WhatsApp's size caps */
 const SENDABLE_MEDIA: Record<string, { type: 'image' | 'video'; max: number }> =
   {
@@ -589,6 +597,11 @@ export class CrmService {
     ]);
     return templates.map((t) => ({
       ...t,
+      // Which built-in send uses it (contact/offer buttons, automatic alerts)
+      system:
+        (Object.entries(TEMPLATES).find(([, name]) => name === t.name)?.[0] as
+          | keyof typeof TEMPLATES
+          | undefined) ?? null,
       defaults: Array.from({ length: t.params }, (_, i) =>
         String(known[t.name]?.[i] ?? ''),
       ),
@@ -901,6 +914,7 @@ export class CrmService {
     const saas = platform?.saasName ?? 'GymOS';
     const offer = (kind ?? (conv.gym ? 'contact' : 'offer')) === 'offer';
     const template = offer ? TEMPLATES.offer : TEMPLATES.contact;
+    await this.assertApproved(template);
     const ok = await this.whatsapp.sendTemplate(
       conv.phone,
       template,
@@ -914,6 +928,28 @@ export class CrmService {
         `WhatsApp rechazó la plantilla ${template}. Revisá que esté aprobada (ver log del back).`,
       );
     return { ok: true };
+  }
+
+  /**
+   * Checked before sending, so a missing or unapproved template never goes out
+   * (nor leaves a failed message in the chat). Meta direct can't list: skipped there.
+   */
+  private async assertApproved(template: string) {
+    if (!this.whatsapp.viaZernio) return;
+    const language = process.env.WHATSAPP_TEMPLATE_LANG ?? 'es';
+    const found = (await this.whatsapp.listTemplates()).find(
+      (t) => t.name === template && t.language === language,
+    );
+    if (!found) {
+      throw new ConflictException(
+        `No se envió: la plantilla ${template} no existe en tu cuenta de WhatsApp. Creala desde "Otra plantilla › Nueva plantilla" con ese nombre y esperá a que la aprueben.`,
+      );
+    }
+    if (found.status !== 'APPROVED') {
+      throw new ConflictException(
+        `No se envió: la plantilla ${template} está ${TEMPLATE_STATUS_ES[found.status] ?? found.status.toLowerCase()} en WhatsApp.`,
+      );
+    }
   }
 
   // ── Webhook ────────────────────────────────────────────────

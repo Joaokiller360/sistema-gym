@@ -8,6 +8,9 @@ import { getConversationAction, listConversationsAction, listQuickRepliesAction,
 
 interface CrmConfig { enabled: boolean; webhookSigned: boolean; alertsPaused: boolean }
 
+/** Once per request: the client starts its countdowns from this, see useNow in CrmInbox */
+const requestTime = () => Date.now()
+
 interface Props {
   searchParams: Promise<{ c?: string }>
 }
@@ -42,6 +45,7 @@ export default async function CrmPage({ searchParams }: Props) {
         initialList={'error' in list ? { data: [], counts: {} } : list}
         initialThread={thread && !('error' in thread) ? (thread as CrmThread) : null}
         initialQuickReplies={'error' in quickReplies ? [] : quickReplies}
+        serverNow={requestTime()}
         loadError={'error' in list ? list.error : null}
       />
     </AdminPage>

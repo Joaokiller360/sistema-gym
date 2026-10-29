@@ -117,6 +117,8 @@ export interface WaTemplate {
   unsupported: string | null
   /** What the CRM already knows for this contact, one per value ('' = to fill) */
   defaults: string[]
+  /** Built-in send that uses it: contact/offer buttons or the automatic alerts */
+  system: 'limitWarning' | 'limitReached' | 'contact' | 'offer' | null
 }
 
 export async function listTemplatesAction(conversationId: string): Promise<WaTemplate[] | { error: string }> {
