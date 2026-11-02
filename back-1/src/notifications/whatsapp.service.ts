@@ -127,6 +127,24 @@ export class WhatsappService {
     return res.ok;
   }
 
+  /**
+   * Template to a gym member (birthday, expiry, announcements). Not logged in the
+   * platform CRM: those chats belong to the gym, not to our sales inbox. Never throws.
+   */
+  sendMemberTemplate(
+    to: string,
+    template: string,
+    params: TemplateParams,
+  ): Promise<SendResult> {
+    return this.send(
+      to,
+      { type: 'template', name: template, params },
+      undefined,
+      undefined,
+      { skipCrmLog: true },
+    );
+  }
+
   /** Any approved template, picked in the CRM. Never throws. */
   sendAnyTemplate(
     to: string,
@@ -381,6 +399,7 @@ export class WhatsappService {
     msg: Outbound,
     sentById?: string,
     messageId?: string,
+    opts: { skipCrmLog?: boolean } = {},
   ): Promise<SendResult> {
     const body =
       msg.type === 'template'
@@ -416,6 +435,7 @@ export class WhatsappService {
       result = { ok: false, error: 'No se pudo conectar con WhatsApp' };
     }
 
+    if (opts.skipCrmLog) return result;
     await this.logOutbound(
       phone,
       { type: msg.type, body, sentById, messageId },

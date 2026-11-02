@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { CommunicationsService } from './communications.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { TenantGuard } from '../common/guards/tenant.guard';
@@ -13,13 +21,29 @@ import { CreateCommunicationDto } from './dto/communication.dto';
 export class CommunicationsController {
   constructor(private readonly communicationsService: CommunicationsService) {}
 
+  /** Inbox: messages from the platform team to the gym owner. */
   @Get()
   findAll(@Req() req: any, @Query() query: any) {
     return this.communicationsService.findAll(req.gymId, query);
   }
 
-  @Post('send')
+  /** Announcements sent by the gym to its members. */
+  @Get('announcements')
+  listAnnouncements(@Req() req: any) {
+    return this.communicationsService.listAnnouncements(req.gymId);
+  }
+
+  @Get('announcements/quota')
+  quota(@Req() req: any) {
+    return this.communicationsService.getAnnouncementQuota(req.gymId);
+  }
+
+  @Post('announcements')
   send(@Req() req: any, @Body() body: CreateCommunicationDto) {
-    return this.communicationsService.send(req.gymId, body);
+    return this.communicationsService.sendAnnouncement(
+      req.gymId,
+      req.user?.userId,
+      body,
+    );
   }
 }

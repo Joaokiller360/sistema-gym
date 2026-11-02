@@ -29,6 +29,7 @@ import {
   Compass,
   Banknote,
   UserCog,
+  BellRing,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -71,6 +72,7 @@ const BASE_NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'reports', icon: BarChart2, path: 'reports' },
       { label: 'marketing', icon: Megaphone, path: 'marketing' },
+      { label: 'announcements', icon: BellRing, path: 'announcements' },
       { label: 'communications', icon: MessageSquare, path: 'communications' },
       { label: 'settings', icon: Settings, path: 'settings' },
       { label: 'support', icon: LifeBuoy, path: 'support' },

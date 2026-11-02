@@ -467,6 +467,10 @@ model Communication {
   subject      String
   body         String
   recipientIds String[]
+  type         String   @default("GENERAL")
+  sentCount    Int      @default(0)
+  failedCount  Int      @default(0)
+  sentById     String?
   sentAt       DateTime @default(now())
   createdAt    DateTime @default(now())
 
@@ -474,6 +478,7 @@ model Communication {
   gym   Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
 
   @@index([gymId])
+  @@index([gymId, sentAt])
   @@map("communications")
 }
 
@@ -495,27 +500,31 @@ model EmailTemplate {
 }
 
 model SubscriptionPlan {
-  id                     String   @id @default(uuid())
-  key                    String   @unique
-  label                  String
-  price                  Int
-  currency               String   @default("USD")
-  durationDays           Int      @default(30)
-  graceDays              Int      @default(5)
-  maxMembers             Int?
-  storeEnabled           Boolean  @default(false)
-  features               Json     @default("[]")
-  isActive               Boolean  @default(true)
-  sortOrder              Int      @default(0)
-  discountPercent        Int?
-  discountActive         Boolean  @default(false)
-  yearlyPrice            Int?
-  demoEnabled            Boolean  @default(false)
-  trialEnabled           Boolean  @default(false)
-  visibleOnLanding       Boolean  @default(true)
-  advancedReportsEnabled Boolean  @default(false)
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  id                       String   @id @default(uuid())
+  key                      String   @unique
+  label                    String
+  price                    Int
+  currency                 String   @default("USD")
+  durationDays             Int      @default(30)
+  graceDays                Int      @default(5)
+  maxMembers               Int?
+  storeEnabled             Boolean  @default(false)
+  features                 Json     @default("[]")
+  isActive                 Boolean  @default(true)
+  sortOrder                Int      @default(0)
+  discountPercent          Int?
+  discountActive           Boolean  @default(false)
+  yearlyPrice              Int?
+  demoEnabled              Boolean  @default(false)
+  trialEnabled             Boolean  @default(false)
+  visibleOnLanding         Boolean  @default(true)
+  advancedReportsEnabled   Boolean  @default(false)
+  // Gym → member announcements per calendar month. null = unlimited, 0 = disabled
+  monthlyAnnouncementLimit Int?     @default(0)
+  birthdayMessagesEnabled    Boolean  @default(true)
+  expiryRemindersEnabled   Boolean  @default(true)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
   @@map("subscription_plans")
 }

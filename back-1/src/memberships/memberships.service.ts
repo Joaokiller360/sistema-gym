@@ -1,20 +1,23 @@
 import { randomUUID } from 'crypto';
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { Resend } from 'resend';
 import { PrismaService } from '../prisma/prisma.service';
 import { calculateProration } from '../common/utils/proration.util';
 import { startOfDayUTC, endOfDayUTC } from '../common/utils/timezone.util';
+import { getPlanFlagsByKey } from '../common/utils/subscription-plan.util';
 import { WalletPassService } from '../wallet/wallet-pass.service';
+import { WhatsappService } from '../notifications/whatsapp.service';
+import { TEMPLATES } from '../notifications/whatsapp-templates';
+import { mapLimit, memberWhatsapp } from '../notifications/member-phone.util';
 
 @Injectable()
 export class MembershipsService {
   private readonly logger = new Logger(MembershipsService.name);
-  private readonly resend = new Resend(process.env.RESEND_API_KEY);
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly passes: WalletPassService,
+    private readonly whatsapp: WhatsappService,
   ) {}
 
   /** Refresh the member's Wallet pass after a membership change (best-effort, not awaited). */
@@ -425,18 +428,30 @@ export class MembershipsService {
     return m;
   }
 
-  // ── Cron: birthday emails (daily 9 AM UTC) ────────────────
+  // ── Cron: birthday WhatsApp (daily 9 AM UTC) ──────────────
   @Cron('0 9 * * *')
   async sendBirthdayEmails() {
     const now = new Date();
 
+    if (!this.whatsapp.enabled) {
+      this.logger.warn('[Birthday] WhatsApp not configured, skipping');
+      return;
+    }
+    const planFlags = await getPlanFlagsByKey(this.prisma);
     const members = await this.prisma.member.findMany({
-      where: { birthDate: { not: null }, isActive: true },
-      include: { gym: { select: { name: true, timezone: true } } },
+      where: { birthDate: { not: null }, isActive: true, phone: { not: null }, gym: { isActive: true } },
+      select: {
+        firstName: true,
+        phone: true,
+        birthDate: true,
+        gym: { select: { name: true, timezone: true, country: true, subscriptionPlan: true } },
+      },
     });
 
     const todayBirthdays = members.filter((m) => {
       if (!m.birthDate) return false;
+      // Plan toggle set by super-admin (missing plan row → keep sending)
+      if (planFlags.get(m.gym.subscriptionPlan)?.birthdayMessagesEnabled === false) return false;
       const tz = m.gym.timezone ?? 'UTC';
       const todayStr = now.toLocaleDateString('en-CA', { timeZone: tz }); // "YYYY-MM-DD"
       const [, todayMonth, todayDay] = todayStr.split('-').map(Number);
@@ -446,34 +461,33 @@ export class MembershipsService {
 
     if (!todayBirthdays.length) return;
 
-    const from = process.env.RESEND_FROM_EMAIL ?? 'noreply@tudominio.com';
-    const results = await Promise.allSettled(
-      todayBirthdays.map((m) =>
-        this.resend.emails.send({
-          from,
-          to: m.email,
-          subject: `🎂 ¡Feliz cumpleaños, ${m.firstName}!`,
-          html: this.buildBirthdayHtml(m.firstName, m.gym.name),
-        }),
-      ),
-    );
-
-    for (const r of results) {
-      if (r.status === 'rejected') this.logger.error('[Birthday] Email failed:', r.reason);
-    }
-    this.logger.log(`[Birthday] Sent ${todayBirthdays.length} birthday email(s)`);
+    let sent = 0;
+    let skipped = 0;
+    await mapLimit(todayBirthdays, 5, async (m) => {
+      const to = memberWhatsapp(m.phone, m.gym.country);
+      if (!to) return skipped++;
+      const res = await this.whatsapp.sendMemberTemplate(to, TEMPLATES.memberBirthday, [m.firstName, m.gym.name]);
+      if (res.ok) sent++;
+      else this.logger.error(`[Birthday] WhatsApp to ${to} failed: ${res.error}`);
+    });
+    this.logger.log(`[Birthday] Sent ${sent}/${todayBirthdays.length} WhatsApp greeting(s), ${skipped} without valid phone`);
   }
 
   // ── Cron: membership expiry reminders (daily 9 AM UTC) ───
   @Cron('0 9 * * *')
   async sendExpiryReminders() {
     const now = new Date();
+    if (!this.whatsapp.enabled) {
+      this.logger.warn('[ExpiryReminder] WhatsApp not configured, skipping');
+      return;
+    }
 
     // Fetch all gyms with timezone to build per-gym date ranges
     const allGyms = await this.prisma.gym.findMany({
       where: { isActive: true },
-      select: { id: true, name: true, timezone: true },
+      select: { id: true, name: true, timezone: true, country: true, subscriptionPlan: true },
     });
+    const planFlags = await getPlanFlagsByKey(this.prisma);
 
     // Build a UTC window covering all possible "in 2 days" across timezones (±14h)
     const windowStart = new Date(now);
@@ -489,8 +503,8 @@ export class MembershipsService {
         endDate: { gte: windowStart, lte: windowEnd },
       },
       include: {
-        member: { select: { firstName: true, email: true } },
-        plan: { select: { name: true, price: true, currency: true } },
+        member: { select: { firstName: true, phone: true, isActive: true } },
+        plan: { select: { name: true } },
       },
     });
 
@@ -501,7 +515,9 @@ export class MembershipsService {
     // Filter to only memberships expiring in exactly 2 days in the gym's local timezone
     const target = memberships.filter((ms) => {
       const gym = gymMap.get(ms.gymId);
-      const tz = gym?.timezone ?? 'UTC';
+      if (!gym || !ms.member.phone || !ms.member.isActive) return false; // inactive gym/member or no phone
+      if (planFlags.get(gym.subscriptionPlan)?.expiryRemindersEnabled === false) return false;
+      const tz = gym.timezone ?? 'UTC';
       const in2DaysStr = new Date(now.getTime() + 2 * 86400000).toLocaleDateString('en-CA', { timeZone: tz });
       const rangeStart = startOfDayUTC(in2DaysStr, tz);
       const rangeEnd = endOfDayUTC(in2DaysStr, tz);
@@ -510,118 +526,23 @@ export class MembershipsService {
 
     if (!target.length) return;
 
-    const from = process.env.RESEND_FROM_EMAIL ?? 'noreply@tudominio.com';
-    const results = await Promise.allSettled(
-      target.map((ms) =>
-        this.resend.emails.send({
-          from,
-          to: ms.member.email,
-          subject: `⏰ Tu membresía vence en 2 días — ${gymMap.get(ms.gymId)?.name ?? 'tu gimnasio'}`,
-          html: this.buildExpiryReminderHtml(
-            ms.member.firstName,
-            gymMap.get(ms.gymId)?.name ?? 'tu gimnasio',
-            ms.plan.name,
-            ms.endDate,
-          ),
-        }),
-      ),
-    );
-
-    for (const r of results) {
-      if (r.status === 'rejected') this.logger.error('[ExpiryReminder] Email failed:', r.reason);
-    }
-    this.logger.log(`[ExpiryReminder] Sent ${target.length} expiry reminder(s)`);
-  }
-
-  // ── Email templates ───────────────────────────────────────
-  private buildBirthdayHtml(firstName: string, gymName: string): string {
-    return `<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="UTF-8"/><title>¡Feliz cumpleaños!</title></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;">
-    <tr><td align="center">
-      <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
-        <tr>
-          <td align="center" style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);border-radius:12px 12px 0 0;padding:48px 32px 40px;">
-            <div style="font-size:56px;margin-bottom:16px;">🎂</div>
-            <h1 style="margin:0;color:#fff;font-size:26px;font-weight:700;">¡Feliz cumpleaños, ${firstName}!</h1>
-          </td>
-        </tr>
-        <tr>
-          <td style="background:#fff;padding:36px 32px 32px;text-align:center;">
-            <p style="margin:0 0 16px;color:#374151;font-size:16px;line-height:1.6;">
-              Todo el equipo de <strong>${gymName}</strong> te desea un increíble día lleno de salud, fuerza y alegría. 💪
-            </p>
-            <p style="margin:0;color:#6b7280;font-size:14px;line-height:1.6;">
-              Gracias por elegirnos para alcanzar tus metas. ¡Seguí entrenando con toda la energía!
-            </p>
-          </td>
-        </tr>
-        <tr>
-          <td style="background:#f9fafb;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
-            <p style="margin:0;color:#9ca3af;font-size:12px;">
-              Este correo fue enviado por <strong>${gymName}</strong> a través de Sistema Gym.
-            </p>
-          </td>
-        </tr>
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>`;
-  }
-
-  private buildExpiryReminderHtml(
-    firstName: string,
-    gymName: string,
-    planName: string,
-    endDate: Date,
-  ): string {
-    const dateStr = endDate.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
-    return `<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="UTF-8"/><title>Tu membresía vence pronto</title></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;">
-    <tr><td align="center">
-      <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
-        <tr>
-          <td align="center" style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);border-radius:12px 12px 0 0;padding:48px 32px 40px;">
-            <div style="font-size:48px;margin-bottom:16px;">⏰</div>
-            <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700;">Tu membresía vence en 2 días</h1>
-          </td>
-        </tr>
-        <tr>
-          <td style="background:#fff;padding:36px 32px 32px;">
-            <p style="margin:0 0 20px;color:#374151;font-size:16px;line-height:1.6;">
-              Hola <strong>${firstName}</strong>,
-            </p>
-            <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;">
-              Tu membresía <strong>${planName}</strong> en <strong>${gymName}</strong> vence el <strong>${dateStr}</strong>.
-            </p>
-            <table width="100%" cellpadding="0" cellspacing="0" style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;margin-bottom:24px;">
-              <tr><td style="padding:16px 20px;">
-                <p style="margin:0;color:#92400e;font-size:14px;font-weight:600;">⚠️ Recordatorio</p>
-                <p style="margin:4px 0 0;color:#92400e;font-size:14px;">Renovate antes del vencimiento para no interrumpir tu acceso al gimnasio.</p>
-              </td></tr>
-            </table>
-            <p style="margin:0;color:#6b7280;font-size:14px;line-height:1.6;">
-              Para renovar, acercate al gimnasio o contactá a tu administrador.
-            </p>
-          </td>
-        </tr>
-        <tr>
-          <td style="background:#f9fafb;border-radius:0 0 12px 12px;padding:20px 32px;text-align:center;">
-            <p style="margin:0;color:#9ca3af;font-size:12px;">
-              Este correo fue enviado por <strong>${gymName}</strong> a través de Sistema Gym.
-            </p>
-          </td>
-        </tr>
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>`;
+    let sent = 0;
+    let skipped = 0;
+    await mapLimit(target, 5, async (ms) => {
+      const gym = gymMap.get(ms.gymId)!;
+      const to = memberWhatsapp(ms.member.phone, gym.country);
+      if (!to) return skipped++;
+      const tz = gym.timezone ?? 'UTC';
+      const endDate = ms.endDate.toLocaleDateString('es', { timeZone: tz, day: 'numeric', month: 'long' });
+      const res = await this.whatsapp.sendMemberTemplate(to, TEMPLATES.memberExpiry, [
+        ms.member.firstName,
+        ms.plan.name,
+        gym.name,
+        endDate,
+      ]);
+      if (res.ok) sent++;
+      else this.logger.error(`[ExpiryReminder] WhatsApp to ${to} failed: ${res.error}`);
+    });
+    this.logger.log(`[ExpiryReminder] Sent ${sent}/${target.length} WhatsApp reminder(s), ${skipped} without valid phone`);
   }
 }

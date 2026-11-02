@@ -32,6 +32,9 @@ export interface SubscriptionPlan {
   trialEnabled: boolean
   advancedReportsEnabled: boolean
   visibleOnLanding: boolean
+  monthlyAnnouncementLimit: number | null
+  birthdayMessagesEnabled: boolean
+  expiryRemindersEnabled: boolean
   features: string[]
   isActive: boolean
   sortOrder: number
@@ -65,6 +68,9 @@ interface PlanFormFields {
   trialEnabled: boolean
   advancedReportsEnabled: boolean
   visibleOnLanding: boolean
+  monthlyAnnouncementLimit: string
+  birthdayMessagesEnabled: boolean
+  expiryRemindersEnabled: boolean
   features: string[]
   isActive: boolean
 }
@@ -79,6 +85,9 @@ const EMPTY_FIELDS: PlanFormFields = {
   trialEnabled: false,
   advancedReportsEnabled: false,
   visibleOnLanding: true,
+  monthlyAnnouncementLimit: '0',
+  birthdayMessagesEnabled: true,
+  expiryRemindersEnabled: true,
   features: [''],
   isActive: true,
 }
@@ -94,6 +103,9 @@ function fieldsFromPlan(plan: SubscriptionPlan): PlanFormFields {
     trialEnabled: plan.trialEnabled ?? false,
     advancedReportsEnabled: plan.advancedReportsEnabled ?? false,
     visibleOnLanding: plan.visibleOnLanding ?? true,
+    monthlyAnnouncementLimit: plan.monthlyAnnouncementLimit == null ? '' : String(plan.monthlyAnnouncementLimit),
+    birthdayMessagesEnabled: plan.birthdayMessagesEnabled ?? true,
+    expiryRemindersEnabled: plan.expiryRemindersEnabled ?? true,
     features: plan.features as string[],
     isActive: plan.isActive,
   }
@@ -174,6 +186,8 @@ function FeaturesList({
 const TOGGLES: { key: keyof PlanFormFields; label: string; hint: string; editOnly?: boolean }[] = [
   { key: 'storeEnabled', label: 'Tienda incluida', hint: 'Habilita el módulo de tienda' },
   { key: 'advancedReportsEnabled', label: 'Reportes avanzados', hint: 'Panel de reportes en el dashboard del gym' },
+  { key: 'birthdayMessagesEnabled', label: 'WhatsApp de cumpleaños', hint: 'Felicita a cada miembro por WhatsApp el día de su cumpleaños' },
+  { key: 'expiryRemindersEnabled', label: 'Aviso de vencimiento', hint: 'WhatsApp al miembro 2 días antes de que venza su membresía' },
   { key: 'demoEnabled', label: 'Demo habilitada', hint: 'Se puede pedir una demo desde la landing' },
   { key: 'trialEnabled', label: 'Prueba gratis (1 mes)', hint: '30 días sin costo' },
   { key: 'visibleOnLanding', label: 'Visible en la landing', hint: 'Aparece en la página pública de precios' },
@@ -231,6 +245,11 @@ function PlanFormBody({
           <span className={field.label}>Máx. miembros</span>
           <input type="number" min="1" value={fields.maxMembers} onChange={e => onChange({ ...fields, maxMembers: e.target.value })} disabled={isPending} placeholder="Ilimitado" className={field.input} />
         </label>
+        <label className="min-w-0 flex-1 basis-40">
+          <span className={field.label}>Avisos a miembros / mes</span>
+          <input type="number" min="0" step="1" value={fields.monthlyAnnouncementLimit} onChange={e => onChange({ ...fields, monthlyAnnouncementLimit: e.target.value })} disabled={isPending} placeholder="Ilimitado" className={field.input} />
+          <span className="mt-1 block text-xs text-adm-muted">WhatsApp · 0 = sin avisos · vacío = ilimitado</span>
+        </label>
       </div>
 
       <div>
@@ -287,6 +306,8 @@ function PlanEditorPanel({
   function handleSave() {
     if (!plan && (!planKey.trim() || !fields.label.trim())) { setError('Clave y nombre requeridos'); return }
     if (isNaN(parseFloat(fields.price)) || parseFloat(fields.price) < 0) { setError('Precio inválido'); return }
+    const annLimit = fields.monthlyAnnouncementLimit.trim()
+    if (annLimit !== '' && (!/^\d+$/.test(annLimit))) { setError('Límite de avisos inválido'); return }
     setError(null)
     const common = {
       label: fields.label,
@@ -298,6 +319,9 @@ function PlanEditorPanel({
       trialEnabled: fields.trialEnabled,
       advancedReportsEnabled: fields.advancedReportsEnabled,
       visibleOnLanding: fields.visibleOnLanding,
+      monthlyAnnouncementLimit: annLimit === '' ? null : parseInt(annLimit, 10),
+      birthdayMessagesEnabled: fields.birthdayMessagesEnabled,
+      expiryRemindersEnabled: fields.expiryRemindersEnabled,
       features: fields.features.filter(f => f.trim()),
     }
     startTransition(async () => {
@@ -389,6 +413,8 @@ function PlanCard({
     [plan.advancedReportsEnabled, 'Reportes'],
     [plan.demoEnabled, 'Demo'],
     [plan.trialEnabled, 'Prueba gratis'],
+    [plan.birthdayMessagesEnabled ?? true, 'Cumpleaños'],
+    [plan.expiryRemindersEnabled ?? true, 'Aviso vencimiento'],
   ]
 
   return (
@@ -440,6 +466,13 @@ function PlanCard({
           </div>
 
           <p className="text-sm font-semibold">{plan.maxMembers == null ? 'Miembros ilimitados' : `Hasta ${plan.maxMembers} miembros`}</p>
+          <p className="-mt-2 text-[13px] text-adm-muted">
+            {plan.monthlyAnnouncementLimit == null
+              ? 'Avisos a miembros ilimitados'
+              : plan.monthlyAnnouncementLimit === 0
+                ? 'Sin avisos a miembros'
+                : `Hasta ${plan.monthlyAnnouncementLimit} avisos a miembros / mes`}
+          </p>
 
           <ul className="flex flex-col gap-2 text-sm">
             {(plan.features as string[]).map((f, i) => (

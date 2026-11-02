@@ -578,6 +578,7 @@ export class SuperAdminService {
     const payload = { ...data };
     if (data.price !== undefined) payload.price = Math.round(Number(data.price) * 100);
     if (data.yearlyPrice !== undefined) payload.yearlyPrice = Math.round(Number(data.yearlyPrice) * 100);
+    if (data.monthlyAnnouncementLimit !== undefined) payload.monthlyAnnouncementLimit = parseAnnouncementLimit(data.monthlyAnnouncementLimit);
     const plan = await this.prisma.subscriptionPlan.create({ data: payload });
     return applySubscriptionDiscount(plan);
   }
@@ -587,6 +588,7 @@ export class SuperAdminService {
     const payload = { ...data };
     if (data.price !== undefined) payload.price = Math.round(Number(data.price) * 100);
     if (data.yearlyPrice !== undefined) payload.yearlyPrice = Math.round(Number(data.yearlyPrice) * 100);
+    if (data.monthlyAnnouncementLimit !== undefined) payload.monthlyAnnouncementLimit = parseAnnouncementLimit(data.monthlyAnnouncementLimit);
     const plan = await this.prisma.subscriptionPlan.update({ where: { id }, data: payload });
 
     if (data.advancedReportsEnabled !== undefined) {
@@ -872,4 +874,12 @@ export class SuperAdminService {
     if (!gym) throw new NotFoundException('Gym not found');
     return gym;
   }
+}
+
+/** '' / null → unlimited (null); otherwise a non-negative integer. */
+function parseAnnouncementLimit(value: unknown): number | null {
+  if (value === null || value === '') return null;
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n) || n < 0) throw new BadRequestException('monthlyAnnouncementLimit debe ser un entero ≥ 0 o vacío (ilimitado)');
+  return n;
 }
