@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useTransition } from 'react'
-import { Plus, Trash2, Check, X, GripVertical, Star, Tag } from 'lucide-react'
+import { Plus, Trash2, Check, X, GripVertical, Star, Tag, Copy } from 'lucide-react'
 import { updateSubscriptionPlanAction, deleteSubscriptionPlanAction, createSubscriptionPlanAction, setSubscriptionPlanDiscountAction, toggleSubscriptionPlanDiscountAction } from './actions'
 import { createBlockHandlers } from '@/lib/input-validation'
 import {
@@ -109,6 +109,21 @@ function fieldsFromPlan(plan: SubscriptionPlan): PlanFormFields {
     features: plan.features as string[],
     isActive: plan.isActive,
   }
+}
+
+/** Key a name maps to: "Pro Anual (copia)" → PRO_ANUAL_COPIA; taken keys get _2, _3… */
+function keyFromLabel(label: string, taken: string[]) {
+  const base = label
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+  if (!base) return ''
+  const used = new Set(taken.map(k => k.toUpperCase()))
+  let next = base
+  for (let n = 2; used.has(next); n++) next = `${base}_${n}`
+  return next
 }
 
 function FeaturesList({
@@ -288,16 +303,38 @@ function PlanFormBody({
 
 function PlanEditorPanel({
   plan,
+  source,
+  takenKeys,
   onClose,
 }: {
   plan: SubscriptionPlan | null
+  /** Plan being duplicated: the form starts as a new plan with its values */
+  source?: SubscriptionPlan | null
+  takenKeys: string[]
   onClose: () => void
 }) {
   const ref = useRef<HTMLElement>(null)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
-  const [planKey, setPlanKey] = useState('')
-  const [fields, setFields] = useState<PlanFormFields>(plan ? fieldsFromPlan(plan) : EMPTY_FIELDS)
+  const [fields, setFields] = useState<PlanFormFields>(() => {
+    if (plan) return fieldsFromPlan(plan)
+    // A copy stays off the public pricing until it's ready
+    if (source) return { ...fieldsFromPlan(source), label: `${source.label} (copia)`, features: [...source.features], visibleOnLanding: false }
+    return EMPTY_FIELDS
+  })
+  const [planKey, setPlanKey] = useState(() => (plan ? '' : keyFromLabel(fields.label, takenKeys)))
+  // The key follows the name until it's typed by hand; clearing it hands it back to the name
+  const [keyTouched, setKeyTouched] = useState(false)
+
+  function changeFields(next: PlanFormFields) {
+    if (!plan && !keyTouched && next.label !== fields.label) setPlanKey(keyFromLabel(next.label, takenKeys))
+    setFields(next)
+  }
+
+  function changeKey(v: string) {
+    setKeyTouched(v.trim() !== '')
+    setPlanKey(v.trim() === '' ? keyFromLabel(fields.label, takenKeys) : v)
+  }
 
   useEffect(() => {
     ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -305,6 +342,8 @@ function PlanEditorPanel({
 
   function handleSave() {
     if (!plan && (!planKey.trim() || !fields.label.trim())) { setError('Clave y nombre requeridos'); return }
+    const newKey = planKey.toUpperCase().replace(/\s+/g, '_')
+    if (!plan && takenKeys.some(k => k.toUpperCase() === newKey)) { setError('Ya existe un plan con esa clave'); return }
     if (isNaN(parseFloat(fields.price)) || parseFloat(fields.price) < 0) { setError('Precio inválido'); return }
     const annLimit = fields.monthlyAnnouncementLimit.trim()
     if (annLimit !== '' && (!/^\d+$/.test(annLimit))) { setError('Límite de avisos inválido'); return }
@@ -327,7 +366,17 @@ function PlanEditorPanel({
     startTransition(async () => {
       const res = plan
         ? await updateSubscriptionPlanAction(plan.id, { ...common, isActive: fields.isActive }, plan.key)
-        : await createSubscriptionPlanAction({ ...common, key: planKey.toUpperCase().replace(/\s+/g, '_') })
+        : await createSubscriptionPlanAction({
+            ...common,
+            key: newKey,
+            // Annual price and discount live outside the form: a copy keeps the original's
+            ...(source && {
+              // Sent only when set: the back turns a null yearlyPrice into 0
+              ...(source.yearlyPrice != null && { yearlyPrice: Number(source.yearlyPrice) }),
+              discountPercent: source.discountPercent ?? 0,
+              discountActive: source.discountActive ?? false,
+            }),
+          })
       if (res.error) { setError(res.error) }
       else onClose()
     })
@@ -337,8 +386,8 @@ function PlanEditorPanel({
     <section ref={ref} aria-labelledby="ed-h" className="scroll-mt-6 rounded-2xl border-2 border-adm-ink bg-adm-surface p-6">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-[13px] text-adm-muted">{plan ? 'Editando' : 'Nuevo'}</p>
-          <h2 id="ed-h" className="text-[22px] font-extrabold">{plan ? `Plan ${plan.label}` : 'Nuevo plan'}</h2>
+          <p className="text-[13px] text-adm-muted">{plan ? 'Editando' : source ? `Copia de ${source.label}` : 'Nuevo'}</p>
+          <h2 id="ed-h" className="text-[22px] font-extrabold">{plan ? `Plan ${plan.label}` : source ? 'Duplicar plan' : 'Nuevo plan'}</h2>
         </div>
         <div className="flex gap-2">
           <button type="button" onClick={onClose} disabled={isPending} className={cn(btn.line, 'min-h-11 text-sm')}>Descartar</button>
@@ -347,7 +396,7 @@ function PlanEditorPanel({
           </button>
         </div>
       </div>
-      <PlanFormBody fields={fields} onChange={setFields} isPending={isPending} showKey={!plan} planKey={planKey} onPlanKeyChange={setPlanKey} />
+      <PlanFormBody fields={fields} onChange={changeFields} isPending={isPending} showKey={!plan} planKey={planKey} onPlanKeyChange={changeKey} />
       {error && <p role="alert" className={cn(field.error, 'mt-4')}>{error}</p>}
     </section>
   )
@@ -360,6 +409,7 @@ function PlanCard({
   gymCount,
   editing,
   onEdit,
+  onDuplicate,
 }: {
   plan: SubscriptionPlan
   index: number
@@ -367,6 +417,7 @@ function PlanCard({
   gymCount: number
   editing: boolean
   onEdit: () => void
+  onDuplicate: () => void
 }) {
   const [discountOpen, setDiscountOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -505,6 +556,9 @@ function PlanCard({
             >
               <Tag className="size-4" />
             </button>
+            <button type="button" onClick={onDuplicate} aria-label={`Duplicar plan ${plan.label}`} title="Duplicar" className={btn.icon}>
+              <Copy className="size-4" />
+            </button>
             <button type="button" onClick={() => setDeleteOpen(true)} aria-label={`Eliminar plan ${plan.label}`} className={cn(btn.icon, 'hover:bg-adm-bad-bg hover:text-adm-bad-fg')}>
               <Trash2 className="size-4" />
             </button>
@@ -598,7 +652,7 @@ function PlanCard({
   )
 }
 
-type Editing = { mode: 'edit'; id: string } | { mode: 'new' } | null
+type Editing = { mode: 'edit' | 'duplicate'; id: string } | { mode: 'new' } | null
 
 export function PlanEditor({ plans, gymCounts }: { plans: SubscriptionPlan[]; gymCounts: Record<string, number> }) {
   const [yearly, setYearly] = useState(false)
@@ -610,7 +664,9 @@ export function PlanEditor({ plans, gymCounts }: { plans: SubscriptionPlan[]; gy
     setEditorKey(k => k + 1)
   }
 
-  const editingPlan = editing?.mode === 'edit' ? plans.find(p => p.id === editing.id) ?? null : null
+  const target = editing && editing.mode !== 'new' ? plans.find(p => p.id === editing.id) ?? null : null
+  const editingPlan = editing?.mode === 'edit' ? target : null
+  const sourcePlan = editing?.mode === 'duplicate' ? target : null
 
   return (
     <>
@@ -663,13 +719,20 @@ export function PlanEditor({ plans, gymCounts }: { plans: SubscriptionPlan[]; gy
               gymCount={gymCounts[p.key.toUpperCase()] ?? 0}
               editing={editing?.mode === 'edit' && editing.id === p.id}
               onEdit={() => open({ mode: 'edit', id: p.id })}
+              onDuplicate={() => open({ mode: 'duplicate', id: p.id })}
             />
           ))}
         </section>
       )}
 
-      {editing && (editing.mode === 'new' || editingPlan) && (
-        <PlanEditorPanel key={editorKey} plan={editingPlan} onClose={() => setEditing(null)} />
+      {editing && (editing.mode === 'new' || target) && (
+        <PlanEditorPanel
+          key={editorKey}
+          plan={editingPlan}
+          source={sourcePlan}
+          takenKeys={plans.map(p => p.key)}
+          onClose={() => setEditing(null)}
+        />
       )}
     </>
   )
