@@ -40,7 +40,7 @@ export async function updateSubscriptionPlanAction(
 }
 
 export async function createSubscriptionPlanAction(
-  data: { key: string; label: string; price: string | number; currency: string; maxMembers?: number | null; storeEnabled?: boolean; demoEnabled?: boolean; trialEnabled?: boolean; advancedReportsEnabled?: boolean; visibleOnLanding?: boolean; monthlyAnnouncementLimit?: number | null; birthdayMessagesEnabled?: boolean; expiryRemindersEnabled?: boolean; features?: string[]; yearlyPrice?: number | null; discountPercent?: number; discountActive?: boolean },
+  data: { key: string; label: string; price: string | number; currency: string; maxMembers?: number | null; storeEnabled?: boolean; demoEnabled?: boolean; trialEnabled?: boolean; advancedReportsEnabled?: boolean; visibleOnLanding?: boolean; monthlyMessageLimit?: number | null; birthdayMessagesEnabled?: boolean; expiryRemindersEnabled?: boolean; features?: string[]; yearlyPrice?: number | null; discountPercent?: number; discountActive?: boolean },
 ): Promise<{ error?: string }> {
   const token = await getToken()
   const result = await apiFetch('/admin/subscription-plans', token, {

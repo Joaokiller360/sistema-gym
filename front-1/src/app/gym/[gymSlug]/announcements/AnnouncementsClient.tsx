@@ -45,7 +45,9 @@ export function AnnouncementsClient({ gymSlug, gymName, quota, history }: Props)
   const enabled = quota?.enabled ?? false
   const limitReached = quota?.remaining === 0
   const whatsappReady = quota?.whatsappReady ?? false
-  const canSend = enabled && whatsappReady && !limitReached && (quota?.activeRecipients ?? 0) > 0
+  const recipients = quota?.activeRecipients ?? 0
+  const notEnough = quota?.remaining != null && quota.remaining > 0 && recipients > quota.remaining
+  const canSend = enabled && whatsappReady && !limitReached && !notEnough && recipients > 0
   const fmtDate = (iso: string, withTime = false) =>
     new Date(iso).toLocaleString(intl, withTime
       ? { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }
@@ -106,8 +108,9 @@ export function AnnouncementsClient({ gymSlug, gymName, quota, history }: Props)
               />
             </div>
           )}
-          <p className="text-xs text-muted-foreground">{t.resets(fmtDate(quota.resetsAt))}</p>
+          <p className="text-xs text-muted-foreground">{t.quotaHint} {t.resets(fmtDate(quota.resetsAt))}</p>
           {limitReached && <p className="text-xs font-medium text-red-600">{t.limitReached}</p>}
+          {notEnough && <p className="text-xs font-medium text-red-600">{t.notEnough(recipients, quota.remaining!)}</p>}
         </section>
       )}
 

@@ -32,7 +32,7 @@ export interface SubscriptionPlan {
   trialEnabled: boolean
   advancedReportsEnabled: boolean
   visibleOnLanding: boolean
-  monthlyAnnouncementLimit: number | null
+  monthlyMessageLimit: number | null
   birthdayMessagesEnabled: boolean
   expiryRemindersEnabled: boolean
   features: string[]
@@ -68,7 +68,7 @@ interface PlanFormFields {
   trialEnabled: boolean
   advancedReportsEnabled: boolean
   visibleOnLanding: boolean
-  monthlyAnnouncementLimit: string
+  monthlyMessageLimit: string
   birthdayMessagesEnabled: boolean
   expiryRemindersEnabled: boolean
   features: string[]
@@ -85,7 +85,7 @@ const EMPTY_FIELDS: PlanFormFields = {
   trialEnabled: false,
   advancedReportsEnabled: false,
   visibleOnLanding: true,
-  monthlyAnnouncementLimit: '0',
+  monthlyMessageLimit: '0',
   birthdayMessagesEnabled: true,
   expiryRemindersEnabled: true,
   features: [''],
@@ -103,7 +103,7 @@ function fieldsFromPlan(plan: SubscriptionPlan): PlanFormFields {
     trialEnabled: plan.trialEnabled ?? false,
     advancedReportsEnabled: plan.advancedReportsEnabled ?? false,
     visibleOnLanding: plan.visibleOnLanding ?? true,
-    monthlyAnnouncementLimit: plan.monthlyAnnouncementLimit == null ? '' : String(plan.monthlyAnnouncementLimit),
+    monthlyMessageLimit: plan.monthlyMessageLimit == null ? '' : String(plan.monthlyMessageLimit),
     birthdayMessagesEnabled: plan.birthdayMessagesEnabled ?? true,
     expiryRemindersEnabled: plan.expiryRemindersEnabled ?? true,
     features: plan.features as string[],
@@ -261,9 +261,9 @@ function PlanFormBody({
           <input type="number" min="1" value={fields.maxMembers} onChange={e => onChange({ ...fields, maxMembers: e.target.value })} disabled={isPending} placeholder="Ilimitado" className={field.input} />
         </label>
         <label className="min-w-0 flex-1 basis-40">
-          <span className={field.label}>Avisos a miembros / mes</span>
-          <input type="number" min="0" step="1" value={fields.monthlyAnnouncementLimit} onChange={e => onChange({ ...fields, monthlyAnnouncementLimit: e.target.value })} disabled={isPending} placeholder="Ilimitado" className={field.input} />
-          <span className="mt-1 block text-xs text-adm-muted">WhatsApp · 0 = sin avisos · vacío = ilimitado</span>
+          <span className={field.label}>Mensajes WhatsApp a socios / mes</span>
+          <input type="number" min="0" step="1" value={fields.monthlyMessageLimit} onChange={e => onChange({ ...fields, monthlyMessageLimit: e.target.value })} disabled={isPending} placeholder="Ilimitado" className={field.input} />
+          <span className="mt-1 block text-xs text-adm-muted">1 aviso a 50 socios = 50 mensajes · 0 = sin avisos · vacío = ilimitado</span>
         </label>
       </div>
 
@@ -345,8 +345,8 @@ function PlanEditorPanel({
     const newKey = planKey.toUpperCase().replace(/\s+/g, '_')
     if (!plan && takenKeys.some(k => k.toUpperCase() === newKey)) { setError('Ya existe un plan con esa clave'); return }
     if (isNaN(parseFloat(fields.price)) || parseFloat(fields.price) < 0) { setError('Precio inválido'); return }
-    const annLimit = fields.monthlyAnnouncementLimit.trim()
-    if (annLimit !== '' && (!/^\d+$/.test(annLimit))) { setError('Límite de avisos inválido'); return }
+    const annLimit = fields.monthlyMessageLimit.trim()
+    if (annLimit !== '' && (!/^\d+$/.test(annLimit))) { setError('Límite de mensajes inválido'); return }
     setError(null)
     const common = {
       label: fields.label,
@@ -358,7 +358,7 @@ function PlanEditorPanel({
       trialEnabled: fields.trialEnabled,
       advancedReportsEnabled: fields.advancedReportsEnabled,
       visibleOnLanding: fields.visibleOnLanding,
-      monthlyAnnouncementLimit: annLimit === '' ? null : parseInt(annLimit, 10),
+      monthlyMessageLimit: annLimit === '' ? null : parseInt(annLimit, 10),
       birthdayMessagesEnabled: fields.birthdayMessagesEnabled,
       expiryRemindersEnabled: fields.expiryRemindersEnabled,
       features: fields.features.filter(f => f.trim()),
@@ -518,11 +518,11 @@ function PlanCard({
 
           <p className="text-sm font-semibold">{plan.maxMembers == null ? 'Miembros ilimitados' : `Hasta ${plan.maxMembers} miembros`}</p>
           <p className="-mt-2 text-[13px] text-adm-muted">
-            {plan.monthlyAnnouncementLimit == null
-              ? 'Avisos a miembros ilimitados'
-              : plan.monthlyAnnouncementLimit === 0
+            {plan.monthlyMessageLimit == null
+              ? 'Mensajes WhatsApp a socios ilimitados'
+              : plan.monthlyMessageLimit === 0
                 ? 'Sin avisos a miembros'
-                : `Hasta ${plan.monthlyAnnouncementLimit} avisos a miembros / mes`}
+                : `Hasta ${plan.monthlyMessageLimit} mensajes WhatsApp a socios / mes`}
           </p>
 
           <ul className="flex flex-col gap-2 text-sm">

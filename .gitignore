@@ -27,3 +27,6 @@ skills-lock.json
 .agents
 # WhatsApp (Meta) message templates — local notes only
 back-1/docs/whatsapp-templates.md
+
+# Project context docs — local only
+contexto/
