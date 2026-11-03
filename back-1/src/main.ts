@@ -30,7 +30,8 @@ async function bootstrap() {
   // Files that aren't on disk come from MinIO
   const storage = app.get(StorageService);
   app.use('/uploads', (req: Request, res: Response, next: NextFunction) => {
-    void storage.serve(req, res, next);
+    // Never let a rejected promise escape: unhandled rejections stop the process
+    storage.serve(req, res, next).catch(next);
   });
 
   const allowedOrigins = (process.env.FRONTEND_URL ?? 'http://localhost:3000')

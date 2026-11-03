@@ -17,6 +17,9 @@ import {
   CreateCommunicationDto,
 } from './dto/communication.dto';
 
+/** Members whose last membership ended longer ago than this don't get announcements */
+const RECENT_MEMBERSHIP_DAYS = 30;
+
 /** Parallel Zernio requests per announcement */
 const CONCURRENCY = 5;
 
@@ -66,17 +69,29 @@ export class CommunicationsService {
     return { start, resetsAt };
   }
 
-  /** Active members of the gym with a phone WhatsApp can reach, deduplicated by number. */
+  /**
+   * Members an announcement may go to: active, with a membership that is current or ended
+   * at most RECENT_MEMBERSHIP_DAYS ago (so numbers typed into bare member records can't be
+   * used to message strangers), and a phone WhatsApp can reach. Deduplicated by number.
+   */
   private async reachableMembers(
     gymId: string,
     country: string | null,
     ids?: string[],
   ) {
+    const since = new Date(Date.now() - RECENT_MEMBERSHIP_DAYS * 86_400_000);
     const members = await this.prisma.member.findMany({
       where: {
         gymId,
         isActive: true,
         phone: { not: null },
+        memberships: {
+          some: {
+            gymId,
+            status: { not: 'CANCELLED' },
+            endDate: { gte: since },
+          },
+        },
         ...(ids?.length && { id: { in: ids } }),
       },
       select: { id: true, firstName: true, phone: true },
@@ -97,14 +112,12 @@ export class CommunicationsService {
     if (!gym) throw new NotFoundException('Gym no encontrado');
     const { start, resetsAt } = this.monthWindow(gym.timezone ?? 'UTC');
     const [used, reachable, activeMembers] = await Promise.all([
-      this.prisma.communication.count({
-        where: { gymId, sentAt: { gte: start } },
-      }),
+      this.messagesUsed(this.prisma, gymId, start),
       this.reachableMembers(gymId, gym.country),
       this.prisma.member.count({ where: { gymId, isActive: true } }),
     ]);
     // No plan row → treat as disabled (safe default)
-    const limit = plan ? plan.monthlyAnnouncementLimit : 0;
+    const limit = plan ? plan.monthlyMessageLimit : 0;
     const remaining = limit === null ? null : Math.max(0, limit - used);
     return {
       limit,
@@ -133,13 +146,22 @@ export class CommunicationsService {
         sentAt: true,
         sentCount: true,
         failedCount: true,
-        recipientIds: true,
+        recipientCount: true,
       },
     });
-    return rows.map(({ recipientIds, ...r }) => ({
-      ...r,
-      recipientCount: recipientIds.length,
-    }));
+  }
+
+  /** WhatsApp messages the gym's announcements used since `start` (one per recipient) */
+  private async messagesUsed(
+    db: Pick<PrismaService, 'communication'>,
+    gymId: string,
+    start: Date,
+  ) {
+    const agg = await db.communication.aggregate({
+      where: { gymId, sentAt: { gte: start } },
+      _sum: { recipientCount: true },
+    });
+    return agg._sum.recipientCount ?? 0;
   }
 
   async sendAnnouncement(
@@ -149,7 +171,7 @@ export class CommunicationsService {
   ) {
     const { gym, plan } = await getGymPlan(this.prisma, gymId);
     if (!gym) throw new NotFoundException('Gym no encontrado');
-    const limit = plan ? plan.monthlyAnnouncementLimit : 0;
+    const limit = plan ? plan.monthlyMessageLimit : 0;
     if (limit === 0) {
       throw new ForbiddenException(
         'Tu plan no incluye avisos a miembros. Mejora tu plan para usarlos.',
@@ -168,7 +190,7 @@ export class CommunicationsService {
     );
     if (!members.length) {
       throw new BadRequestException(
-        'Ningún miembro activo tiene un número de WhatsApp válido',
+        'Ningún miembro con membresía vigente tiene un número de WhatsApp válido',
       );
     }
 
@@ -179,12 +201,13 @@ export class CommunicationsService {
     const record = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${gymId}))`;
       if (limit !== null) {
-        const used = await tx.communication.count({
-          where: { gymId, sentAt: { gte: start } },
-        });
-        if (used >= limit) {
+        const used = await this.messagesUsed(tx, gymId, start);
+        const remaining = Math.max(0, limit - used);
+        if (members.length > remaining) {
           throw new ForbiddenException(
-            `Límite mensual de avisos alcanzado (${used}/${limit}). Se reinicia el próximo mes.`,
+            remaining === 0
+              ? `Límite mensual de mensajes alcanzado (${used}/${limit}). Se reinicia el próximo mes.`
+              : `Este aviso necesita ${members.length} mensajes y te quedan ${remaining} este mes.`,
           );
         }
       }
@@ -195,6 +218,7 @@ export class CommunicationsService {
           body: dto.body,
           type,
           recipientIds: members.map((m) => m.id),
+          recipientCount: members.length,
           sentById: userId ?? null,
           sentAt: new Date(),
         },

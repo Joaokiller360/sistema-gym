@@ -13,6 +13,7 @@ import { StorageService } from '../storage/storage.service';
 import {
   WhatsappService,
   type WaTemplate,
+  gymIdForPhone,
   normalizePhone,
   parseWhatsapp,
 } from '../notifications/whatsapp.service';
@@ -518,10 +519,7 @@ export class CrmService {
     const phone = parseWhatsapp(dto.phone)!;
     const alias = dto.name?.trim() || undefined;
     // Might be a customer already: link the gym like an inbound message would
-    const gym = await this.prisma.gym.findFirst({
-      where: { whatsappPhone: phone },
-      select: { id: true },
-    });
+    const gymId = await gymIdForPhone(this.prisma, phone);
     const existing = await this.prisma.waConversation.findUnique({
       where: { phone },
       select: { id: true, alias: true },
@@ -536,7 +534,7 @@ export class CrmService {
       return { id: existing.id };
     }
     return this.prisma.waConversation.create({
-      data: { phone, alias, gymId: gym?.id, status: 'PENDING' },
+      data: { phone, alias, gymId, status: 'PENDING' },
       select: { id: true },
     });
   }
@@ -1296,12 +1294,7 @@ export class CrmService {
               externalId: m.conversationId,
               // We wrote first: the ball is on their side
               status: 'PENDING',
-              gymId: (
-                await this.prisma.gym.findFirst({
-                  where: { whatsappPhone: phone },
-                  select: { id: true },
-                })
-              )?.id,
+              gymId: await gymIdForPhone(this.prisma, phone),
             },
             update: {},
             select: { id: true, status: true },
@@ -1391,14 +1384,7 @@ export class CrmService {
       where: { phone },
       select: { id: true, gymId: true, externalId: true },
     });
-    const gymId =
-      existing?.gymId ??
-      (
-        await this.prisma.gym.findFirst({
-          where: { whatsappPhone: phone },
-          select: { id: true },
-        })
-      )?.id;
+    const gymId = existing?.gymId ?? (await gymIdForPhone(this.prisma, phone));
 
     const conv = await this.prisma.waConversation.upsert({
       where: { phone },

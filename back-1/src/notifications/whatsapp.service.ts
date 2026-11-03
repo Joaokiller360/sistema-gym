@@ -683,12 +683,7 @@ export class WhatsappService {
             phone,
             // We wrote first: the ball is on the gym's side
             status: 'PENDING',
-            gymId: (
-              await this.prisma.gym.findFirst({
-                where: { whatsappPhone: phone },
-                select: { id: true },
-              })
-            )?.id,
+            gymId: await gymIdForPhone(this.prisma, phone),
           },
           select: { id: true },
         })
@@ -729,6 +724,24 @@ export class WhatsappService {
       },
     });
   }
+}
+
+/**
+ * The gym a WhatsApp number belongs to, for auto-linking chats. `Gym.whatsappPhone` is
+ * set by each owner and isn't unique: when more than one gym claims the number, none is
+ * linked (an owner could otherwise put another contact's number on their gym and have
+ * that contact's chat shown as theirs). The team can still link it by hand in the CRM.
+ */
+export async function gymIdForPhone(
+  prisma: PrismaService,
+  phone: string,
+): Promise<string | undefined> {
+  const gyms = await prisma.gym.findMany({
+    where: { whatsappPhone: phone },
+    select: { id: true },
+    take: 2,
+  });
+  return gyms.length === 1 ? gyms[0].id : undefined;
 }
 
 /** Meta wants the full international number, digits only (no +, spaces or dashes). */

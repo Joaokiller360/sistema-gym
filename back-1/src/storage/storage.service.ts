@@ -196,7 +196,13 @@ export class StorageService implements OnApplicationBootstrap {
     if (!this.enabled || (req.method !== 'GET' && req.method !== 'HEAD')) {
       return next();
     }
-    const key = decodeURIComponent(req.path.replace(/^\//, ''));
+    let key: string;
+    try {
+      key = decodeURIComponent(req.path.replace(/^\//, ''));
+    } catch {
+      // Malformed percent-encoding (e.g. /uploads/%E0): not one of our keys
+      return next();
+    }
     if (!KEY_RE.test(key)) return next();
 
     try {
