@@ -1,9 +1,12 @@
 import { Module } from '@nestjs/common';
 import { SuperAdminController } from './super-admin.controller';
 import { SuperAdminService } from './super-admin.service';
+import { MessagePacksAdminController } from './message-packs.controller';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  controllers: [SuperAdminController],
+  imports: [NotificationsModule],
+  controllers: [SuperAdminController, MessagePacksAdminController],
   providers: [SuperAdminService],
   // The CRM creates gym accounts from a chat
   exports: [SuperAdminService],

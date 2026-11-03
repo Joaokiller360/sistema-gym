@@ -10,6 +10,7 @@ export async function getGymPlan(prisma: PrismaService, gymId: string) {
       timezone: true,
       country: true,
       subscriptionPlan: true,
+      whatsappPhone: true,
     },
   });
   if (!gym) return { gym: null, plan: null };

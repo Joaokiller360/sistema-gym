@@ -7,6 +7,7 @@ import { startOfDayUTC, endOfDayUTC } from '../common/utils/timezone.util';
 import { getPlanFlagsByKey } from '../common/utils/subscription-plan.util';
 import { WalletPassService } from '../wallet/wallet-pass.service';
 import { WhatsappService } from '../notifications/whatsapp.service';
+import { MessageQuotaService } from '../notifications/message-quota.service';
 import { TEMPLATES } from '../notifications/whatsapp-templates';
 import { mapLimit, memberWhatsapp } from '../notifications/member-phone.util';
 
@@ -18,6 +19,7 @@ export class MembershipsService {
     private readonly prisma: PrismaService,
     private readonly passes: WalletPassService,
     private readonly whatsapp: WhatsappService,
+    private readonly quota: MessageQuotaService,
   ) {}
 
   /** Refresh the member's Wallet pass after a membership change (best-effort, not awaited). */
@@ -444,6 +446,7 @@ export class MembershipsService {
         firstName: true,
         phone: true,
         birthDate: true,
+        gymId: true,
         gym: { select: { name: true, timezone: true, country: true, subscriptionPlan: true } },
       },
     });
@@ -463,14 +466,17 @@ export class MembershipsService {
 
     let sent = 0;
     let skipped = 0;
+    let noBalance = 0;
     await mapLimit(todayBirthdays, 5, async (m) => {
       const to = memberWhatsapp(m.phone, m.gym.country);
       if (!to) return skipped++;
+      // Each greeting uses 1 message of the gym's monthly balance; none left → paused
+      if (!(await this.quota.consume(m.gymId, 1, 'BIRTHDAY'))) return noBalance++;
       const res = await this.whatsapp.sendMemberTemplate(to, TEMPLATES.memberBirthday, [m.firstName, m.gym.name]);
       if (res.ok) sent++;
       else this.logger.error(`[Birthday] WhatsApp to ${to} failed: ${res.error}`);
     });
-    this.logger.log(`[Birthday] Sent ${sent}/${todayBirthdays.length} WhatsApp greeting(s), ${skipped} without valid phone`);
+    this.logger.log(`[Birthday] Sent ${sent}/${todayBirthdays.length} WhatsApp greeting(s), ${skipped} without valid phone, ${noBalance} without message balance`);
   }
 
   // ── Cron: membership expiry reminders (daily 9 AM UTC) ───
@@ -528,10 +534,12 @@ export class MembershipsService {
 
     let sent = 0;
     let skipped = 0;
+    let noBalance = 0;
     await mapLimit(target, 5, async (ms) => {
       const gym = gymMap.get(ms.gymId)!;
       const to = memberWhatsapp(ms.member.phone, gym.country);
       if (!to) return skipped++;
+      if (!(await this.quota.consume(ms.gymId, 1, 'EXPIRY'))) return noBalance++;
       const tz = gym.timezone ?? 'UTC';
       const endDate = ms.endDate.toLocaleDateString('es', { timeZone: tz, day: 'numeric', month: 'long' });
       const res = await this.whatsapp.sendMemberTemplate(to, TEMPLATES.memberExpiry, [
@@ -543,6 +551,6 @@ export class MembershipsService {
       if (res.ok) sent++;
       else this.logger.error(`[ExpiryReminder] WhatsApp to ${to} failed: ${res.error}`);
     });
-    this.logger.log(`[ExpiryReminder] Sent ${sent}/${target.length} WhatsApp reminder(s), ${skipped} without valid phone`);
+    this.logger.log(`[ExpiryReminder] Sent ${sent}/${target.length} WhatsApp reminder(s), ${skipped} without valid phone, ${noBalance} without message balance`);
   }
 }

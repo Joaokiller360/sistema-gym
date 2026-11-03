@@ -40,3 +40,15 @@ export class CreateCommunicationDto {
   @IsUUID('4', { each: true, message: 'Uno o más recipientIds son inválidos' })
   recipientIds?: string[];
 }
+
+export class TestAnnouncementDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(60)
+  subject: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(700)
+  body: string;
+}

@@ -59,13 +59,15 @@ export class GymsService {
     if (!gym) throw new NotFoundException('Gym not found');
     const subscriptionPlan = await this.prisma.subscriptionPlan.findUnique({
       where: { key: gym.subscriptionPlan },
-      select: { storeEnabled: true, advancedReportsEnabled: true, demoEnabled: true, monthlyMessageLimit: true },
+      select: { storeEnabled: true, advancedReportsEnabled: true, demoEnabled: true, monthlyMessageLimit: true, messagePacksEnabled: true },
     });
     const storeEnabled = subscriptionPlan?.storeEnabled ?? false;
     const advancedReportsEnabled = gym.advancedReportsEnabled || (subscriptionPlan?.advancedReportsEnabled ?? false);
     const demoEnabled = subscriptionPlan?.demoEnabled ?? false;
-    // null = unlimited, 0 = disabled; missing plan row → disabled
-    const announcementsEnabled = subscriptionPlan ? subscriptionPlan.monthlyMessageLimit !== 0 : false;
+    // null = unlimited, 0 = none included (still usable with message packs); missing plan row → disabled
+    const announcementsEnabled = subscriptionPlan
+      ? subscriptionPlan.monthlyMessageLimit !== 0 || subscriptionPlan.messagePacksEnabled
+      : false;
     return { ...gym, storeEnabled, advancedReportsEnabled, demoEnabled, announcementsEnabled };
   }
 

@@ -115,6 +115,8 @@ model Gym {
   whatsappPhone           String?
   /// Highest member-limit threshold (%) already alerted; reset when usage drops
   memberLimitAlertLevel   Int                   @default(0)
+  /// WhatsApp messages left from one-time packs; used after the plan's monthly allowance, never expire
+  messageCredits          Int                   @default(0)
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @updatedAt
 
@@ -139,6 +141,8 @@ model Gym {
   memberCredits      MemberProductCredit[]
   supportTickets     SupportTicket[]
   waConversations    WaConversation[]
+  messagePurchases   MessagePackPurchase[]
+  messageUsage       MessageUsage[]
 
   @@map("gyms")
 }
@@ -525,6 +529,8 @@ model SubscriptionPlan {
   monthlyMessageLimit     Int?     @default(0)
   birthdayMessagesEnabled Boolean  @default(true)
   expiryRemindersEnabled  Boolean  @default(true)
+  /// Gyms on this plan can buy message packs once the monthly allowance runs out; false = sending just stops
+  messagePacksEnabled     Boolean  @default(true)
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
@@ -921,4 +927,92 @@ model WaMessage {
 
   @@index([conversationId, createdAt])
   @@map("wa_messages")
+}
+
+enum MessagePackBilling {
+  ONCE
+  MONTHLY
+}
+
+enum MessagePurchaseStatus {
+  PENDING
+  ACTIVE
+  CANCELLED
+  REJECTED
+}
+
+/// Extra WhatsApp messages the platform sells to gyms
+model MessagePack {
+  id        String             @id @default(uuid())
+  name      String
+  messages  Int
+  /// Cents
+  price     Int
+  currency  String             @default("USD")
+  /// ONCE adds credits that never expire; MONTHLY adds to the allowance every month while active
+  billing   MessagePackBilling @default(ONCE)
+  /// Subscription plan keys that can buy it
+  planKeys  String[]           @default([])
+  isActive  Boolean            @default(true)
+  sortOrder Int                @default(0)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  purchases MessagePackPurchase[]
+
+  @@map("message_packs")
+}
+
+/// A gym asking for a pack. Billing is manual: messages are added when the super-admin marks it paid.
+model MessagePackPurchase {
+  id            String                @id @default(uuid())
+  /// Copied from the pack so later edits don't change what was bought
+  name          String
+  messages      Int
+  price         Int
+  currency      String                @default("USD")
+  billing       MessagePackBilling
+  status        MessagePurchaseStatus @default(PENDING)
+  method        PaymentMethod?
+  requestedById String?
+  paidAt        DateTime?
+  cancelledAt   DateTime?
+  createdAt     DateTime              @default(now())
+
+  gymId  String
+  gym    Gym          @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  packId String?
+  pack   MessagePack? @relation(fields: [packId], references: [id], onDelete: SetNull)
+
+  @@index([gymId, status])
+  @@index([status])
+  @@map("message_pack_purchases")
+}
+
+/// Every WhatsApp message a gym sends to its members, for the monthly quota
+model MessageUsage {
+  id          String   @id @default(uuid())
+  /// ANNOUNCEMENT | BIRTHDAY | EXPIRY | TEST
+  kind        String
+  count       Int
+  /// Part of `count` paid with one-time pack credits
+  fromCredits Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  gymId String
+  gym   Gym    @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@index([gymId, createdAt])
+  @@index([createdAt])
+  @@map("message_usage")
+}
+
+/// Admin-only messaging settings (kept out of the public platform settings)
+model MessagingConfig {
+  id             String   @id @default("1")
+  /// What the WhatsApp provider charges per message, in USD
+  costPerMessage Float    @default(0)
+  updatedAt      DateTime @updatedAt
+
+  @@map("messaging_config")
 }

@@ -7,14 +7,18 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { startOfDayUTC } from '../common/utils/timezone.util';
 import { getGymPlan } from '../common/utils/subscription-plan.util';
-import { WhatsappService } from '../notifications/whatsapp.service';
+import {
+  WhatsappService,
+  normalizePhone,
+} from '../notifications/whatsapp.service';
+import { MessageQuotaService } from '../notifications/message-quota.service';
 import { TEMPLATES, templateParam } from '../notifications/whatsapp-templates';
 import { mapLimit, memberWhatsapp } from '../notifications/member-phone.util';
 import {
   AnnouncementType,
   CreateCommunicationDto,
+  TestAnnouncementDto,
 } from './dto/communication.dto';
 
 /** Members whose last membership ended longer ago than this don't get announcements */
@@ -30,6 +34,7 @@ export class CommunicationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly whatsapp: WhatsappService,
+    private readonly quota: MessageQuotaService,
   ) {}
 
   // ── Inbox: super-admin → gym owner ─────────────────────────
@@ -58,17 +63,6 @@ export class CommunicationsService {
   }
 
   // ── Announcements: gym → members (WhatsApp via Zernio) ─────
-  private monthWindow(timezone: string, now = new Date()) {
-    const local = now.toLocaleDateString('en-CA', { timeZone: timezone }); // YYYY-MM-DD
-    const [y, m] = local.split('-').map(Number);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const start = startOfDayUTC(`${y}-${pad(m)}-01`, timezone);
-    const nextY = m === 12 ? y + 1 : y;
-    const nextM = m === 12 ? 1 : m + 1;
-    const resetsAt = startOfDayUTC(`${nextY}-${pad(nextM)}-01`, timezone);
-    return { start, resetsAt };
-  }
-
   /**
    * Members an announcement may go to: active, with a membership that is current or ended
    * at most RECENT_MEMBERSHIP_DAYS ago (so numbers typed into bare member records can't be
@@ -110,22 +104,31 @@ export class CommunicationsService {
   async getAnnouncementQuota(gymId: string) {
     const { gym, plan } = await getGymPlan(this.prisma, gymId);
     if (!gym) throw new NotFoundException('Gym no encontrado');
-    const { start, resetsAt } = this.monthWindow(gym.timezone ?? 'UTC');
-    const [used, reachable, activeMembers] = await Promise.all([
-      this.messagesUsed(this.prisma, gymId, start),
+    const [balance, reachable, activeMembers] = await Promise.all([
+      this.quota.balance(gymId),
       this.reachableMembers(gymId, gym.country),
       this.prisma.member.count({ where: { gymId, isActive: true } }),
     ]);
-    // No plan row → treat as disabled (safe default)
-    const limit = plan ? plan.monthlyMessageLimit : 0;
-    const remaining = limit === null ? null : Math.max(0, limit - used);
+    const b = balance!;
     return {
-      limit,
-      used,
-      remaining,
-      resetsAt,
-      enabled: limit === null || limit > 0,
+      /** Plan's monthly messages (null = unlimited, 0 = none) */
+      limit: b.planLimit,
+      /** Added every month by active monthly packs */
+      monthlyExtra: b.monthlyExtra,
+      /** One-time pack messages left (never expire) */
+      credits: b.credits,
+      used: b.used,
+      /** Everything the gym can still send this month; null = unlimited */
+      remaining: b.remaining,
+      resetsAt: b.resetsAt,
+      enabled:
+        b.remaining === null ||
+        b.remaining > 0 ||
+        b.planLimit !== 0 ||
+        b.packsEnabled,
+      packsEnabled: b.packsEnabled,
       whatsappReady: this.whatsapp.enabled,
+      ownerPhoneSet: !!gym.whatsappPhone,
       activeRecipients: reachable.length,
       membersWithoutPhone: activeMembers - reachable.length,
       birthdayMessagesEnabled: plan?.birthdayMessagesEnabled ?? true,
@@ -149,19 +152,7 @@ export class CommunicationsService {
         recipientCount: true,
       },
     });
-  }
-
-  /** WhatsApp messages the gym's announcements used since `start` (one per recipient) */
-  private async messagesUsed(
-    db: Pick<PrismaService, 'communication'>,
-    gymId: string,
-    start: Date,
-  ) {
-    const agg = await db.communication.aggregate({
-      where: { gymId, sentAt: { gte: start } },
-      _sum: { recipientCount: true },
-    });
-    return agg._sum.recipientCount ?? 0;
+    return rows;
   }
 
   async sendAnnouncement(
@@ -171,8 +162,10 @@ export class CommunicationsService {
   ) {
     const { gym, plan } = await getGymPlan(this.prisma, gymId);
     if (!gym) throw new NotFoundException('Gym no encontrado');
-    const limit = plan ? plan.monthlyMessageLimit : 0;
-    if (limit === 0) {
+    if (
+      !plan ||
+      (plan.monthlyMessageLimit === 0 && !plan.messagePacksEnabled)
+    ) {
       throw new ForbiddenException(
         'Tu plan no incluye avisos a miembros. Mejora tu plan para usarlos.',
       );
@@ -194,40 +187,92 @@ export class CommunicationsService {
       );
     }
 
-    const { start } = this.monthWindow(gym.timezone ?? 'UTC');
     const type: AnnouncementType = dto.type ?? 'GENERAL';
 
-    // Serialize per gym so two concurrent sends can't both pass the quota check
-    const record = await this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${gymId}))`;
-      if (limit !== null) {
-        const used = await this.messagesUsed(tx, gymId, start);
-        const remaining = Math.max(0, limit - used);
-        if (members.length > remaining) {
-          throw new ForbiddenException(
-            remaining === 0
-              ? `Límite mensual de mensajes alcanzado (${used}/${limit}). Se reinicia el próximo mes.`
-              : `Este aviso necesita ${members.length} mensajes y te quedan ${remaining} este mes.`,
-          );
-        }
-      }
-      return tx.communication.create({
-        data: {
-          gymId,
-          subject: dto.subject,
-          body: dto.body,
-          type,
-          recipientIds: members.map((m) => m.id),
-          recipientCount: members.length,
-          sentById: userId ?? null,
-          sentAt: new Date(),
-        },
-      });
-    });
+    // The quota check and the announcement are saved together, serialized per gym
+    const done = await this.quota.consume(
+      gymId,
+      members.length,
+      'ANNOUNCEMENT',
+      (tx) =>
+        tx.communication.create({
+          data: {
+            gymId,
+            subject: dto.subject,
+            body: dto.body,
+            type,
+            recipientIds: members.map((m) => m.id),
+            recipientCount: members.length,
+            sentById: userId ?? null,
+            sentAt: new Date(),
+          },
+        }),
+    );
+    if (!done) {
+      const b = await this.quota.balance(gymId);
+      const left = b?.remaining ?? 0;
+      throw new ForbiddenException(
+        left === 0
+          ? 'No te quedan mensajes este mes. Compra un pack o espera al próximo mes.'
+          : `Este aviso necesita ${members.length} mensajes y te quedan ${left}. Compra un pack para enviarlo.`,
+      );
+    }
+    const record = done.result!;
 
     void this.deliver(record.id, gym.name, dto.subject, dto.body, members);
 
     return { id: record.id, recipientCount: members.length, status: 'SENDING' };
+  }
+
+  /** Sends the announcement to the gym's own WhatsApp (1 message from the balance) */
+  async sendTest(gymId: string, dto: TestAnnouncementDto) {
+    const gym = await this.prisma.gym.findUnique({
+      where: { id: gymId },
+      select: {
+        name: true,
+        whatsappPhone: true,
+        owner: { select: { name: true } },
+      },
+    });
+    if (!gym) throw new NotFoundException('Gym no encontrado');
+    if (!this.whatsapp.enabled) {
+      throw new ServiceUnavailableException(
+        'WhatsApp no está configurado en el servidor',
+      );
+    }
+    const to = normalizePhone(gym.whatsappPhone);
+    if (!to) {
+      throw new BadRequestException(
+        'Tu gimnasio no tiene un WhatsApp con código de país cargado. Pídele a soporte que lo agregue.',
+      );
+    }
+    const done = await this.quota.consume(gymId, 1, 'TEST');
+    if (!done) {
+      throw new ForbiddenException(
+        'No te quedan mensajes este mes para enviar la prueba.',
+      );
+    }
+    const res = await this.whatsapp.sendMemberTemplate(
+      to,
+      TEMPLATES.memberAnnouncement,
+      [
+        templateParam(gym.owner?.name?.split(' ')[0] || 'equipo', 40),
+        templateParam(gym.name, 60),
+        templateParam(dto.subject, 60),
+        templateParam(dto.body, 700),
+      ],
+    );
+    if (!res.ok) {
+      this.logger.warn(`[AnnouncementTest] ${gymId} failed: ${res.error}`);
+      throw new ServiceUnavailableException(
+        'No se pudo enviar la prueba. Intenta de nuevo en unos minutos.',
+      );
+    }
+    return {
+      ok: true,
+      to: `+${to.slice(0, -4).replace(/\d/g, '•')}${to.slice(-4)}`,
+      remaining: done.remaining,
+    };
   }
 
   private async deliver(
