@@ -142,6 +142,11 @@ export class MessagePacksAdminController {
 
   @Patch('purchases/:id/cancel')
   cancel(@Param('id', ParseUUIDPipe) id: string) {
-    return this.packs.cancelMonthly(id);
+    return this.packs.cancel(id);
+  }
+
+  @Delete('purchases/:id')
+  deletePurchase(@Param('id', ParseUUIDPipe) id: string) {
+    return this.packs.deletePurchase(id);
   }
 }

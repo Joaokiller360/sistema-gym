@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PaymentMethod, Prisma } from '@prisma/client';
+import { MessagePurchaseStatus, PaymentMethod, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface MessagePackInput {
@@ -238,10 +238,32 @@ export class MessagePacksService {
   }
 
   // ── Requests (super-admin) ────────────────────────────────
+  /** status=PAID lists the sales that count as income (same rule as summary), for the income page */
   listPurchases(status?: string) {
+    if (status === 'PAID') {
+      return this.prisma.messagePackPurchase.findMany({
+        where: {
+          paidAt: { not: null },
+          // A voided one-time pack was refunded; a cancelled monthly one was still paid
+          OR: [
+            { status: 'ACTIVE' },
+            { status: 'CANCELLED', billing: 'MONTHLY' },
+          ],
+        },
+        orderBy: { paidAt: 'desc' },
+        take: 2000,
+        select: {
+          ...PURCHASE_SELECT,
+          gym: { select: { id: true, name: true, slug: true } },
+        },
+      });
+    }
     const valid = ['PENDING', 'ACTIVE', 'CANCELLED', 'REJECTED'];
     return this.prisma.messagePackPurchase.findMany({
-      where: status && valid.includes(status) ? { status: status as any } : {},
+      where:
+        status && valid.includes(status)
+          ? { status: status as MessagePurchaseStatus }
+          : {},
       orderBy: { createdAt: 'desc' },
       take: 200,
       select: {
@@ -310,6 +332,70 @@ export class MessagePacksService {
     });
   }
 
+  /**
+   * Voids a sale. Pending → rejected; monthly → stops adding messages;
+   * one-time → takes back the credits the gym hasn't used yet.
+   */
+  async cancel(id: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const p = await this.lockPurchase(tx, id);
+      if (p.status !== 'PENDING' && p.status !== 'ACTIVE')
+        throw new BadRequestException('Esta venta ya está anulada');
+      const removedCredits =
+        p.status === 'ACTIVE' ? await this.takeBackCredits(tx, p) : 0;
+      await tx.messagePackPurchase.update({
+        where: { id },
+        data: {
+          status: p.status === 'PENDING' ? 'REJECTED' : 'CANCELLED',
+          cancelledAt: new Date(),
+        },
+      });
+      return { ok: true, removedCredits };
+    });
+  }
+
+  /** Erases a sale (e.g. entered by mistake). An active one is voided first. */
+  async deletePurchase(id: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const p = await this.lockPurchase(tx, id);
+      const removedCredits =
+        p.status === 'ACTIVE' ? await this.takeBackCredits(tx, p) : 0;
+      await tx.messagePackPurchase.delete({ where: { id } });
+      return { ok: true, removedCredits };
+    });
+  }
+
+  /** Same lock as quota consumption, so credits can't be spent while we take them back */
+  private async lockPurchase(tx: Prisma.TransactionClient, id: string) {
+    const found = await tx.messagePackPurchase.findUnique({
+      where: { id },
+      select: { gymId: true },
+    });
+    if (!found) throw new NotFoundException('Venta no encontrada');
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'quota:' + found.gymId}))`;
+    return tx.messagePackPurchase.findUniqueOrThrow({ where: { id } });
+  }
+
+  /** One-time packs gave credits: remove them, but only what is left (never below 0) */
+  private async takeBackCredits(
+    tx: Prisma.TransactionClient,
+    p: { billing: string; messages: number; gymId: string },
+  ) {
+    if (p.billing !== 'ONCE') return 0;
+    const gym = await tx.gym.findUniqueOrThrow({
+      where: { id: p.gymId },
+      select: { messageCredits: true },
+    });
+    const take = Math.min(p.messages, Math.max(gym.messageCredits, 0));
+    if (take > 0) {
+      await tx.gym.update({
+        where: { id: p.gymId },
+        data: { messageCredits: { decrement: take } },
+      });
+    }
+    return take;
+  }
+
   // ── Cost & usage (super-admin) ────────────────────────────
   async getConfig() {
     return this.prisma.messagingConfig.upsert({
@@ -345,7 +431,11 @@ export class MessagePacksService {
       this.prisma.messagePackPurchase.aggregate({
         where: {
           paidAt: { gte: start },
-          status: { in: ['ACTIVE', 'CANCELLED'] },
+          // A voided one-time pack was refunded; a cancelled monthly one was still paid
+          OR: [
+            { status: 'ACTIVE' },
+            { status: 'CANCELLED', billing: 'MONTHLY' },
+          ],
         },
         _sum: { price: true },
       }),

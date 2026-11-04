@@ -12,7 +12,7 @@ async function getToken() {
 
 export async function updateSubscriptionPlanAction(
   id: string,
-  data: { label?: string; price?: string | number; currency?: string; maxMembers?: number | null; storeEnabled?: boolean; demoEnabled?: boolean; trialEnabled?: boolean; advancedReportsEnabled?: boolean; visibleOnLanding?: boolean; features?: string[]; isActive?: boolean },
+  data: { label?: string; price?: string | number; currency?: string; maxMembers?: number | null; storeEnabled?: boolean; demoEnabled?: boolean; trialEnabled?: boolean; advancedReportsEnabled?: boolean; visibleOnLanding?: boolean; monthlyMessageLimit?: number | null; messagePacksEnabled?: boolean; birthdayMessagesEnabled?: boolean; expiryRemindersEnabled?: boolean; features?: string[]; isActive?: boolean },
   planKey?: string,
 ): Promise<{ error?: string }> {
   const token = await getToken()
@@ -26,6 +26,7 @@ export async function updateSubscriptionPlanAction(
   })
   if (!result) return { error: 'Error al actualizar el plan' }
   updateTag('admin-subscription-plans')
+  updateTag('admin-messaging')
   if (planKey) {
     const gyms = await apiFetch<{ data: { slug: string; subscriptionPlan: string }[] } | { slug: string; subscriptionPlan: string }[]>(
       '/admin/gyms?limit=1000',
@@ -40,7 +41,7 @@ export async function updateSubscriptionPlanAction(
 }
 
 export async function createSubscriptionPlanAction(
-  data: { key: string; label: string; price: string | number; currency: string; maxMembers?: number | null; storeEnabled?: boolean; demoEnabled?: boolean; trialEnabled?: boolean; advancedReportsEnabled?: boolean; visibleOnLanding?: boolean; monthlyMessageLimit?: number | null; birthdayMessagesEnabled?: boolean; expiryRemindersEnabled?: boolean; features?: string[]; yearlyPrice?: number | null; discountPercent?: number; discountActive?: boolean },
+  data: { key: string; label: string; price: string | number; currency: string; maxMembers?: number | null; storeEnabled?: boolean; demoEnabled?: boolean; trialEnabled?: boolean; advancedReportsEnabled?: boolean; visibleOnLanding?: boolean; monthlyMessageLimit?: number | null; messagePacksEnabled?: boolean; birthdayMessagesEnabled?: boolean; expiryRemindersEnabled?: boolean; features?: string[]; yearlyPrice?: number | null; discountPercent?: number; discountActive?: boolean },
 ): Promise<{ error?: string }> {
   const token = await getToken()
   const result = await apiFetch('/admin/subscription-plans', token, {

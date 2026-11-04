@@ -15,6 +15,7 @@ import {
   planPrice,
   type GymWithBilling,
   type Money,
+  type PackSale,
   type SubscriptionPlanPrice,
 } from '@/lib/admin-billing'
 import { EmptyState, GymMark, Meter, PageHeader, Panel, Pill, Stat, btn, chip, field, td, th, type Tone } from '@/components/admin/ui'
@@ -28,12 +29,29 @@ const METHODS = [
 
 type Method = (typeof METHODS)[number]['value']
 type Period = 'month' | 'prev' | 'all'
+type Kind = 'all' | 'SUBSCRIPTION' | 'PACK'
+
+/** A subscription payment or a message pack sale, shown in one list */
+interface Tx {
+  id: string
+  kind: 'SUBSCRIPTION' | 'PACK'
+  date: string
+  gym: { name: string }
+  concept: string
+  period: string
+  method: string | null
+  notes: string
+  currency: string
+  amount: number
+}
 
 const TX_PAGE = 15
 
 interface Stats {
   monthly: Money | null
   monthDelta: number | null
+  /** Pack sales included in `monthly` (same currency) */
+  monthPacks: number
   daily: Money | null
   dailyCount: number
   dueSoon: Money | null
@@ -158,12 +176,14 @@ function PaymentDialog({
 export function IncomeClient({
   gyms,
   subPlans,
+  packSales,
   stats,
   monthName,
   prevMonthName,
 }: {
   gyms: GymWithBilling[]
   subPlans: SubscriptionPlanPrice[]
+  packSales: PackSale[]
   stats: Stats
   monthName: string
   prevMonthName: string
@@ -172,6 +192,7 @@ export function IncomeClient({
   const openPay = (gymId: string | null) => setPayFor(p => ({ open: true, gymId, key: p.key + 1 }))
 
   const [period, setPeriod] = useState<Period>('month')
+  const [kind, setKind] = useState<Kind>('all')
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(1)
 
@@ -196,12 +217,36 @@ export function IncomeClient({
       .sort((a, b) => (a.late === b.late ? a.days - b.days : a.late ? -1 : 1))
   }, [gyms, subPlans])
 
-  // All transactions, flattened
-  const transactions = useMemo(() => {
-    return gyms
-      .flatMap(g => g.billing.map(b => ({ ...b, gym: g })))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-  }, [gyms])
+  // All transactions (subscription payments + pack sales), newest first
+  const transactions = useMemo<Tx[]>(() => {
+    const subs: Tx[] = gyms.flatMap(g => g.billing.map(b => ({
+      id: b.id,
+      kind: 'SUBSCRIPTION' as const,
+      date: b.createdAt,
+      gym: g,
+      concept: `Plan ${planLabel(g.subscription?.subscriptionPlan ?? g.subscriptionPlan)}`,
+      period: b.periodStart && b.periodEnd ? `${fmtShort(b.periodStart)} → ${fmtShort(b.periodEnd)}` : '—',
+      method: b.method ?? null,
+      notes: b.notes ?? '',
+      currency: b.currency,
+      amount: parseFloat(b.amount) || 0,
+    })))
+    const packs: Tx[] = packSales.map(s => ({
+      id: s.id,
+      kind: 'PACK' as const,
+      date: s.paidAt,
+      gym: s.gym,
+      concept: `Pack ${s.name}`,
+      period: s.billing === 'MONTHLY' ? 'Mensual' : 'Único',
+      method: s.method,
+      notes: `${s.messages.toLocaleString('es-AR')} mensajes WhatsApp${s.billing === 'MONTHLY' ? ' / mes' : ''}`,
+      currency: s.currency,
+      amount: Number(s.price) || 0,
+    }))
+    return [...subs, ...packs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    // planLabel only depends on subPlans
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gyms, packSales, subPlans])
 
   const now = new Date()
   const range: Record<Period, [Date, Date] | null> = {
@@ -211,12 +256,15 @@ export function IncomeClient({
   }
   const r = range[period]
   const q = query.trim().toLowerCase()
+  const inPeriod = (iso: string) => {
+    if (!r) return true
+    const d = new Date(iso)
+    return d >= r[0] && d <= r[1]
+  }
   const filteredTx = transactions.filter(t => {
-    if (r) {
-      const d = new Date(t.createdAt)
-      if (d < r[0] || d > r[1]) return false
-    }
-    return !q || t.gym.name.toLowerCase().includes(q) || (t.notes ?? '').toLowerCase().includes(q)
+    if (kind !== 'all' && t.kind !== kind) return false
+    if (!inPeriod(t.date)) return false
+    return !q || t.gym.name.toLowerCase().includes(q) || t.notes.toLowerCase().includes(q) || t.concept.toLowerCase().includes(q)
   })
   const totalPages = Math.max(1, Math.ceil(filteredTx.length / TX_PAGE))
   const currentPage = Math.min(page, totalPages)
@@ -226,16 +274,18 @@ export function IncomeClient({
   const byMethod = (() => {
     const totals: Record<string, Record<string, number>> = {}
     for (const g of gyms) {
-      const recs = dedupeBilling(g.billing.filter(b => {
-        if (!r) return true
-        const d = new Date(b.createdAt)
-        return d >= r[0] && d <= r[1]
-      }))
+      const recs = dedupeBilling(g.billing.filter(b => inPeriod(b.createdAt)))
       for (const b of recs) {
         const m = b.method ?? 'OTHER'
         totals[b.currency] ??= {}
         totals[b.currency][m] = (totals[b.currency][m] ?? 0) + (parseFloat(b.amount) || 0)
       }
+    }
+    for (const s of packSales) {
+      if (!inPeriod(s.paidAt)) continue
+      const m = s.method ?? 'OTHER'
+      totals[s.currency] ??= {}
+      totals[s.currency][m] = (totals[s.currency][m] ?? 0) + (Number(s.price) || 0)
     }
     const [currency, perMethod] = Object.entries(totals).sort(
       (a, b) => Object.values(b[1]).reduce((x, y) => x + y, 0) - Object.values(a[1]).reduce((x, y) => x + y, 0),
@@ -252,23 +302,23 @@ export function IncomeClient({
 
   const periodTotal = (() => {
     const byCur: Record<string, number> = {}
-    for (const t of filteredTx) byCur[t.currency] = (byCur[t.currency] ?? 0) + (parseFloat(t.amount) || 0)
+    for (const t of filteredTx) byCur[t.currency] = (byCur[t.currency] ?? 0) + t.amount
     return Object.entries(byCur).sort((a, b) => b[1] - a[1])[0]
   })()
 
   function exportCsv() {
-    const header = ['Fecha', 'Gimnasio', 'Plan', 'Periodo desde', 'Periodo hasta', 'Metodo', 'Nota', 'Moneda', 'Monto']
+    const header = ['Fecha', 'Gimnasio', 'Tipo', 'Concepto', 'Periodo', 'Metodo', 'Nota', 'Moneda', 'Monto']
     const esc = (v: string) => `"${v.replace(/"/g, '""')}"`
     const lines = filteredTx.map(t => [
-      fmtDate(t.createdAt),
+      fmtDate(t.date),
       t.gym.name,
-      planLabel(t.gym.subscription?.subscriptionPlan ?? t.gym.subscriptionPlan),
-      t.periodStart ? fmtDate(t.periodStart) : '',
-      t.periodEnd ? fmtDate(t.periodEnd) : '',
+      t.kind === 'PACK' ? 'Pack de mensajes' : 'Suscripción',
+      t.concept,
+      t.period === '—' ? '' : t.period,
       t.method ? (METHOD_LABELS[t.method] ?? t.method) : '',
-      t.notes ?? '',
+      t.notes,
       t.currency,
-      String(parseFloat(t.amount)),
+      String(t.amount),
     ].map(esc).join(','))
     const blob = new Blob(['﻿' + [header.map(esc).join(','), ...lines].join('\n')], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -284,11 +334,16 @@ export function IncomeClient({
     { key: 'prev', label: 'Mes anterior' },
     { key: 'all', label: 'Todo' },
   ]
+  const KINDS: { key: Kind; label: string }[] = [
+    { key: 'all', label: 'Todo tipo' },
+    { key: 'SUBSCRIPTION', label: 'Suscripciones' },
+    { key: 'PACK', label: 'Packs de mensajes' },
+  ]
 
   return (
     <>
       <PageHeader
-        eyebrow="Control de suscripciones y pagos de gimnasios"
+        eyebrow="Suscripciones y packs de mensajes cobrados a gimnasios"
         title="Ingresos"
         actions={
           <>
@@ -314,6 +369,11 @@ export function IncomeClient({
           {stats.monthDelta !== null && (
             <div className={cn('mt-2 text-[13px] font-semibold', stats.monthDelta >= 0 ? 'text-adm-brand' : 'text-[#ff8a80]')}>
               {stats.monthDelta >= 0 ? '+' : ''}{stats.monthDelta.toLocaleString('es-AR', { maximumFractionDigits: 1 })}% vs. mismo período de {prevMonthName}
+            </div>
+          )}
+          {stats.monthly && stats.monthPacks > 0 && (
+            <div className="mt-1 text-[13px] text-[#a3a39d]">
+              Incluye <span className="font-admin-mono">{fmtAmount(stats.monthPacks)}</span> en packs de mensajes
             </div>
           )}
         </div>
@@ -400,6 +460,13 @@ export function IncomeClient({
         id="tx-h"
         action={
           <div className="flex flex-wrap items-center gap-2">
+            <div role="group" aria-label="Tipo" className="flex flex-wrap gap-1.5">
+              {KINDS.map(k => (
+                <button key={k.key} type="button" aria-pressed={kind === k.key} onClick={() => { setKind(k.key); setPage(1) }} className={chip(kind === k.key)}>
+                  {k.label}
+                </button>
+              ))}
+            </div>
             <div role="group" aria-label="Período" className="flex flex-wrap gap-1.5">
               {PERIODS.map(p => (
                 <button key={p.key} type="button" aria-pressed={period === p.key} onClick={() => { setPeriod(p.key); setPage(1) }} className={chip(period === p.key)}>
@@ -414,7 +481,7 @@ export function IncomeClient({
                 type="search"
                 value={query}
                 onChange={e => { setQuery(e.target.value); setPage(1) }}
-                placeholder="Gimnasio o nota"
+                placeholder="Gimnasio, plan o pack"
                 className={cn(field.input, 'min-h-10 pl-9')}
               />
             </label>
@@ -430,7 +497,7 @@ export function IncomeClient({
                 <tr>
                   <th scope="col" className={cn(th, 'pl-5')}>Fecha</th>
                   <th scope="col" className={th}>Gimnasio</th>
-                  <th scope="col" className={th}>Plan</th>
+                  <th scope="col" className={th}>Concepto</th>
                   <th scope="col" className={th}>Período</th>
                   <th scope="col" className={th}>Método</th>
                   <th scope="col" className={th}>Nota</th>
@@ -439,16 +506,19 @@ export function IncomeClient({
               </thead>
               <tbody>
                 {pageTx.map(t => (
-                  <tr key={t.id} className="hover:bg-adm-subtle">
-                    <td className={cn(td, 'pl-5 font-admin-mono text-[13px]')}>{fmtDate(t.createdAt)}</td>
+                  <tr key={`${t.kind}-${t.id}`} className="hover:bg-adm-subtle">
+                    <td className={cn(td, 'pl-5 font-admin-mono text-[13px]')}>{fmtDate(t.date)}</td>
                     <td className={cn(td, 'font-bold')}>{t.gym.name}</td>
-                    <td className={td}>{planLabel(t.gym.subscription?.subscriptionPlan ?? t.gym.subscriptionPlan)}</td>
-                    <td className={cn(td, 'text-[13px] text-adm-muted')}>
-                      {t.periodStart && t.periodEnd ? `${fmtShort(t.periodStart)} → ${fmtShort(t.periodEnd)}` : '—'}
+                    <td className={td}>
+                      <span className="flex items-center gap-2">
+                        {t.kind === 'PACK' && <Pill tone="info">Pack</Pill>}
+                        <span className="truncate">{t.kind === 'PACK' ? t.concept.replace(/^Pack /, '') : t.concept.replace(/^Plan /, '')}</span>
+                      </span>
                     </td>
+                    <td className={cn(td, 'text-[13px] text-adm-muted')}>{t.period}</td>
                     <td className={td}><Pill>{t.method ? (METHOD_LABELS[t.method] ?? t.method) : '—'}</Pill></td>
-                    <td className={cn(td, 'max-w-[220px] truncate text-adm-muted')}>{t.notes ?? '—'}</td>
-                    <td className={cn(td, 'pr-5 text-right font-admin-mono font-bold')}>{fmtMoney({ amount: parseFloat(t.amount), currency: t.currency }, { decimals: true })}</td>
+                    <td className={cn(td, 'max-w-[220px] truncate text-adm-muted')}>{t.notes || '—'}</td>
+                    <td className={cn(td, 'pr-5 text-right font-admin-mono font-bold')}>{fmtMoney({ amount: t.amount, currency: t.currency }, { decimals: true })}</td>
                   </tr>
                 ))}
               </tbody>

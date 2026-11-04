@@ -97,10 +97,37 @@ export function recordsBetween(gym: GymWithBilling, from: Date, to: Date) {
   return dedupeBilling(gym.billing.filter((b) => inRange(b.createdAt, from, to)))
 }
 
-export function revenueBetween(gyms: GymWithBilling[], from: Date, to: Date): Money | null {
-  return sumByCurrency(
-    gyms.flatMap((g) => recordsBetween(g, from, to).map((b) => ({ amount: parseFloat(b.amount), currency: b.currency }))),
-  )
+/** WhatsApp message pack the platform sold to a gym (only paid ones). `price` comes in currency units. */
+export interface PackSale {
+  id: string
+  name: string
+  messages: number
+  price: number
+  currency: string
+  billing: 'ONCE' | 'MONTHLY'
+  method: string | null
+  paidAt: string
+  gym: { id: string; name: string; slug: string }
+}
+
+export async function loadPackSales(token: string): Promise<PackSale[]> {
+  const rows = await apiFetch<PackSale[]>('/admin/messaging/purchases?status=PAID', token, {
+    next: { tags: ['admin-messaging'] },
+    silent: true,
+  })
+  return (rows ?? []).filter((r) => r.paidAt)
+}
+
+export function packSalesBetween(sales: PackSale[], from: Date, to: Date) {
+  return sales.filter((s) => inRange(s.paidAt, from, to))
+}
+
+/** Subscription payments plus pack sales in the range. */
+export function revenueBetween(gyms: GymWithBilling[], from: Date, to: Date, sales: PackSale[] = []): Money | null {
+  return sumByCurrency([
+    ...gyms.flatMap((g) => recordsBetween(g, from, to).map((b) => ({ amount: parseFloat(b.amount), currency: b.currency }))),
+    ...packSalesBetween(sales, from, to).map((s) => ({ amount: Number(s.price), currency: s.currency })),
+  ])
 }
 
 export function mainCurrency(gyms: GymWithBilling[]): string {

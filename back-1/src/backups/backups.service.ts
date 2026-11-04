@@ -40,10 +40,27 @@ export interface BackupRun {
   error: string | null;
 }
 
+/** Every backup lives under this folder in the bucket */
+const ROOT = 'GymOs/';
+
 const PREFIX: Record<BackupKind, string> = {
+  db: `${ROOT}db/`,
+  uploads: `${ROOT}uploads/`,
+};
+
+/** Copies made before ROOT existed sat at the bucket root; kept listed until they age out */
+const LEGACY_PREFIX: Record<BackupKind, string> = {
   db: 'db/',
   uploads: 'uploads/',
 };
+
+function kindOf(key: string): BackupKind | null {
+  for (const kind of ['db', 'uploads'] as const) {
+    if (key.startsWith(PREFIX[kind]) || key.startsWith(LEGACY_PREFIX[kind]))
+      return kind;
+  }
+  return null;
+}
 
 // Prisma-only URL params that pg_dump rejects ("invalid URI query parameter")
 const PRISMA_PARAMS = [
@@ -254,15 +271,18 @@ export class BackupsService {
     } while (token);
 
     return objects
-      .map<BackupFile>((o) => ({
-        key: o.Key!,
-        kind: o.Key!.startsWith(PREFIX.uploads) ? 'uploads' : 'db',
-        size: o.Size ?? 0,
-        createdAt: (o.LastModified ?? new Date(0)).toISOString(),
-      }))
-      .filter(
-        (f) => f.key.startsWith(PREFIX.db) || f.key.startsWith(PREFIX.uploads),
-      )
+      .flatMap<BackupFile>((o) => {
+        const kind = o.Key ? kindOf(o.Key) : null;
+        if (!kind) return [];
+        return [
+          {
+            key: o.Key!,
+            kind,
+            size: o.Size ?? 0,
+            createdAt: (o.LastModified ?? new Date(0)).toISOString(),
+          },
+        ];
+      })
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
@@ -310,7 +330,7 @@ export class BackupsService {
   }
 
   private assertKey(key: string) {
-    const valid = /^(db|uploads)\/[\w.-]+\.(dump|tar\.gz)$/.test(key);
+    const valid = /^(GymOs\/)?(db|uploads)\/[\w.-]+\.(dump|tar\.gz)$/.test(key);
     if (!valid) throw new BadRequestException('Copia inválida');
   }
 }

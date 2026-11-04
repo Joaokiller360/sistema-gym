@@ -3,6 +3,8 @@ import { apiFetch } from '@/lib/api'
 import {
   daysUntil,
   loadGymsWithBilling,
+  loadPackSales,
+  packSalesBetween,
   planPrice,
   recordsBetween,
   revenueBetween,
@@ -17,9 +19,10 @@ export default async function AdminIncomePage() {
   const token = cookieStore.get('session')?.value ?? ''
   const now = new Date()
 
-  const [gyms, subPlans] = await Promise.all([
+  const [gyms, subPlans, packSales] = await Promise.all([
     loadGymsWithBilling(token),
     apiFetch<SubscriptionPlanPrice[]>(`/admin/subscription-plans`, token),
+    loadPackSales(token),
   ])
   const plans = subPlans ?? []
 
@@ -28,14 +31,22 @@ export default async function AdminIncomePage() {
   const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
   const prevSameDay = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate(), 23, 59, 59, 999)
 
-  const monthly = revenueBetween(gyms, monthStart, now)
-  const prev = revenueBetween(gyms, prevStart, prevSameDay)
+  const monthly = revenueBetween(gyms, monthStart, now, packSales)
+  const prev = revenueBetween(gyms, prevStart, prevSameDay, packSales)
   const monthDelta = monthly && prev && prev.currency === monthly.currency && prev.amount > 0
     ? ((monthly.amount - prev.amount) / prev.amount) * 100
     : null
+  // Pack share of the month, in the headline currency
+  const monthPacks = monthly
+    ? packSalesBetween(packSales, monthStart, now)
+        .filter(s => s.currency === monthly.currency)
+        .reduce((sum, s) => sum + Number(s.price), 0)
+    : 0
 
-  const daily = revenueBetween(gyms, dayStart, now)
-  const dailyCount = gyms.reduce((n, g) => n + recordsBetween(g, dayStart, now).length, 0)
+  const daily = revenueBetween(gyms, dayStart, now, packSales)
+  const dailyCount =
+    gyms.reduce((n, g) => n + recordsBetween(g, dayStart, now).length, 0) +
+    packSalesBetween(packSales, dayStart, now).length
 
   const dueSoon = gyms.filter(g => {
     const s = g.subscription
@@ -52,11 +63,13 @@ export default async function AdminIncomePage() {
       <IncomeClient
         gyms={gyms}
         subPlans={plans}
+        packSales={packSales}
         monthName={now.toLocaleDateString('es-AR', { month: 'long' })}
         prevMonthName={prevStart.toLocaleDateString('es-AR', { month: 'long' })}
         stats={{
           monthly,
           monthDelta,
+          monthPacks,
           daily,
           dailyCount,
           dueSoon: priceOf(dueSoon),

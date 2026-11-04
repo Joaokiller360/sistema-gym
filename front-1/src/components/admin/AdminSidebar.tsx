@@ -20,6 +20,7 @@ import {
   Mail,
   MessageCircle,
   DatabaseBackup,
+  MessagesSquare,
   type LucideIcon,
 } from 'lucide-react'
 import { cn, normalizeLogoUrl } from '@/lib/utils'
@@ -55,6 +56,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { label: 'Ingresos', href: '/admin/income', icon: TrendingUp },
       { label: 'Planes', href: '/admin/plans', icon: CreditCard },
+      { label: 'Mensajes y packs', href: '/admin/mensajes', icon: MessagesSquare },
     ],
   },
   {

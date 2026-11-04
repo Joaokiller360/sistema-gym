@@ -33,6 +33,7 @@ export interface SubscriptionPlan {
   advancedReportsEnabled: boolean
   visibleOnLanding: boolean
   monthlyMessageLimit: number | null
+  messagePacksEnabled: boolean
   birthdayMessagesEnabled: boolean
   expiryRemindersEnabled: boolean
   features: string[]
@@ -69,6 +70,7 @@ interface PlanFormFields {
   advancedReportsEnabled: boolean
   visibleOnLanding: boolean
   monthlyMessageLimit: string
+  messagePacksEnabled: boolean
   birthdayMessagesEnabled: boolean
   expiryRemindersEnabled: boolean
   features: string[]
@@ -86,6 +88,7 @@ const EMPTY_FIELDS: PlanFormFields = {
   advancedReportsEnabled: false,
   visibleOnLanding: true,
   monthlyMessageLimit: '0',
+  messagePacksEnabled: true,
   birthdayMessagesEnabled: true,
   expiryRemindersEnabled: true,
   features: [''],
@@ -104,6 +107,7 @@ function fieldsFromPlan(plan: SubscriptionPlan): PlanFormFields {
     advancedReportsEnabled: plan.advancedReportsEnabled ?? false,
     visibleOnLanding: plan.visibleOnLanding ?? true,
     monthlyMessageLimit: plan.monthlyMessageLimit == null ? '' : String(plan.monthlyMessageLimit),
+    messagePacksEnabled: plan.messagePacksEnabled ?? true,
     birthdayMessagesEnabled: plan.birthdayMessagesEnabled ?? true,
     expiryRemindersEnabled: plan.expiryRemindersEnabled ?? true,
     features: plan.features as string[],
@@ -203,6 +207,7 @@ const TOGGLES: { key: keyof PlanFormFields; label: string; hint: string; editOnl
   { key: 'advancedReportsEnabled', label: 'Reportes avanzados', hint: 'Panel de reportes en el dashboard del gym' },
   { key: 'birthdayMessagesEnabled', label: 'WhatsApp de cumpleaños', hint: 'Felicita a cada miembro por WhatsApp el día de su cumpleaños' },
   { key: 'expiryRemindersEnabled', label: 'Aviso de vencimiento', hint: 'WhatsApp al miembro 2 días antes de que venza su membresía' },
+  { key: 'messagePacksEnabled', label: 'Packs de mensajes', hint: 'Al agotar los mensajes del mes pueden comprar más; apagado, los envíos se frenan' },
   { key: 'demoEnabled', label: 'Demo habilitada', hint: 'Se puede pedir una demo desde la landing' },
   { key: 'trialEnabled', label: 'Prueba gratis (1 mes)', hint: '30 días sin costo' },
   { key: 'visibleOnLanding', label: 'Visible en la landing', hint: 'Aparece en la página pública de precios' },
@@ -263,7 +268,7 @@ function PlanFormBody({
         <label className="min-w-0 flex-1 basis-40">
           <span className={field.label}>Mensajes WhatsApp a socios / mes</span>
           <input type="number" min="0" step="1" value={fields.monthlyMessageLimit} onChange={e => onChange({ ...fields, monthlyMessageLimit: e.target.value })} disabled={isPending} placeholder="Ilimitado" className={field.input} />
-          <span className="mt-1 block text-xs text-adm-muted">1 aviso a 50 socios = 50 mensajes · 0 = sin avisos · vacío = ilimitado</span>
+          <span className="mt-1 block text-xs text-adm-muted">Avisos, cumpleaños, vencimientos y pruebas · 1 aviso a 50 socios = 50 mensajes · 0 = ninguno · vacío = ilimitado</span>
         </label>
       </div>
 
@@ -359,6 +364,7 @@ function PlanEditorPanel({
       advancedReportsEnabled: fields.advancedReportsEnabled,
       visibleOnLanding: fields.visibleOnLanding,
       monthlyMessageLimit: annLimit === '' ? null : parseInt(annLimit, 10),
+      messagePacksEnabled: fields.messagePacksEnabled,
       birthdayMessagesEnabled: fields.birthdayMessagesEnabled,
       expiryRemindersEnabled: fields.expiryRemindersEnabled,
       features: fields.features.filter(f => f.trim()),
