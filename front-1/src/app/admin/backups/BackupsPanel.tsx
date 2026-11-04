@@ -78,7 +78,14 @@ export function BackupsPanel({ initialConfig, initialFiles, loadError }: Props) 
       const res = await backupDownloadAction(key)
       setBusyKey(null)
       if ('error' in res) { setError(res.error); return }
-      window.location.href = res.url
+      // The link is signed as an attachment, so this saves the file and keeps the panel open
+      const a = document.createElement('a')
+      a.href = res.url
+      a.download = res.filename ?? ''
+      a.rel = 'noopener'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
     })
   }
 

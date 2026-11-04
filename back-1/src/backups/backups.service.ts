@@ -289,16 +289,24 @@ export class BackupsService {
   /** Short-lived link; S3_PUBLIC_ENDPOINT when MinIO is only reachable internally by the API */
   async downloadUrl(key: string) {
     this.assertKey(key);
+    // GymOs/db/2026-11-03T09-00-00-027Z.dump → gymos-db-2026-11-03T09-00-00-027Z.dump
+    const filename = `gymos-${key.replace(/^GymOs\//, '').replace('/', '-')}`;
     const s3 = this.storage;
     const signer = process.env.S3_PUBLIC_ENDPOINT
       ? createS3Client(process.env.S3_PUBLIC_ENDPOINT)
       : s3;
     const url = await getSignedUrl(
       signer,
-      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        // Makes the browser save the file instead of opening it on MinIO
+        ResponseContentDisposition: `attachment; filename="${filename}"`,
+        ResponseContentType: 'application/octet-stream',
+      }),
       { expiresIn: 300 },
     );
-    return { url };
+    return { url, filename };
   }
 
   async delete(key: string) {

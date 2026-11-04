@@ -48,9 +48,9 @@ export async function runBackupAction() {
   return 'error' in res ? { error: res.error } : {}
 }
 
-/** Signed MinIO link valid for 5 minutes */
-export async function backupDownloadAction(key: string): Promise<{ url: string } | { error: string }> {
-  const res = await apiFetchWithError<{ url: string }>('/admin/backups/download', await token(), {
+/** Signed MinIO link valid for 5 minutes, served as a file download */
+export async function backupDownloadAction(key: string): Promise<{ url: string; filename?: string } | { error: string }> {
+  const res = await apiFetchWithError<{ url: string; filename?: string }>('/admin/backups/download', await token(), {
     method: 'POST',
     body: JSON.stringify({ key }),
   })
